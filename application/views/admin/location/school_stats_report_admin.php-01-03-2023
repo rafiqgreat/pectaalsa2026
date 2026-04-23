@@ -1,0 +1,254 @@
+<style>
+	.border-none {
+	  border-collapse: collapse;
+	  border: none;
+	}
+
+	.border-none td {
+	  border: 1px solid black;
+	}
+
+	.border-none tr:first-child td {
+	  border-top: none;
+	}
+
+	.border-none tr:last-child td {
+	  border-bottom: none;
+	}
+
+	.border-none tr td:first-child {
+	  border-left: none;
+	}
+
+	.border-none tr td:last-child {
+	  border-right: none;
+	}
+	.tabletd tr{
+		line-height: 30px;
+	}	
+	.bordertop{
+	border-top: 1px solid #000 !important;
+	}
+</style>
+<!-- Content Wrapper. Contains page content -->
+<div class="content-wrapper">
+	<!-- Content Header (Page header) -->
+	<div class="content-header">
+		<div class="container-fluid">
+			<div class="row mb-2">
+				<div class="col-sm-6">
+					<h1 class="m-0 text-dark">Schools Report</h1>
+				</div>
+				<!-- /.col -->
+				<div class="col-sm-6">
+					<ol class="breadcrumb float-sm-right">
+						<li class="breadcrumb-item"><a href="#">Home</a>
+						</li>
+						<li class="breadcrumb-item active">Dashboard</li>
+					</ol>
+				</div>
+				<!-- /.col -->
+			</div>
+			<!-- /.row -->
+		</div>
+		<!-- /.container-fluid -->
+	</div>
+	<!-- /.content-header -->
+	<!-- Main content -->
+	<section class="content">
+		<div class="container-fluid">
+
+			<div class="row">
+				<div class="info-box col-12 col-sm-12 col-md-12" style="text-align: center;">
+					<div class="table-responsive">
+						<table class="tabletd" style="width: 100%" border="2" cellpadding="0">
+							<thead>
+								<tr>
+									<th style="padding: 10px 0;">#</th>
+									<th>District</th>
+									<!--<th>Tehsil</th>-->
+									<th>School Count
+										<table class="border-none" style="width: 100%">
+											<tbody>
+												<tr>
+													<td class="bordertop" width="50%"><strong>Public</strong></td>
+													<td class="bordertop" width="50%"><strong>Private</strong></td>
+												</tr>
+											</tbody>
+										</table>
+									</th>
+									<th>School Login
+										<table class="border-none" style="width: 100%">
+											<tbody>
+												<tr>
+													<td class="bordertop" width="50%"><strong>Public</strong></td>
+													<td class="bordertop" width="50%"><strong>Private</strong></td>
+												</tr>
+											</tbody>
+										</table>
+									</th>
+									<th>Generated Paper
+										<table class="border-none" style="width: 100%">
+											<tbody>
+												<tr>
+													<td class="bordertop" width="16.6%"><strong>3</strong></td>
+													<td class="bordertop" width="16.6%"><strong>4</strong></td>
+													<td class="bordertop" width="16.6%"><strong>5</strong></td>
+													<td class="bordertop" width="16.6%"><strong>6</strong></td>
+													<td class="bordertop" width="16.6%"><strong>7</strong></td>
+													<td class="bordertop" width="16.6%"><strong>8</strong></td>
+												</tr>
+											</tbody>
+										</table>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php 
+								$i = 0;
+								$totalschool = $totalprivate = $totalpublic = 0;
+								//print "<pre>";print_r($dfp_schools);die('');
+								$school_type = '';
+								$school_gender = '';
+								$dis_total_5 = $dis_total_6 = $dis_total_7 = $dis_total_8 = $dis_total_9 = $dis_total_10 = 0;
+								foreach($dfp_schools as $dfp_school)
+								{
+								  $dis_mcq_total_5 = $dis_mcq_total_6 = $dis_mcq_total_7 = $dis_mcq_total_8 =$dis_mcq_total_9 = $dis_mcq_total_10 = 0;
+								  $dis_stats_mcq = $this->School_model->get_mcq_stats_for_admin($dfp_school['school_district_id']);
+								  $dis_stats_mcq = $dis_stats_mcq[0];
+								  
+								  $dis_mcq_total_5 += $dis_stats_mcq['5_mcqs'];
+								  $dis_mcq_total_6 += $dis_stats_mcq['6_mcqs'];
+								  $dis_mcq_total_7 += $dis_stats_mcq['7_mcqs'];
+								  $dis_mcq_total_8 += $dis_stats_mcq['8_mcqs'];
+								  $dis_mcq_total_9 += $dis_stats_mcq['9_mcqs'];
+								  $dis_mcq_total_10 += $dis_stats_mcq['10_mcqs'];
+								  
+								  $dis_total_5 += $dis_mcq_total_5;
+								  $dis_total_6 += $dis_mcq_total_6;
+								  $dis_total_7 += $dis_mcq_total_7;
+								  $dis_total_8 += $dis_mcq_total_8;
+								  $dis_total_9 += $dis_mcq_total_9;
+								  $dis_total_10 += $dis_mcq_total_10;
+								  
+								  //$dis_crq_total_5 += $dis_stats_crq['5_crqs'];
+								  //$dis_crq_total_6 += $dis_stats_crq['6_crqs'];
+								  //$dis_crq_total_7 += $dis_stats_crq['7_crqs'];
+								  //$dis_crq_total_8 += $dis_stats_crq['8_crqs'];
+								  //$dis_crq_total_9 += $dis_stats_crq['9_crqs'];
+								  //$dis_crq_total_10 += $dis_stats_crq['10_crqs'];
+								  $i++;
+									?>
+									<tr>
+										<td><?php echo $i; ?></td>
+										<td style="text-align: left; padding: 0px 5px;"><?php echo $dfp_school['district_name_en']; ?></td>
+										<?php /*?><td><?php echo $dfp_school['tehsil_name_en']; ?></td><?php */?>
+										<td><?php /*echo $dfp_school['schools'];*/ $totalschool += $dfp_school['schools'];?>
+											<table class="border-none" style="width: 100%" >
+												<tbody>
+													<tr>
+														<td width="50%"><a href="<?=base_url('admin/school?school_district_id='.$dfp_school['school_district_id'].'&school_tehsil_id=0&school_type=Public&school_gender=')?>"><?php echo $dfp_school['publicschools']; $totalpublic += $dfp_school['publicschools']; ?></a></td>
+														<td width="50%"><a href="<?=base_url('admin/school?school_district_id='.$dfp_school['school_district_id'].'&school_tehsil_id=0&school_type=Private&school_gender=')?>"><?php echo $dfp_school['privateschools']; $totalprivate += $dfp_school['privateschools'];?></a></td>
+													</tr>
+												</tbody>
+											</table>
+										</td>
+										<td>
+											<table class="border-none" style="width: 100%" >
+												<tbody>
+													<tr>
+														<td width="50%">0</td>
+														<td width="50%">0</td>
+													</tr>
+												</tbody>
+											</table>
+										</td>
+										<td>
+											<table class="border-none" style="width: 100%" >
+												<tbody>
+													<tr>
+														<td width="16.6%"><?php echo $dis_mcq_total_5;?></td>
+														<td width="16.6%"><?php echo $dis_mcq_total_6;?></td>
+														<td width="16.6%"><?php echo $dis_mcq_total_7;?></td>
+														<td width="16.6%"><?php echo $dis_mcq_total_8;?></td>
+														<td width="16.6%"><?php echo $dis_mcq_total_9;?></td>
+														<td width="16.6%"><?php echo $dis_mcq_total_10;?></td>
+													</tr>
+												</tbody>
+											</table>
+										</td>
+									</tr>
+									<?php 		
+								}	  
+								?>
+								<tr style="font-weight: bold;">
+									<th scope="row">Total</th>
+									<td>&nbsp;</td>
+									<!--<td>&nbsp;</td>-->
+									<td>
+										<table class="border-none" style="width: 100%" >
+											<tbody>
+												<tr>
+													<td width="50%"><?php echo $totalpublic;?></td>
+													<td width="50%"><?php echo $totalprivate;?></td>
+												</tr>
+											</tbody>
+										</table>
+									</td>
+									<td>
+										<table class="border-none" style="width: 100%" >
+											<tbody>
+												<tr>
+													<td width="50%">0</td>
+													<td width="50%">0</td>
+												</tr>
+											</tbody>
+										</table>
+									</td>
+									<td>
+										<table class="border-none" style="width: 100%" >
+											<tbody>
+												<tr>
+													<td width="16.6%"><?php print $dis_total_5;?></td>
+													<td width="16.6%"><?php print $dis_total_6;?></td>
+													<td width="16.6%"><?php print $dis_total_7;?></td>
+													<td width="16.6%"><?php print $dis_total_8;?></td>
+													<td width="16.6%"><?php print $dis_total_9;?></td>
+													<td width="16.6%"><?php print $dis_total_10;?></td>
+												</tr>
+											</tbody>
+										</table>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+				</div>
+				<!-- /.info-box-content -->
+			</div>
+			<!-- /.col -->
+		</div>
+</div>
+<!-- /.container-fluid -->
+</section>
+<!-- /.content -->
+</div>
+<!-- /.content-wrapper -->
+<!-- Morris.js charts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/raphael/2.1.0/raphael-min.js"></script>
+<script src="<?= base_url() ?>assets/plugins/morris/morris.min.js"></script>
+<!-- Sparkline -->
+<script src="<?= base_url() ?>assets/plugins/sparkline/jquery.sparkline.min.js"></script>
+<!-- jvectormap -->
+<script src="<?= base_url() ?>assets/plugins/jvectormap/jquery-jvectormap-1.2.2.min.js"></script>
+<script src="<?= base_url() ?>assets/plugins/jvectormap/jquery-jvectormap-world-mill-en.js"></script>
+<!-- jQuery Knob Chart -->
+<script src="<?= base_url() ?>assets/plugins/knob/jquery.knob.js"></script>
+<!-- daterangepicker -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.2/moment.min.js"></script>
+<script src="<?= base_url() ?>assets/plugins/daterangepicker/daterangepicker.js"></script>
+<!-- datepicker -->
+<script src="<?= base_url() ?>assets/plugins/datepicker/bootstrap-datepicker.js"></script>
+<!-- Bootstrap WYSIHTML5 -->
+<script src="<?= base_url() ?>assets/plugins/bootstrap-wysihtml5/bootstrap3-wysihtml5.all.min.js"></script>
+<!-- AdminLTE dashboard demo (This is only for demo purposes) -->
+<script src="<?= base_url() ?>assets/dist/js/pages/dashboard.js"></script>

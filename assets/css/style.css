@@ -1,0 +1,104 @@
+        .bg-main {
+            background-color: #2563eb;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+        }
+
+        .text-main {
+            color: #2563eb;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+        }
+
+        .btn-main {
+            background-color: #2563eb;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+            color: white;
+        }
+
+        .btn-main:hover {
+            background-color: #1e40af;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+        }
+
+        .urdu {
+            font-family: Font_Urdu;
+            font-size: 24px;
+        }
+
+        .bg-blue-600 {
+            background-color: #1a365d !important;
+            /* color: white; */
+        }
+		::placeholder {
+			color: #6c757d !important; /* Bootstrap's default placeholder color */
+			opacity: 1; /* Ensures visibility */
+		}
+    
+		.arabic_class{
+		  font-family: "Amiri script=latin rev=3"; 
+		  font-weight: bold; 
+		  line-height: initial;  
+		}
+		@import url(//fonts.googleapis.com/earlyaccess/notonastaliqurdu.css); 
+		@font-face {
+		  font-family:"Jameel Noori Nastaleeq";
+		  src:url("../../assets/fonts/Jameel Noori Nastaleeq.ttf");
+		  font-weight: bold;
+		}
+		.urdufont-right{
+		  font-family: 'Jameel Noori Nastaleeq' ,'Open Sans', sans-serif;
+		  direction: rtl;
+		  font-size:22px;
+		}
+		.urdufont-center{
+		  font-family: 'Noto Nastaliq Urdu', serif; 
+		  direction: rtl;
+		  text-align:center;
+		}
+		.nori_font {
+			font-family: 'Jameel Noori Nastaleeq' ,'Open Sans', sans-serif;
+		}
+		@font-face {
+		  font-family:"AlQalam";
+		  src:url("../../assets/fonts/Al_Qalam_Quran_Majeed_Web.ttf");
+		  font-weight: bold;
+		}
+		.alqalam_class{
+		  font-family: "AlQalam"; 
+		  font-weight: bold; 
+		  line-height: initial;  
+		}
+		@font-face {
+		  font-family:"AlQalam2";
+		  src:url("../../assets/fonts/2AlQalamQuranPublisher.ttf");
+		  font-weight: bold;
+		}
+		.alqalam2_class{
+		  font-family: "AlQalam2"; 
+		  font-weight: bold; 
+		  line-height: initial;  
+		}	
+        .bg-main {
+            background-color: #2563eb;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+        }
+
+        .text-main {
+            color: #2563eb;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+        }
+
+        .btn-main {
+            background-color: #2563eb;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+            color: white;
+        }
+
+        .btn-main:hover {
+            background-color: #1e40af;
+            /* rgb(37 99 235 / var(--tw-bg-opacity, 1)); */
+        }
+
+        .bg-blue-600 {
+            background-color: #1a365d !important;
+            /* color: white; */
+        }

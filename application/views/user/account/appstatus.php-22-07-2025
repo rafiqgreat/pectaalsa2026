@@ -1,0 +1,204 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed'); ?>
+<!DOCTYPE html>
+<html lang="<?php echo getUserlang() ?>">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Application Status - PEIMA</title>
+<!-- Tailwind CSS via CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Custom CSS for Main Color and Urdu Font -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="<?= base_url('assets/css/style.css'); ?>">
+</head>
+<body class="bg-gray-100 flex flex-col min-h-screen">
+<!-- Header with Two Logos -->
+<header class="w-full bg-gray-300 text-dark px-3 py-2">
+   <div class="container mx-auto flex justify-between items-center">
+      <div class="flex items-center space-x-4"> <a href="<?= base_url(); ?>"><img src="<?= base_url('assets/images/Logo_1.png'); ?>" alt="PEIMA Logo" class="h-20" /></a>
+         <div class="flex flex-col">
+            <h3 class="text-xl font-bold text-dark">Punjab Education Foundation - PSRP Phase III</h3>
+            <h4 class="text-lg text-dark">Public School Reorganization Program - Phase III</h4>
+         </div>
+      </div>
+      <div class="space-x-2"> <a href="<?= base_url('user/login'); ?>" class="p-2 cursor-pointer bg-white rounded-lg p-4 text-dark font-semibold">Login</a> </div>
+   </div>
+</header>
+
+<!-- Main Content -->
+<main class="flex-grow container mx-auto mt-1 md:mt-1 px-2 py-4"> 
+   <!-- Login Form Container -->
+   <div class="grid grid-cols-1 md:grid-cols-[100%] gap-8">
+      <?php if (!empty($this->session->flashdata('message'))): ?>
+      <div class="alert alert-<?php echo $this->session->flashdata('message_type'); ?>">
+         <p><?php echo $this->session->flashdata('message'); ?></p>
+      </div>
+      <?php endif; ?>
+      <!-- Left Side: Image/Information --> 
+      <div class="bg-white p-6 rounded-lg shadow-md">
+      	<?php echo form_open('/user/login/appstatus', ['method' => 'POST', 'autocomplete' => 'off', 'class' => 'space-y-4']); ?>
+      
+         <h1 class="text-3xl text-primary font-bold mb-6">Check Application Status</h1>
+         <h3 class="text-md font-semibold text-gray-700">Select Application Type</h3>
+         <form id="registrationForm" class="space-y-4">
+            <div class="flex flex-wrap gap-2 mt-2 ml-4">
+               <label class="flex items-center">
+                  <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="2" <?php echo set_radio('role', '2', $this->input->post('role') === null); ?>>
+                  <span class="ml-2 text-gray-700">Young Entrepreneur</span> </label>
+               <label class="flex items-center ml-4">
+                  <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="3" <?php echo set_radio('role', '3'); ?>>
+                  <span class="ml-2 text-gray-700">Individual</span> </label>
+            </div>
+            
+            <!-- Common Fields (Always Shown) -->
+            <div class="row col-12 mt-3">
+               <div class="col-4">
+                  <label class="block text-gray-700 text-sm font-bold mb-2" for="fullName">Application ID:</label>
+                  <input type="text" class="input-field form-control" id="application_id" name="application_id" placeholder="Application ID" value="<?php echo set_value('application_id'); ?>" required>
+                  (In case of Young Entrepreneur enter Lead CNIC)
+               </div>
+               <div class="col-4">
+                  <label class="block text-gray-700 text-sm font-bold mb-2" for="cnic">CNIC No:</label>
+                  <input type="text" class="input-field form-control" id="cnic" name="cnic" placeholder="CNIC No" value="<?php echo set_value('cnic'); ?>" required>
+               </div>
+            </div>            
+            <div class="row">
+            	<div class="col-4">
+               </div>
+            	<div class="row col-4 p-2 mt-3">
+               <button type="submit" class="btn btn-flat btn-primary">Search</button>
+               </div>
+            </div>
+         </form>      
+      <?php echo form_close(); ?> 
+      
+      <?php if (!empty($result)){ ?>
+          <div class="<?php if($result['status'] === 'yes'){?>bg-green-100 border border-green-400 text-green-700<?php }else{?>bg-red-100 border border-red-400 text-red-700<?php }?> px-4 py-3 rounded relative mt-4">
+              <h3 style="font-size:24px;"><strong class="font-bold">Application Status:</strong></h3>
+              <table cellpadding="2" cellspacing="2">
+              	<tr>
+               	<td><strong>Application ID:</strong></td>
+                  <td><?php echo htmlspecialchars($result['application_id']); ?></td>
+               </tr>
+               <tr>
+               	<td><strong>CNIC:</strong></td>
+                  <td><?php echo htmlspecialchars($result['cnic']); ?></td>
+               </tr>
+               <tr>
+               	<td><strong>Name:</strong></td>
+                  <td><?php echo htmlspecialchars($result['name']); ?></td>
+               </tr>
+               <tr>
+               	<td><strong>Status:</strong></td>
+                  <td><?php echo ($result['status'] === 'yes') ? 'Eligible' : 'Not Eligible'; ?></td>
+               </tr>
+               <tr>
+               	<td><strong>Reason:</strong></td>
+                  <td><?php echo htmlspecialchars($result['reason']); ?></td>
+               </tr>
+               <tr>
+               	<td><strong>Additional Remarks:</strong></td>
+                  <td></strong> <?php echo htmlspecialchars($result['additionalremarks']); ?></td>
+               </tr>
+               <?php
+					if(!empty($result['as_emis']) && $result['school_excluded'] == 0 )
+					{?>
+                  <tr>
+                     <td colspan="2"><br /><h3 style="font-size:24px; font-weight:bold;">Congratulations!!!  You are selected for School.<br>School Details:</h3></td>
+                  </tr>
+                  <tr>
+                     <td><strong>School Code:</strong></td>
+                     <td><?php echo htmlspecialchars($result['as_emis']); ?></td>
+                  </tr>
+                  <tr>
+                     <td><strong>School Name:</strong></td>
+                     <td><?php echo htmlspecialchars($result['as_school_name']); ?></td>
+                  </tr>
+                  <tr>
+                     <td><strong>District:</strong></td>
+                     <td><?php echo htmlspecialchars($result['district_name_en']); ?></td>
+                  </tr>
+                  <tr>
+                     <td><strong>Tehsil:</strong></td>
+                     <td><?php echo htmlspecialchars($result['tehsil_name_en']); ?></td>
+                  </tr>               
+               <?php }
+					else
+					{
+						if ($result['status'] === 'yes' && $result['school_excluded'] == 1)
+						{ 
+							if (!empty($request))
+							{//print '<pre>'; print_r($request); die; 
+								if($request['r_option'] == 'replacement')
+								{
+								?>
+									<tr>
+										<td colspan="2"><br /><h3 style="font-size:24px; font-weight:bold;">Requested School Replacement Informtion:</h3></td>
+									</tr>
+									<tr>
+										<td><strong>School Code:</strong></td>
+										<td><?php echo htmlspecialchars($request['username']); ?></td>
+									</tr>
+									<tr>
+										<td><strong>School Name:</strong></td>
+										<td><?php echo htmlspecialchars($request['school_name']); ?></td>
+									</tr>
+									<tr>
+										<td><strong>District:</strong></td>
+										<td><?php echo htmlspecialchars($request['district_name_en']); ?></td>
+									</tr>
+									<tr>
+										<td><strong>Tehsil:</strong></td>
+										<td><?php echo htmlspecialchars($request['tehsil_name_en']); ?></td>
+									</tr>								
+								<?php	
+								}
+								else
+								{ ?>
+									<tr>
+										<td colspan="2"><br /><h3 style="font-size:24px; font-weight:bold;">Requested for refund</h3></td>
+									</tr>
+								<?php
+								}
+							}
+							else
+							{
+								?>
+								<tr>
+									<td colspan="2"><br /><h3 style="font-size:24px;"><a href="<?php echo url('user/login') ?>"><strong>Click here to Login to your Dashboard for Refund Fee Request or any other school selection option</strong></a></h3></td>
+								</tr>
+							<?php
+							}							
+						}
+						else
+						{
+							if ($result['status'] === 'yes')
+							{
+							?>
+							<tr>
+								<td colspan="2"><br /><h3 style="font-size:24px; font-weight:bold;">Better luck next time, priority exausted. Your merit is low.</h3></td>
+							</tr>
+						<?php 
+							}
+						}
+					}
+					?>
+              </table>
+          </div>
+      <?php }elseif ($this->input->method() == 'post'){ ?>
+          <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mt-4">
+              No application found with the provided Application ID and CNIC.
+          </div>
+      <?php } ?>
+      </div>
+   </div>
+</main>
+
+<!-- Footer -->
+<footer class="bg-gray-200 text-center py-4 mt-8">
+   <p class="text-gray-600">© <?php echo date('Y'); ?> PEF</p>
+</footer>
+</body>
+</html> 
+
