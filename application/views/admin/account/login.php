@@ -21,8 +21,8 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
       <div class="flex items-center space-x-4">
         <img src="<?= base_url('assets/images/Logo_1.png'); ?>" alt="PEIMA Logo" class="h-20" />
         <div class="flex flex-col">
-          <h3 class="text-xl font-bold text-dark">Punjab Education Foundation - PSRP Phase III</h3>
-          <h4 class="text-lg text-dark">Public School Reorganization Program - Phase III</h4>
+          <h3 class="text-xl font-bold text-dark">PECTAA LSA 2026 - DIGITAL WEB SOLUTION</h3>
+          <h4 class="text-lg text-dark">Digital Barcoding, Scanning, Emarking, AI Analysis - A Complete Solution</h4>
         </div>
       </div>
       <div class="space-x-2">

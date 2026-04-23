@@ -21,8 +21,8 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
             <div class="flex items-center space-x-4">
                 <a href="<?= base_url(); ?>"><img src="<?= base_url('assets/images/Logo_1.png'); ?>" alt="PEIMA Logo" class="h-20" /></a>
                 <div class="flex flex-col">
-                    <h3 class="text-xl font-bold text-dark">Punjab Education Foundation - PSRP Phase III</h3>
-                    <h4 class="text-lg text-dark">Public School Reorganization Program - Phase III</h4>
+                    <h3 class="text-xl font-bold text-dark">PECTAA LSA 2026 - DIGITAL WEB SOLUTION</h3>
+                    <h4 class="text-lg text-dark">Digital Barcoding, Scanning, Emarking, AI Analysis - A Complete Solution</h4>
                 </div>
             </div>
             <div class="space-x-2">
@@ -37,6 +37,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
         <div class="grid grid-cols-1 md:grid-cols-[100%] gap-8">
             <?php
             $old = $this->session->flashdata('old');
+            $registration_roles = isset($registration_roles) && is_array($registration_roles) ? $registration_roles : [];
             ?>
             <?php if (!empty($this->session->flashdata('message'))): ?>
                 <div class="alert alert-<?php echo $this->session->flashdata('message_type'); ?>">
@@ -50,28 +51,19 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                     <div class="col-6 text-lg font-semibold text-gray-800 mb-4">Registration Instructions (<a href="<?= base_url('assets/docs/PSRP-III-UserManual.pdf'); ?>" target="_blank" class="text-blue-500 hover:underline">Instruction for Application Portal</a>)</div>
                     <div class="col-6 text-gray-700 text-center text-red-600 urdufont-right">درخواست جمع کرانے سے پہلے اس کی شرائط و ضوابط کو پڑھنا لازمی ہے۔ <a href="<?= base_url('assets/docs/Revised TORs PSRP Ph-III.pdf'); ?>" target="_blank" class="text-blue-500 hover:underline urdufont-right">ہدایات برائے درخواست دھندگان</a></div>
                 </div>
-                <h3 class="text-md font-semibold text-gray-700">Select Registration Type</h3>
+                <h3 class="text-md font-semibold text-gray-700">Roles</h3>
                 <div class="flex flex-wrap gap-2 mt-2 ml-4">
-                    <label class="flex items-center">
-                        <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="2" <?php echo (empty($old['role']) || $old['role'] == '2') ? 'checked' : ''; ?>>
-                        <span class="ml-2 text-gray-700">Young Entrepreneur</span>
-                    </label>
-                    <label class="flex items-center ml-4">
-                        <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="3" <?php echo (!empty($old['role']) && $old['role'] == '3') ? 'checked' : ''; ?>>
-                        <span class="ml-2 text-gray-700">Individual</span>
-                    </label>
-                    <label class="flex items-center ml-4">
-                        <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="4" <?php echo (!empty($old['role']) && $old['role'] == '4') ? 'checked' : ''; ?>>
-                        <span class="ml-2 text-gray-700">Ed Tech Firm</span>
-                    </label>
-                    <label class="flex items-center ml-4">
-                        <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="5" <?php echo (!empty($old['role']) && $old['role'] == '5') ? 'checked' : ''; ?>>
-                        <span class="ml-2 text-gray-700">Education Chain</span>
-                    </label>
-                    <label class="flex items-center ml-4">
-                        <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="6" <?php echo (!empty($old['role']) && $old['role'] == '6') ? 'checked' : ''; ?>>
-                        <span class="ml-2 text-gray-700">NGOs</span>
-                    </label>
+                    <?php foreach ($registration_roles as $index => $role): ?>
+                        <?php
+                        $is_checked = !empty($old['role'])
+                            ? $old['role'] == (string) $role->id
+                            : $index === 0;
+                        ?>
+                        <label class="flex items-center <?php echo $index > 0 ? 'ml-4' : ''; ?>">
+                            <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="role" value="<?php echo (int) $role->id; ?>" <?php echo $is_checked ? 'checked' : ''; ?>>
+                            <span class="ml-2 text-gray-700"><?php echo html_escape($role->title); ?></span>
+                        </label>
+                    <?php endforeach; ?>
                 </div>
                 <br />
                 <hr />

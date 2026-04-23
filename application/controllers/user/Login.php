@@ -3,6 +3,27 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 class Login extends CI_Controller {
 	public $data;
 
+	private function getRegistrationRoles()
+	{
+		return $this->db->select('id, title')
+			->from('roles')
+			->where('id !=', 1)
+			->order_by('id', 'ASC')
+			->get()
+			->result();
+	}
+
+	private function isValidRegistrationRole($roleId)
+	{
+		return $this->db->select('id')
+			->from('roles')
+			->where('id', (int) $roleId)
+			->where('id !=', 1)
+			->limit(1)
+			->get()
+			->num_rows() === 1;
+	}
+
 	private function getUserAccessBlockedMessage()
 	{
 		return user_access_block_message();
@@ -224,6 +245,7 @@ class Login extends CI_Controller {
 			redirect('user/login', 'refresh');
 			return;
 		}
+		$this->data['registration_roles'] = $this->getRegistrationRoles();
 		$this->load->view('user/account/register', $this->data, FALSE);
 	}
 	
@@ -242,6 +264,7 @@ class Login extends CI_Controller {
 		$_POST['username'] = $username;
 
 		$email = $this->input->post('email', TRUE);
+		$role = (int) $this->input->post('role', TRUE);
 
 		$this->form_validation->set_rules('fullName', 'Name', 'required|trim|min_length[3]|max_length[50]|is_unique[users.username]');
 		$this->form_validation->set_rules('role', 'Role', 'required|trim');
@@ -260,9 +283,16 @@ class Login extends CI_Controller {
 			$this->session->set_flashdata('message', $data['errors']);
 			redirect(base_url('user/login/register'),'refresh');
 		}
+
+		if (!$this->isValidRegistrationRole($role)) {
+			$this->session->set_flashdata('old', $this->input->post(NULL, true));
+			$this->session->set_flashdata('message_type', 'danger');
+			$this->session->set_flashdata('message', 'Selected role is invalid.');
+			redirect(base_url('user/login/register'),'refresh');
+		}
 		
 		$data = [
-			'role' => $this->input->post('role', TRUE),
+			'role' => $role,
 			'name' => $this->input->post('fullName', TRUE),
 			'phone' => $this->input->post('mobileNumber', TRUE),
 			'username' => $username,
@@ -307,8 +337,9 @@ class Login extends CI_Controller {
 		}
 
 		$role = (int) $this->input->post('role', TRUE);
-		if ($role !== 2 && $role !== 3) {
-			return true;
+		if (!$this->isValidRegistrationRole($role)) {
+			$this->form_validation->set_message('unique_cnic_for_registration', 'Selected role is invalid.');
+			return false;
 		}
 
 		return true;
