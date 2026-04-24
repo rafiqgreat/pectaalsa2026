@@ -1,7 +1,7 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>
 <?php
 	$rows = isset($educations) && is_array($educations) && count($educations) ? $educations : [ [] ];
-	$degree_options = [
+	$default_degree_options = [
 		'PhD',
 		'MPhil. / MS (18 years)',
 		'Master / M.A/ MSc./ BS (Hons) (16 years)',
@@ -9,6 +9,9 @@
 		'HSSC',
 		'SSC',
 	];
+	$degree_options = (isset($degree_options) && is_array($degree_options) && count($degree_options))
+		? $degree_options
+		: $default_degree_options;
 ?>
 
 <form id="signupFormStep3" class="signup-step-form" autocomplete="off">

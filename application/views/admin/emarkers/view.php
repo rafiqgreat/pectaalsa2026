@@ -10,6 +10,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 	$img = (!empty($u->profile_picture)) ? base_url($u->profile_picture) : base_url('assets/img/avatar5.png');
 	$is_active = !empty($u) && (int) ($u->status ?? 0) === 1;
 	$is_completed = !empty($steps) && (int) ($steps->registration_completed ?? 0) === 1;
+	$review_status = !empty($steps) && !empty($steps->review_status) ? (string) $steps->review_status : ($is_active ? 'approved' : 'pending');
 	$doc_verified = $is_active ? 'Verified' : 'Not-Verified';
 	$eligible = $is_completed ? 'Eligible' : 'Not-Eligible';
 ?>
@@ -21,20 +22,30 @@ defined('BASEPATH') or exit('No direct script access allowed');
 				<ol class="breadcrumb">
 					<li class="breadcrumb-item"><a href="<?php echo url('/admin/'); ?>"><?php echo lang('home'); ?></a></li>
 					<li class="breadcrumb-item"><a href="<?php echo url('admin/emarkers'); ?>">Evaluator</a></li>
-					<li class="breadcrumb-item active"><?php echo $is_active ? 'Approved Profiles' : 'Pending Profiles'; ?></li>
+					<li class="breadcrumb-item active">
+						<?php echo ($review_status === 'approved') ? 'Approved Profiles' : (($review_status === 'rejected') ? 'Rejected Profiles' : 'Pending Request'); ?>
+					</li>
 					<li class="breadcrumb-item active"><?php echo (int) ($u->id ?? 0); ?></li>
 				</ol>
 			</div>
 			<div class="col-sm-6">
-				<div class="float-sm-right" style="display:flex;gap:10px;justify-content:flex-end;">
-					<a href="<?php echo url('admin/emarkers/edit/' . (int) $u->id . '/1'); ?>" target="_blank" rel="noopener" class="btn btn-outline-primary">Edit Profile</a>
-					<a href="<?php echo url('admin/emarkers/change_password/' . (int) $u->id); ?>" class="btn btn-primary">Change Password</a>
+				<div class="float-sm-right" style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+					<?php if ($review_status === 'pending'): ?>
+						<button type="button" class="btn btn-outline-primary js-seek-btn">Seek Information</button>
+						<button type="button" class="btn btn-danger js-reject-btn">Reject Request</button>
+						<?php echo form_open('admin/emarkers/approve/' . (int) $u->id, ['method' => 'POST', 'style' => 'display:inline']); ?>
+							<button type="submit" class="btn btn-success js-approve" <?php echo !$is_completed ? 'disabled' : ''; ?>>Approve Request</button>
+						<?php echo form_close(); ?>
+					<?php else: ?>
+						<a href="<?php echo url('admin/emarkers/edit/' . (int) $u->id . '/1'); ?>" target="_blank" rel="noopener" class="btn btn-outline-primary">Edit Profile</a>
+						<a href="<?php echo url('admin/emarkers/change_password/' . (int) $u->id); ?>" class="btn btn-primary">Change Password</a>
+					<?php endif; ?>
 				</div>
 			</div>
 		</div>
 		<div class="row mb-2">
 			<div class="col-sm-12">
-				<a href="<?php echo url('admin/emarkers'); ?>" style="font-weight:600;">Back to List</a>
+				<a href="<?php echo url('admin/emarkers/' . (($review_status === 'approved') ? 'approved' : (($review_status === 'rejected') ? 'rejected' : 'pending'))); ?>" style="font-weight:600;">Back to List</a>
 			</div>
 		</div>
 	</div>
@@ -105,15 +116,23 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 					<?php if (!$is_active): ?>
 						<div style="margin-top:14px;">
-							<?php echo form_open('admin/emarkers/approve/' . (int) $u->id, ['method' => 'POST', 'style' => 'display:inline']); ?>
-								<button type="submit" class="btn btn-success js-approve" <?php echo !$is_completed ? 'disabled' : ''; ?>>
-									<i class="fas fa-check"></i> Approve & Activate
-								</button>
-							<?php echo form_close(); ?>
+							<?php if ($review_status !== 'pending'): ?>
+								<?php echo form_open('admin/emarkers/approve/' . (int) $u->id, ['method' => 'POST', 'style' => 'display:inline']); ?>
+									<button type="submit" class="btn btn-success js-approve" <?php echo !$is_completed ? 'disabled' : ''; ?>>
+										<i class="fas fa-check"></i> Approve & Activate
+									</button>
+								<?php echo form_close(); ?>
+							<?php endif; ?>
 						</div>
 					<?php endif; ?>
 				</div>
 			</div>
+
+			<?php if ($review_status === 'rejected' && !empty($steps->rejection_reason)): ?>
+				<div class="mt-3">
+					<strong>Rejection Reason:</strong> <span class="doc-missing"><?php echo htmlspecialchars((string) $steps->rejection_reason); ?></span>
+				</div>
+			<?php endif; ?>
 		</div>
 
 		<?php $a = isset($address) && is_object($address) ? $address : null; ?>
@@ -292,6 +311,54 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 <?php include viewPath('admin/includes/footer'); ?>
 
+<!-- Reject Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-centered" role="document">
+		<div class="modal-content" style="border-radius:10px;">
+			<div class="modal-header">
+				<h5 class="modal-title">Reject Request</h5>
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+			</div>
+			<?php echo form_open('admin/emarkers/reject/' . (int) ($u->id ?? 0), ['method' => 'POST']); ?>
+				<div class="modal-body">
+					<div class="form-group">
+						<label>Rejection Reason<span class="text-danger">*</span></label>
+						<textarea name="reason" class="form-control" rows="4" placeholder="Enter rejection reason..." required></textarea>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+					<button type="submit" class="btn btn-danger">Reject</button>
+				</div>
+			<?php echo form_close(); ?>
+		</div>
+	</div>
+</div>
+
+<!-- Seek Information Modal -->
+<div class="modal fade" id="seekModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-centered" role="document">
+		<div class="modal-content" style="border-radius:10px;">
+			<div class="modal-header">
+				<h5 class="modal-title">Seek Information</h5>
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+			</div>
+			<?php echo form_open('admin/emarkers/seek_information/' . (int) ($u->id ?? 0), ['method' => 'POST']); ?>
+				<div class="modal-body">
+					<div class="form-group">
+						<label>Message<span class="text-danger">*</span></label>
+						<textarea name="note" class="form-control" rows="4" placeholder="Enter message for evaluator..." required><?php echo !empty($steps->review_notes) ? htmlspecialchars((string) $steps->review_notes) : ''; ?></textarea>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+					<button type="submit" class="btn btn-outline-primary">Save</button>
+				</div>
+			<?php echo form_close(); ?>
+		</div>
+	</div>
+</div>
+
 <!-- Document Modal -->
 <div class="modal fade" id="docModal" tabindex="-1" role="dialog" aria-hidden="true">
 	<div class="modal-dialog modal-xl modal-dialog-centered" role="document">
@@ -317,6 +384,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
 				e.preventDefault();
 				return false;
 			}
+		});
+
+		$('.js-reject-btn').on('click', function () {
+			$('#rejectModal').modal('show');
+		});
+		$('.js-seek-btn').on('click', function () {
+			$('#seekModal').modal('show');
 		});
 
 		$(document).on('click', '.js-doc-view', function (e) {

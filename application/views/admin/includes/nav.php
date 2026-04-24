@@ -17,11 +17,34 @@
   <?php endif; ?>
 
   <?php if ((int) logged('role') === 1): ?>
-    <li class="nav-item">
-      <a href="<?php echo url('admin/emarkers'); ?>" class="nav-link <?php echo ($page->menu == 'emarkers') ? 'active' : ''; ?>">
+    <li class="nav-item has-treeview <?php echo ($page->menu == 'emarkers') ? 'menu-open' : ''; ?>">
+      <a href="#" class="nav-link <?php echo ($page->menu == 'emarkers') ? 'active' : ''; ?>">
         <i class="nav-icon fas fa-user-check"></i>
-        <p>E-Markers</p>
+        <p>
+          Evaluator
+          <i class="right fas fa-angle-left"></i>
+        </p>
       </a>
+      <ul class="nav nav-treeview">
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarkers/approved'); ?>" class="nav-link <?php echo ($page->menu == 'emarkers' && $page->submenu == 'approved') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Approved Profiles</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarkers/pending'); ?>" class="nav-link <?php echo ($page->menu == 'emarkers' && $page->submenu == 'pending') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Pending Requests</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarkers/rejected'); ?>" class="nav-link <?php echo ($page->menu == 'emarkers' && $page->submenu == 'rejected') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Rejected Profiles</p>
+          </a>
+        </li>
+      </ul>
     </li>
   <?php endif; ?>
 

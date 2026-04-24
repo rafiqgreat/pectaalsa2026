@@ -273,6 +273,56 @@ class Signup_model extends CI_Model
 		return $this->db->get_where('teacher_bank_details', ['user_id' => (int) $user_id])->row_array();
 	}
 
+	public function get_degree_options()
+	{
+		$defaults = [
+			'PhD',
+			'MPhil. / MS (18 years)',
+			'Master / M.A/ MSc./ BS (Hons) (16 years)',
+			'B.A / BSc. (14 years)',
+			'HSSC',
+			'SSC',
+		];
+
+		$options = $defaults;
+		$seen = array_fill_keys($defaults, true);
+
+		if ($this->db->table_exists('teacher_educations')) {
+			$rows = $this->db->select('degree')->distinct()->order_by('degree', 'ASC')->get('teacher_educations')->result_array();
+			foreach ($rows as $r) {
+				$deg = trim((string) ($r['degree'] ?? ''));
+				if ($deg === '') continue;
+				if (isset($seen[$deg])) continue;
+				$seen[$deg] = true;
+				$options[] = $deg;
+			}
+		}
+
+		return $options;
+	}
+
+	public function get_specialization_options()
+	{
+		$defaults = ['ENGLISH', 'URDU', 'MATH', 'SCIENCE'];
+
+		$options = $defaults;
+		$seen = array_fill_keys($defaults, true);
+
+		if ($this->db->table_exists('teacher_specializations')) {
+			$rows = $this->db->select('specialization')->distinct()->order_by('specialization', 'ASC')->get('teacher_specializations')->result_array();
+			foreach ($rows as $r) {
+				$spec = strtoupper(trim((string) ($r['specialization'] ?? '')));
+				if ($spec === '') continue;
+				if (isset($seen[$spec])) continue;
+				$seen[$spec] = true;
+				$options[] = $spec;
+			}
+		}
+
+		sort($options, SORT_STRING);
+		return $options;
+	}
+
 	public function save_bank($user_id, array $data)
 	{
 		$user_id = (int) $user_id;

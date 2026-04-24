@@ -77,9 +77,9 @@
 							</div>
 						</div>
 						<div class="form-group col-md-4">
-							<label>Teaching Level</label>
+							<label>Teaching Level<span class="text-danger">*</span></label>
 							<?php $tlevel = $r['teaching_level'] ?? ''; ?>
-							<select class="form-control" name="teaching_level[]">
+							<select class="form-control" name="teaching_level[]" required>
 								<option value="">Select</option>
 								<option value="Under-graduate" <?php echo ($tlevel === 'Under-graduate') ? 'selected' : ''; ?>>Under-graduate</option>
 								<option value="Post-graduate" <?php echo ($tlevel === 'Post-graduate') ? 'selected' : ''; ?>>Post-graduate</option>
@@ -180,8 +180,8 @@
 				</div>
 			</div>
 			<div class="form-group col-md-4">
-				<label>Teaching Level</label>
-				<select class="form-control" name="teaching_level[]">
+				<label>Teaching Level<span class="text-danger">*</span></label>
+				<select class="form-control" name="teaching_level[]" required>
 					<option value="">Select</option>
 					<option value="Under-graduate">Under-graduate</option>
 					<option value="Post-graduate">Post-graduate</option>

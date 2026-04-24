@@ -103,7 +103,10 @@ class Profile extends MY_Controller {
 				$form_data = ['address' => $this->signup->get_address($user_id)];
 				break;
 			case 3:
-				$form_data = ['educations' => $this->signup->get_educations($user_id)];
+				$form_data = [
+					'educations' => $this->signup->get_educations($user_id),
+					'degree_options' => $this->signup->get_degree_options(),
+				];
 				break;
 			case 4:
 				$form_data = [
@@ -115,7 +118,10 @@ class Profile extends MY_Controller {
 				$form_data = ['bank' => $this->signup->get_bank($user_id)];
 				break;
 			case 6:
-				$form_data = ['specialization' => $this->signup->get_specialization($user_id)];
+				$form_data = [
+					'specialization' => $this->signup->get_specialization($user_id),
+					'specialization_options' => $this->signup->get_specialization_options(),
+				];
 				break;
 			case 7:
 				$form_data = [
@@ -396,11 +402,11 @@ class Profile extends MY_Controller {
 				'start_date' => trim((string) ($start_dates[$i] ?? '')),
 				'end_date' => $currently ? null : trim((string) ($end_dates[$i] ?? '')),
 				'currently_working' => $currently,
-				'teaching_level' => trim((string) ($teaching_levels[$i] ?? '')) ?: null,
+				'teaching_level' => trim((string) ($teaching_levels[$i] ?? '')),
 				'bps' => ($sector === 'Government') ? (trim((string) ($bps[$i] ?? '')) ?: null) : null,
 				'document_file' => trim((string) ($docs[$i] ?? '')),
 			];
-			if ($row['department'] === '' || $row['sector'] === '' || $row['experience_type'] === '' || $row['job_type'] === '' || $row['start_date'] === '' || $row['document_file'] === '') {
+			if ($row['department'] === '' || $row['sector'] === '' || $row['experience_type'] === '' || $row['job_type'] === '' || $row['start_date'] === '' || $row['teaching_level'] === '' || $row['document_file'] === '') {
 				$this->json(['success' => false, 'message' => 'All experience fields and uploads are required.'], 422);
 				return;
 			}
@@ -491,16 +497,7 @@ class Profile extends MY_Controller {
 			return;
 		}
 
-		$allowed = ['ENGLISH', 'URDU', 'MATH', 'SCIENCE'];
 		$spec = strtoupper(trim((string) post('specialization')));
-		if (!in_array($spec, $allowed, true)) {
-			$this->json([
-				'success' => false,
-				'message' => 'Please correct the highlighted errors.',
-				'errors' => ['specialization' => 'Please select a valid specialization.'],
-			], 422);
-			return;
-		}
 
 		$result = $this->signup->save_specialization($user_id, ['specialization' => $spec]);
 		if (!$result['success']) {

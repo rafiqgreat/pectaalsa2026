@@ -3,6 +3,19 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Emarkers extends MY_Controller
 {
+	private function role_column()
+	{
+		if ($this->db->field_exists('role', 'users')) return 'role';
+		if ($this->db->field_exists('role_id', 'users')) return 'role_id';
+		return 'role';
+	}
+
+	private function get_emarker_user($id)
+	{
+		$role_col = $this->role_column();
+		return $this->db->get_where('users', ['id' => (int) $id, $role_col => 2])->row();
+	}
+
 	private $step_titles = [
 		1 => 'Personal Information',
 		2 => 'Address Details',
@@ -35,59 +48,168 @@ class Emarkers extends MY_Controller
 
 		$this->page_data['page']->title = 'E-Markers';
 		$this->page_data['page']->menu = 'emarkers';
+		$this->page_data['page']->submenu = 'pending';
 		$this->load->model('Signup_model', 'signup');
 	}
 
-	public function index()
+	public function index($type = 'pending')
 	{
-		$status = (string) $this->input->get('status', true);
-		$status = in_array($status, ['all', 'pending', 'active'], true) ? $status : 'all';
-		$reg = (string) $this->input->get('reg', true);
-		$reg = in_array($reg, ['all', 'completed', 'incomplete'], true) ? $reg : 'all';
-		$q = trim((string) $this->input->get('q', true));
+		$type = strtolower((string) $type);
+		$type = in_array($type, ['approved', 'pending', 'rejected'], true) ? $type : 'pending';
+		$this->page_data['page']->submenu = $type;
 
-		$this->db->select('u.id, u.name, u.email, u.phone, u.cnic, u.status, u.created_at, s.registration_completed')
+		$cnic = trim((string) $this->input->get('cnic', true));
+		$name = trim((string) $this->input->get('name', true));
+		// Legacy filter (kept for backward compatibility with older links)
+		$q = trim((string) $this->input->get('q', true));
+		if ($cnic === '' && $name === '' && $q !== '') {
+			$cnic = $q;
+		}
+		$spec = trim((string) $this->input->get('spec', true));
+		$qual = trim((string) $this->input->get('qual', true));
+		$sort = (string) $this->input->get('sort', true);
+		$dir = strtolower((string) $this->input->get('dir', true));
+		$dir = in_array($dir, ['asc', 'desc'], true) ? $dir : 'asc';
+		if ($sort !== 'exp') $sort = '';
+
+		$role_col = $this->role_column();
+		$has_review = $this->db->field_exists('review_status', 'teacher_registration_steps');
+		$review_select = $has_review
+			? "s.review_status, s.rejection_reason, s.rejected_at, s.updated_at AS steps_updated_at,
+			CASE WHEN s.rejected_at IS NOT NULL AND s.updated_at > s.rejected_at THEN 1 ELSE 0 END AS is_resubmission,"
+			: "'' AS review_status, NULL AS rejection_reason, NULL AS rejected_at, s.updated_at AS steps_updated_at, 0 AS is_resubmission,";
+
+		// Base query
+		$this->db->select("u.id, u.name, u.email, u.phone, u.cnic, u.status, u.created_at,
+			s.registration_completed, {$review_select}
+			sp.specialization,
+			edu.highest_degree,
+			exp.total_years,
+			exp.teaching_level
+		", false)
 			->from('users u')
 			->join('teacher_registration_steps s', 's.user_id = u.id', 'left')
-			->where('u.role', 2)
-			->order_by('u.id', 'DESC');
+			->join('teacher_specializations sp', 'sp.user_id = u.id', 'left')
+			->join("(
+				SELECT e.user_id,
+					(
+						SELECT e2.degree
+						FROM teacher_educations e2
+						WHERE e2.user_id = e.user_id
+						ORDER BY
+							CASE
+								WHEN e2.degree = 'PhD' THEN 6
+								WHEN e2.degree = 'MPhil. / MS (18 years)' THEN 5
+								WHEN e2.degree = 'Master / M.A/ MSc./ BS (Hons) (16 years)' THEN 4
+								WHEN e2.degree = 'B.A / BSc. (14 years)' THEN 3
+								WHEN e2.degree = 'HSSC' THEN 2
+								WHEN e2.degree = 'SSC' THEN 1
+								ELSE 0
+							END DESC,
+							e2.passing_year DESC,
+							e2.id DESC
+						LIMIT 1
+					) AS highest_degree
+				FROM teacher_educations e
+				GROUP BY e.user_id
+			) edu", 'edu.user_id = u.id', 'left', false)
+			->join("(
+				SELECT x.user_id,
+					ROUND(SUM(DATEDIFF(COALESCE(x.end_date, CURDATE()), x.start_date)) / 365.25, 1) AS total_years,
+					(
+						SELECT x2.teaching_level
+						FROM teacher_experiences x2
+						WHERE x2.user_id = x.user_id
+						  AND x2.teaching_level IS NOT NULL
+						  AND x2.teaching_level <> ''
+						ORDER BY COALESCE(x2.end_date, CURDATE()) DESC, x2.id DESC
+						LIMIT 1
+					) AS teaching_level
+				FROM teacher_experiences x
+				GROUP BY x.user_id
+			) exp", 'exp.user_id = u.id', 'left', false)
+			->where('u.' . $role_col, 2);
 
-		if ($status === 'pending') {
-			$this->db->where('u.status', 0);
-		} elseif ($status === 'active') {
-			$this->db->where('u.status', 1);
+		// Filter by request type (review_status)
+		if ($has_review) {
+			$this->db->where('s.review_status', $type);
+		} else {
+			// Backward compatible fallback: pending=inactive, approved=active, rejected=none
+			if ($type === 'approved') $this->db->where('u.status', 1);
+			if ($type === 'pending') $this->db->where('u.status', 0);
+			if ($type === 'rejected') $this->db->where('u.status', -1);
 		}
 
-		if ($reg === 'completed') {
-			$this->db->where('s.registration_completed', 1);
-		} elseif ($reg === 'incomplete') {
-			$this->db->group_start()
-				->where('s.registration_completed IS NULL', null, false)
-				->or_where('s.registration_completed', 0)
-				->group_end();
+		// Registration must be completed to appear in queues
+		$this->db->where('s.registration_completed', 1);
+
+		if ($cnic !== '') {
+			$this->db->like('u.cnic', $cnic);
+		}
+		if ($name !== '') {
+			$this->db->like('u.name', $name);
+		}
+		if ($spec !== '') {
+			$this->db->where('sp.specialization', $spec);
+		}
+		if ($qual !== '') {
+			$this->db->where('edu.highest_degree', $qual);
 		}
 
-		if ($q !== '') {
-			$this->db->group_start()
-				->like('u.name', $q)
-				->or_like('u.email', $q)
-				->or_like('u.phone', $q)
-				->or_like('u.cnic', $q)
-				->group_end();
+		if ($sort === 'exp') {
+			$this->db->order_by('exp.total_years', $dir === 'desc' ? 'DESC' : 'ASC', false);
+		} else {
+			$this->db->order_by('u.id', 'DESC');
 		}
 
 		$rows = $this->db->get()->result();
 
-		// Attach doc presence counts (small N -> per-row queries acceptable)
+		// Build dropdown options (include defaults even if no records exist yet)
+		$spec_opts = $this->signup->get_specialization_options();
+		$qual_opts = $this->signup->get_degree_options();
+
+		// Add derived status label (Fresh/Resubmission) for pending list
 		foreach ($rows as $r) {
-			$r->has_security_doc = (int) $this->db->from('teacher_security_documents')->where('user_id', (int) $r->id)->count_all_results() > 0;
-			$r->edu_docs = (int) $this->db->from('teacher_educations')->where('user_id', (int) $r->id)->count_all_results();
-			$r->exp_docs = (int) $this->db->from('teacher_experiences')->where('user_id', (int) $r->id)->count_all_results();
+			$r->derived_status = '';
+			if ($type === 'pending') {
+				$r->derived_status = !empty($r->is_resubmission) ? 'Resubmission' : 'Fresh';
+			} elseif ($type === 'approved') {
+				$r->derived_status = 'Approved';
+			}
+			if (empty($r->total_years)) $r->total_years = 0.0;
+			if (empty($r->teaching_level)) $r->teaching_level = '---';
+			if ((string) $r->teaching_level === 'SSC/HSSC') $r->teaching_level = 'Secondary';
 		}
 
 		$this->page_data['emarkers'] = $rows;
-		$this->page_data['filters'] = ['status' => $status, 'reg' => $reg, 'q' => $q];
+		$this->page_data['filters'] = [
+			'type' => $type,
+			'cnic' => $cnic,
+			'name' => $name,
+			'q' => $q,
+			'spec' => $spec,
+			'qual' => $qual,
+			'sort' => $sort,
+			'dir' => $dir,
+			'spec_opts' => $spec_opts,
+			'qual_opts' => $qual_opts,
+		];
 		$this->load->view('admin/emarkers/list', $this->page_data);
+	}
+
+	public function pending()
+	{
+		$this->index('pending');
+	}
+
+	public function approved()
+	{
+		$this->index('approved');
+	}
+
+	public function rejected()
+	{
+		$this->index('rejected');
 	}
 
 	public function view($id = 0)
@@ -95,14 +217,22 @@ class Emarkers extends MY_Controller
 		$id = (int) $id;
 		if ($id <= 0) show_404();
 
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
 
 		$this->page_data['page']->title = 'E-Marker Profile';
 		$this->page_data['page']->menu = 'emarkers';
 
 		$this->page_data['user_row'] = $user;
-		$this->page_data['steps_row'] = $this->db->get_where('teacher_registration_steps', ['user_id' => $id])->row();
+		$steps_row = $this->db->get_where('teacher_registration_steps', ['user_id' => $id])->row();
+		$this->page_data['steps_row'] = $steps_row;
+		$sub = 'pending';
+		if ($steps_row && !empty($steps_row->review_status)) {
+			$sub = (string) $steps_row->review_status;
+		} else if ((int) ($user->status ?? 0) === 1) {
+			$sub = 'approved';
+		}
+		$this->page_data['page']->submenu = $sub;
 		$this->page_data['address'] = $this->db->get_where('teacher_addresses', ['user_id' => $id])->row();
 		$this->page_data['educations'] = $this->db->order_by('id', 'ASC')->get_where('teacher_educations', ['user_id' => $id])->result();
 		$this->page_data['experiences'] = $this->db->order_by('id', 'ASC')->get_where('teacher_experiences', ['user_id' => $id])->result();
@@ -119,11 +249,13 @@ class Emarkers extends MY_Controller
 		$id = (int) $id;
 		if ($id <= 0) show_404();
 
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
 
 		$this->page_data['page']->title = 'Change E-Marker Password';
 		$this->page_data['page']->menu = 'emarkers';
+		$steps_row = $this->db->get_where('teacher_registration_steps', ['user_id' => $id])->row();
+		$this->page_data['page']->submenu = ($steps_row && !empty($steps_row->review_status)) ? (string) $steps_row->review_status : 'pending';
 		$this->page_data['user_row'] = $user;
 		$this->load->view('admin/emarkers/change_password', $this->page_data);
 	}
@@ -134,7 +266,7 @@ class Emarkers extends MY_Controller
 		if ($id <= 0) show_404();
 		postAllowed();
 
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
 
 		$password = (string) $this->input->post('password', false);
@@ -168,7 +300,7 @@ class Emarkers extends MY_Controller
 		if ($id <= 0) show_404();
 		if ($step < 1 || $step > 8) show_404();
 
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
 
 		$steps = $this->signup->get_steps($id);
@@ -213,6 +345,8 @@ class Emarkers extends MY_Controller
 
 		$this->page_data['page']->title = 'Edit E-Marker';
 		$this->page_data['page']->menu = 'emarkers';
+		$steps_row2 = $this->db->get_where('teacher_registration_steps', ['user_id' => $id])->row();
+		$this->page_data['page']->submenu = ($steps_row2 && !empty($steps_row2->review_status)) ? (string) $steps_row2->review_status : 'pending';
 		$this->page_data['wizard'] = $data;
 		$this->load->view('admin/emarkers/edit_wizard', $this->page_data);
 	}
@@ -222,7 +356,7 @@ class Emarkers extends MY_Controller
 		$id = (int) $id;
 		if ($id <= 0) show_404();
 
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
 
 		if (empty($_FILES['file'])) {
@@ -292,7 +426,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -347,7 +481,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -384,7 +518,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -455,7 +589,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -502,7 +636,7 @@ class Emarkers extends MY_Controller
 					'sector' => $sec,
 					'experience_type' => $et,
 					'job_type' => $jt,
-					'teaching_level' => $tl ?: null,
+					'teaching_level' => $tl,
 					'bps' => ($sec === 'Government') ? ($bp ?: null) : null,
 					'start_date' => $sd,
 					'end_date' => $cw ? null : ($ed ?: null),
@@ -519,6 +653,10 @@ class Emarkers extends MY_Controller
 
 		// Validate date ranges (basic)
 		foreach ($rows as $r) {
+			if (empty($r['teaching_level'])) {
+				$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => ['teaching_level[]' => 'Teaching Level is required.']], 422);
+				return;
+			}
 			if (empty($r['start_date'])) {
 				$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => ['start_date[]' => 'Start Date is required.']], 422);
 				return;
@@ -545,7 +683,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -593,7 +731,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -605,16 +743,7 @@ class Emarkers extends MY_Controller
 			return;
 		}
 
-		$allowed = ['ENGLISH', 'URDU', 'MATH', 'SCIENCE'];
 		$spec = strtoupper(trim((string) post('specialization')));
-		if (!in_array($spec, $allowed, true)) {
-			$this->json([
-				'success' => false,
-				'message' => 'Please correct the highlighted errors.',
-				'errors' => ['specialization' => 'Please select a valid specialization.'],
-			], 422);
-			return;
-		}
 
 		$result = $this->signup->save_specialization($id, ['specialization' => $spec]);
 		if (!$result['success']) {
@@ -628,7 +757,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -676,7 +805,7 @@ class Emarkers extends MY_Controller
 	{
 		$id = (int) $id;
 		postAllowed();
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->json(['success' => false, 'message' => 'Invalid user.'], 404);
 			return;
@@ -743,7 +872,10 @@ class Emarkers extends MY_Controller
 			case 2:
 				return ['address' => $this->signup->get_address($user_id)];
 			case 3:
-				return ['educations' => $this->signup->get_educations($user_id)];
+				return [
+					'educations' => $this->signup->get_educations($user_id),
+					'degree_options' => $this->signup->get_degree_options(),
+				];
 			case 4:
 				$steps = $this->signup->get_steps($user_id);
 				return [
@@ -753,7 +885,10 @@ class Emarkers extends MY_Controller
 			case 5:
 				return ['bank' => $this->signup->get_bank($user_id)];
 			case 6:
-				return ['specialization' => $this->signup->get_specialization($user_id)];
+				return [
+					'specialization' => $this->signup->get_specialization($user_id),
+					'specialization_options' => $this->signup->get_specialization_options(),
+				];
 			case 7:
 				return [
 					'security' => $this->signup->get_security($user_id),
@@ -783,7 +918,7 @@ class Emarkers extends MY_Controller
 		$id = (int) $id;
 		if ($id <= 0) show_404();
 
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
 
 		$steps = $this->db->get_where('teacher_registration_steps', ['user_id' => $id])->row();
@@ -803,10 +938,111 @@ class Emarkers extends MY_Controller
 		}
 
 		$this->db->where('id', $id)->update('users', ['status' => 1]);
+		if ($this->db->table_exists('teacher_registration_steps') && $this->db->field_exists('review_status', 'teacher_registration_steps')) {
+			// Update only this user's steps row
+			$update = [
+				'review_status' => 'approved',
+			];
+			if ($this->db->field_exists('approved_at', 'teacher_registration_steps')) {
+				$update['approved_at'] = date('Y-m-d H:i:s');
+			}
+			if ($this->db->field_exists('rejected_at', 'teacher_registration_steps')) {
+				$update['rejected_at'] = null;
+			}
+			if ($this->db->field_exists('rejection_reason', 'teacher_registration_steps')) {
+				$update['rejection_reason'] = null;
+			}
+			if ($this->db->field_exists('reviewed_by', 'teacher_registration_steps')) {
+				$update['reviewed_by'] = (int) logged('id');
+			}
+			$this->db->where('user_id', $id)->update('teacher_registration_steps', $update);
+		}
 		$this->activity_model->add("Admin approved E-Marker user #{$id}", logged('id'));
 
 		$this->session->set_flashdata('alert-type', 'success');
 		$this->session->set_flashdata('alert', 'E-Marker account approved and activated.');
+		redirect('admin/emarkers/view/' . $id);
+	}
+
+	public function reject($id = 0)
+	{
+		$id = (int) $id;
+		if ($id <= 0) show_404();
+		postAllowed();
+
+		$user = $this->get_emarker_user($id);
+		if (!$user) show_404();
+
+		$reason = trim((string) $this->input->post('reason', true));
+		if ($reason === '') {
+			$this->session->set_flashdata('alert-type', 'danger');
+			$this->session->set_flashdata('alert', 'Rejection reason is required.');
+			redirect('admin/emarkers/view/' . $id);
+			return;
+		}
+
+		if ($this->db->table_exists('teacher_registration_steps') && $this->db->field_exists('review_status', 'teacher_registration_steps')) {
+			// Update only this user's steps row
+			$update = [
+				'review_status' => 'rejected',
+			];
+			if ($this->db->field_exists('rejection_reason', 'teacher_registration_steps')) {
+				$update['rejection_reason'] = $reason;
+			}
+			if ($this->db->field_exists('rejected_at', 'teacher_registration_steps')) {
+				$update['rejected_at'] = date('Y-m-d H:i:s');
+			}
+			if ($this->db->field_exists('approved_at', 'teacher_registration_steps')) {
+				$update['approved_at'] = null;
+			}
+			if ($this->db->field_exists('reviewed_by', 'teacher_registration_steps')) {
+				$update['reviewed_by'] = (int) logged('id');
+			}
+			$this->db->where('user_id', $id)->update('teacher_registration_steps', $update);
+		}
+		// Keep account inactive until approved.
+		$this->db->where('id', $id)->update('users', ['status' => 0]);
+
+		$this->activity_model->add("Admin rejected E-Marker user #{$id}", logged('id'));
+		$this->session->set_flashdata('alert-type', 'success');
+		$this->session->set_flashdata('alert', 'Request rejected.');
+		redirect('admin/emarkers/view/' . $id);
+	}
+
+	public function seek_information($id = 0)
+	{
+		$id = (int) $id;
+		if ($id <= 0) show_404();
+		postAllowed();
+
+		$user = $this->get_emarker_user($id);
+		if (!$user) show_404();
+
+		$note = trim((string) $this->input->post('note', true));
+		if ($note === '') {
+			$this->session->set_flashdata('alert-type', 'danger');
+			$this->session->set_flashdata('alert', 'Message is required.');
+			redirect('admin/emarkers/view/' . $id);
+			return;
+		}
+
+		if ($this->db->table_exists('teacher_registration_steps') && $this->db->field_exists('review_status', 'teacher_registration_steps')) {
+			// Update only this user's steps row
+			$update = [
+				'review_status' => 'pending',
+			];
+			if ($this->db->field_exists('review_notes', 'teacher_registration_steps')) {
+				$update['review_notes'] = $note;
+			}
+			if ($this->db->field_exists('reviewed_by', 'teacher_registration_steps')) {
+				$update['reviewed_by'] = (int) logged('id');
+			}
+			$this->db->where('user_id', $id)->update('teacher_registration_steps', $update);
+		}
+
+		$this->activity_model->add("Admin requested information from E-Marker user #{$id}", logged('id'));
+		$this->session->set_flashdata('alert-type', 'success');
+		$this->session->set_flashdata('alert', 'Information request saved.');
 		redirect('admin/emarkers/view/' . $id);
 	}
 
@@ -821,7 +1057,7 @@ class Emarkers extends MY_Controller
 			return;
 		}
 
-		$user = $this->db->get_where('users', ['id' => $id, 'role' => 2])->row();
+		$user = $this->get_emarker_user($id);
 		if (!$user) {
 			$this->output->set_output('error');
 			return;

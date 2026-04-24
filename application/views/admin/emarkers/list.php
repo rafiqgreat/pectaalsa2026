@@ -1,170 +1,227 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 ?>
-
 <?php include viewPath('admin/includes/header'); ?>
+<?php
+	$rows = isset($emarkers) && is_array($emarkers) ? $emarkers : [];
+	$f = isset($filters) && is_array($filters) ? $filters : [];
+	$type = (string) ($f['type'] ?? 'pending');
+	$cnic = (string) ($f['cnic'] ?? '');
+	$name = (string) ($f['name'] ?? '');
+	$spec = (string) ($f['spec'] ?? '');
+	$qual = (string) ($f['qual'] ?? '');
+	$sort = (string) ($f['sort'] ?? '');
+	$dir = (string) ($f['dir'] ?? 'asc');
+	$spec_opts = isset($f['spec_opts']) && is_array($f['spec_opts']) ? $f['spec_opts'] : [];
+	$qual_opts = isset($f['qual_opts']) && is_array($f['qual_opts']) ? $f['qual_opts'] : [];
 
+	$titleMap = [
+		'pending' => 'Pending Request',
+		'approved' => 'Approved Profiles',
+		'rejected' => 'Rejected Profiles',
+	];
+	$pageTitle = $titleMap[$type] ?? 'Pending Request';
+
+	$expDir = ($sort === 'exp' && $dir === 'asc') ? 'desc' : 'asc';
+	$expUrl = url('admin/emarkers/' . $type) . '?sort=exp&dir=' . $expDir
+		. ($cnic !== '' ? ('&cnic=' . urlencode($cnic)) : '')
+		. ($name !== '' ? ('&name=' . urlencode($name)) : '')
+		. ($spec !== '' ? ('&spec=' . urlencode($spec)) : '')
+		. ($qual !== '' ? ('&qual=' . urlencode($qual)) : '');
+	$expArrow = ($sort === 'exp') ? ($dir === 'asc' ? '&uarr;' : '&darr;') : '&uarr;';
+?>
+
+<!-- Content Header (Page header) -->
 <section class="content-header">
 	<div class="container-fluid">
 		<div class="row mb-2">
 			<div class="col-sm-6">
-				<h1>Registered E-Markers</h1>
+				<h1><?php echo htmlspecialchars((string) $pageTitle); ?></h1>
 			</div>
 			<div class="col-sm-6">
 				<ol class="breadcrumb float-sm-right">
 					<li class="breadcrumb-item"><a href="<?php echo url('/admin/'); ?>"><?php echo lang('home'); ?></a></li>
-					<li class="breadcrumb-item active">E-Markers</li>
+					<li class="breadcrumb-item"><a href="<?php echo url('admin/emarkers/pending'); ?>">Evaluator</a></li>
+					<li class="breadcrumb-item active"><?php echo htmlspecialchars((string) $pageTitle); ?></li>
 				</ol>
 			</div>
 		</div>
-	</div>
+	</div><!-- /.container-fluid -->
 </section>
 
+<!-- Main content -->
 <section class="content">
 	<div class="container-fluid">
-		<div class="card">
-			<div class="card-header">
-				<h3 class="card-title">E-Marker Listing</h3>
-			</div>
-			<div class="card-body">
-				<?php if (!empty($this->session->flashdata('alert'))): ?>
-					<div class="alert alert-<?php echo $this->session->flashdata('alert-type'); ?>">
-						<?php echo $this->session->flashdata('alert'); ?>
+		<div class="row">
+			<div class="col-12">
+				<div class="card">
+					<div class="card-header d-flex p-0">
+						<h3 class="card-title p-3"><?php echo htmlspecialchars((string) $pageTitle); ?></h3>
 					</div>
-				<?php endif; ?>
 
-				<?php $f = isset($filters) && is_array($filters) ? $filters : ['status' => 'all', 'reg' => 'all', 'q' => '']; ?>
-				<div class="row mb-3">
-					<div class="col-md-3 col-sm-6 mb-2">
-						<input type="text" id="filter-q" class="form-control form-control-sm" placeholder="Search name/email/phone/CNIC" value="<?php echo htmlspecialchars((string) ($f['q'] ?? '')); ?>">
-					</div>
-					<div class="col-md-3 col-sm-6 mb-2">
-						<select id="filter-status" class="form-control form-control-sm">
-							<option value="all" <?php echo (($f['status'] ?? 'all') === 'all') ? 'selected' : ''; ?>>All Status</option>
-							<option value="pending" <?php echo (($f['status'] ?? 'all') === 'pending') ? 'selected' : ''; ?>>Pending</option>
-							<option value="active" <?php echo (($f['status'] ?? 'all') === 'active') ? 'selected' : ''; ?>>Active</option>
-						</select>
-					</div>
-					<div class="col-md-3 col-sm-6 mb-2">
-						<select id="filter-reg" class="form-control form-control-sm">
-							<option value="all" <?php echo (($f['reg'] ?? 'all') === 'all') ? 'selected' : ''; ?>>All Registrations</option>
-							<option value="completed" <?php echo (($f['reg'] ?? 'all') === 'completed') ? 'selected' : ''; ?>>Completed</option>
-							<option value="incomplete" <?php echo (($f['reg'] ?? 'all') === 'incomplete') ? 'selected' : ''; ?>>Incomplete</option>
-						</select>
-					</div>
-					<div class="col-md-2 col-sm-6 mb-2">
-						<button type="button" id="filter-search" class="btn btn-sm btn-primary btn-block">Search</button>
-					</div>
-					<div class="col-md-1 col-sm-6 mb-2">
-						<button type="button" id="filter-reset" class="btn btn-sm btn-outline-secondary btn-block">Reset</button>
-					</div>
-				</div>
+					<div class="card-body">
+						<?php if (!empty($this->session->flashdata('alert'))): ?>
+							<div class="alert alert-<?php echo $this->session->flashdata('alert-type'); ?>">
+								<?php echo $this->session->flashdata('alert'); ?>
+							</div>
+						<?php endif; ?>
 
-				<div class="table-responsive">
-					<table class="table table-bordered table-hover table-striped">
-						<thead>
-							<tr>
-								<th style="width:80px;">ID</th>
-								<th>Name</th>
-								<th>CNIC</th>
-								<th>Email</th>
-								<th>Phone</th>
-								<th>Registration</th>
-								<th>Account</th>
-								<th>Docs</th>
-								<th style="width:140px;">Action</th>
-							</tr>
-						</thead>
-						<tbody>
-							<?php if (!empty($emarkers)): ?>
-								<?php foreach ($emarkers as $r): ?>
-									<tr>
-										<td><?php echo (int) $r->id; ?></td>
-										<td><?php echo htmlspecialchars((string) $r->name); ?></td>
-										<td><?php echo htmlspecialchars((string) $r->cnic); ?></td>
-										<td><?php echo htmlspecialchars((string) $r->email); ?></td>
-										<td><?php echo htmlspecialchars((string) $r->phone); ?></td>
-										<td>
-											<?php if ((int) ($r->registration_completed ?? 0) === 1): ?>
-												<span class="badge badge-success">Completed</span>
+						<div class="row mb-3">
+							<div class="col-md-3 col-sm-6 mb-2">
+								<input type="text" id="filter-cnic" class="form-control form-control-sm" placeholder="CNIC" value="<?php echo htmlspecialchars((string) $cnic); ?>">
+							</div>
+							<div class="col-md-3 col-sm-6 mb-2">
+								<input type="text" id="filter-name" class="form-control form-control-sm" placeholder="Name" value="<?php echo htmlspecialchars((string) $name); ?>">
+							</div>
+							<div class="col-md-3 col-sm-6 mb-2">
+								<select id="filter-spec" class="form-control form-control-sm">
+									<option value="">All Specializations</option>
+									<?php foreach ($spec_opts as $opt): ?>
+										<option value="<?php echo htmlspecialchars($opt); ?>" <?php echo ($spec === $opt) ? 'selected' : ''; ?>><?php echo htmlspecialchars($opt); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="col-md-3 col-sm-6 mb-2">
+								<select id="filter-qual" class="form-control form-control-sm">
+									<option value="">All Qualifications</option>
+									<?php foreach ($qual_opts as $opt): ?>
+										<option value="<?php echo htmlspecialchars($opt); ?>" <?php echo ($qual === $opt) ? 'selected' : ''; ?>><?php echo htmlspecialchars($opt); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="col-md-2 col-sm-6 mb-2">
+								<button type="button" id="filter-search" class="btn btn-sm btn-primary btn-block">Search</button>
+							</div>
+							<div class="col-md-2 col-sm-6 mb-2">
+								<button type="button" id="filter-reset" class="btn btn-sm btn-outline-secondary btn-block">Reset</button>
+							</div>
+						</div>
+
+						<table id="example1" class="table table-bordered table-hover table-striped">
+							<thead>
+								<tr>
+									<th style="width:70px;">ID</th>
+									<th>Name</th>
+									<th style="width:170px;">CNIC</th>
+									<th>Specialization</th>
+									<th style="width:140px;">
+										<a href="<?php echo $expUrl; ?>" style="color:inherit;text-decoration:none;">
+											Experience <?php echo $expArrow; ?>
+										</a>
+									</th>
+									<th>Qualification</th>
+									<th style="width:160px;">Teaching Level</th>
+									<th style="width:150px;">Active Status</th>
+									<?php if ($type === 'rejected'): ?>
+										<th>Rejection Reason</th>
+									<?php else: ?>
+										<th style="width:120px;">Status</th>
+									<?php endif; ?>
+									<th style="width:90px;">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php if (!empty($rows)): ?>
+									<?php foreach ($rows as $r): ?>
+										<tr>
+											<td><?php echo (int) ($r->id ?? 0); ?></td>
+											<td><?php echo htmlspecialchars((string) ($r->name ?? '')); ?></td>
+											<td><?php echo htmlspecialchars((string) ($r->cnic ?? '')); ?></td>
+											<td><?php echo htmlspecialchars((string) ($r->specialization ?? '')); ?></td>
+											<td><?php echo number_format((float) ($r->total_years ?? 0), 1); ?> years</td>
+											<td><?php echo htmlspecialchars((string) ($r->highest_degree ?? '')); ?></td>
+											<td><?php echo htmlspecialchars((string) ($r->teaching_level ?? '---')); ?></td>
+											<td>
+												<?php
+													$active = ((int) ($r->status ?? 0) === 1);
+													$disabled = ($type !== 'approved') ? 'disabled' : '';
+												?>
+												<input
+													type="checkbox"
+													name="my-checkbox"
+													<?php echo $active ? 'checked' : ''; ?>
+													<?php echo $disabled; ?>
+													onchange="updateEmarkerStatus('<?php echo (int) ($r->id ?? 0); ?>', $(this).is(':checked'))"
+													data-bootstrap-switch
+													data-off-color="secondary"
+													data-on-color="success"
+													data-off-text="Inactive"
+													data-on-text="Active"
+												>
+											</td>
+											<?php if ($type === 'rejected'): ?>
+												<td><?php echo htmlspecialchars((string) ($r->rejection_reason ?? '')); ?></td>
 											<?php else: ?>
-												<span class="badge badge-secondary">Incomplete</span>
+												<td><?php echo htmlspecialchars((string) (!empty($r->derived_status) ? $r->derived_status : ($type === 'approved' ? 'Approved' : 'Pending'))); ?></td>
 											<?php endif; ?>
-										</td>
-										<td>
-											<input type="checkbox"
-												name="emarker-status"
-												data-user-id="<?php echo (int) $r->id; ?>"
-												<?php echo ((int) ($r->status ?? 0) === 1) ? 'checked' : ''; ?>
-												data-bootstrap-switch
-												data-off-color="secondary"
-												data-on-color="success"
-												data-off-text="Inactive"
-												data-on-text="Active"
-											>
-										</td>
-										<td>
-											<span class="badge badge-info">Sec: <?php echo !empty($r->has_security_doc) ? 'Yes' : 'No'; ?></span>
-											<span class="badge badge-light">Edu: <?php echo (int) ($r->edu_docs ?? 0); ?></span>
-											<span class="badge badge-light">Exp: <?php echo (int) ($r->exp_docs ?? 0); ?></span>
-										</td>
-										<td>
-											<a href="<?php echo url('admin/emarkers/view/' . (int) $r->id); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> View</a>
-										</td>
-									</tr>
-								<?php endforeach; ?>
-							<?php else: ?>
-								<tr><td colspan="9" class="text-center text-muted">No e-markers found.</td></tr>
-							<?php endif; ?>
-						</tbody>
-					</table>
+											<td>
+												<a href="<?php echo url('admin/emarkers/view/' . (int) $r->id); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-info" title="View" data-toggle="tooltip">
+													<i class="fa fa-eye"></i>
+												</a>
+											</td>
+										</tr>
+									<?php endforeach; ?>
+								<?php else: ?>
+									<tr><td colspan="10" class="text-center text-muted py-4">No records found.</td></tr>
+								<?php endif; ?>
+							</tbody>
+						</table>
+					</div>
+					<!-- /.card-body -->
 				</div>
+				<!-- /.card -->
 			</div>
+			<!-- /.col -->
 		</div>
+		<!-- /.row -->
 	</div>
+	<!-- /.container-fluid -->
 </section>
+<!-- /.content -->
 
 <?php include viewPath('admin/includes/footer'); ?>
 
 <script>
-	$(function () {
-		function buildUrl(reset) {
-			var base = '<?php echo url('admin/emarkers'); ?>';
-			if (reset) return base;
-			var params = [];
-			var q = ($('#filter-q').val() || '').trim();
-			var status = $('#filter-status').val() || 'all';
-			var reg = $('#filter-reg').val() || 'all';
-			if (q) params.push('q=' + encodeURIComponent(q));
-			if (status && status !== 'all') params.push('status=' + encodeURIComponent(status));
-			if (reg && reg !== 'all') params.push('reg=' + encodeURIComponent(reg));
-			return params.length ? (base + '?' + params.join('&')) : base;
-		}
-		$('#filter-search').on('click', function () { window.location.href = buildUrl(false); });
-		$('#filter-reset').on('click', function () { window.location.href = buildUrl(true); });
-	});
-
-	$(function () {
-		// Toggle behavior (BootstrapSwitch)
-		$("input[name='emarker-status']").on('switchChange.bootstrapSwitch', function (event, state) {
-			var $sw = $(this);
-			var id = $sw.data('user-id');
-			if (!id) return;
-
-			if (!confirm('Change account status?')) {
-				$sw.bootstrapSwitch('state', !state, true);
-				return;
+	$(function() {
+		function buildFilterUrl(reset) {
+			var baseUrl = '<?php echo url('admin/emarkers/' . $type); ?>';
+			if (reset) {
+				return baseUrl;
 			}
+			var params = [];
+			var cnic = ($('#filter-cnic').val() || '').trim();
+			var name = ($('#filter-name').val() || '').trim();
+			var spec = $('#filter-spec').val() || '';
+			var qual = $('#filter-qual').val() || '';
+			if (cnic) params.push('cnic=' + encodeURIComponent(cnic));
+			if (name) params.push('name=' + encodeURIComponent(name));
+			if (spec) params.push('spec=' + encodeURIComponent(spec));
+			if (qual) params.push('qual=' + encodeURIComponent(qual));
+			return params.length ? (baseUrl + '?' + params.join('&')) : baseUrl;
+		}
 
-			$.get('<?php echo url('admin/emarkers/change_status'); ?>/' + id, { status: state }, function (data) {
-				if (data !== 'done') {
-					alert('Unable to change status.');
-					$sw.bootstrapSwitch('state', !state, true);
-				}
-			}).fail(function () {
-				alert('Unable to change status.');
-				$sw.bootstrapSwitch('state', !state, true);
-			});
+		$('#filter-search').on('click', function() {
+			window.location.href = buildFilterUrl(false);
+		});
+
+		$('#filter-reset').on('click', function() {
+			window.location.href = buildFilterUrl(true);
+		});
+
+		$('#filter-cnic, #filter-name').on('keyup', function(e) {
+			if (e.key === 'Enter') window.location.href = buildFilterUrl(false);
 		});
 	});
+
+	window.updateEmarkerStatus = (id, status) => {
+		$.get('<?php echo url('admin/emarkers/change_status'); ?>/' + id, {
+			status: status
+		}, (data) => {
+			if (data !== 'done') {
+				alert('Unable to change status.');
+			}
+		}).fail(function() {
+			alert('Unable to change status.');
+		});
+	}
 </script>

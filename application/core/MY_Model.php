@@ -33,7 +33,11 @@ class MY_Model extends CI_Model {
 	{
 		$table = $table ?? $this->table;
 		$primaryKey = $primaryKey ?? $this->table_key;
-		return $this->db->get_where($table, [$primaryKey => $id])->row();
+		$query = $this->db->get_where($table, [$primaryKey => $id]);
+		if ($query === false) {
+			return null;
+		}
+		return $query->row();
 	}
 
 
@@ -49,7 +53,15 @@ class MY_Model extends CI_Model {
 
 	public function getRowById($id, $row)
 	{
-		return $this->db->get_where($this->table, [ $this->table_key => $id ])->row()->{$row};
+		$query = $this->db->get_where($this->table, [ $this->table_key => $id ]);
+		if ($query === false) {
+			return null;
+		}
+		$r = $query->row();
+		if (!$r) {
+			return null;
+		}
+		return $r->{$row};
 		//die($this->db->last_query());
 	}
 

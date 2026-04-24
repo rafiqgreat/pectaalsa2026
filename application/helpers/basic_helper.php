@@ -152,21 +152,23 @@ if (!function_exists('dd')) {
  * @return boolean
  * 
  */
-if (!function_exists('is_logged')) {
-	function is_logged()
-	{
-		$CI = &get_instance();
-		$login_token_match = false;
-		$isLogged = !empty($CI->session->userdata('login')) &&  !empty($CI->session->userdata('logged')) ? (object) $CI->session->userdata('logged') : false;
-		$_token = $isLogged && !empty($CI->session->userdata('login_token')) ? $CI->session->userdata('login_token') : false;
+	if (!function_exists('is_logged')) {
+		function is_logged()
+		{
+			$CI = &get_instance();
+			$login_token_match = false;
+			$isLogged = !empty($CI->session->userdata('login')) &&  !empty($CI->session->userdata('logged')) ? (object) $CI->session->userdata('logged') : false;
+			$_token = $isLogged && !empty($CI->session->userdata('login_token')) ? $CI->session->userdata('login_token') : false;
 		if (!$isLogged) {
 			$isLogged = get_cookie('login') && !empty(get_cookie('logged')) ? json_decode(get_cookie('logged')) : false;
 			$_token = $isLogged && !empty(get_cookie('login_token')) ? get_cookie('login_token') : false;
 		}
 		if ($isLogged) {
-			$user = $CI->users_model->getById($CI->db->escape((int) $isLogged->id));
-			// verify login_token
-			$login_token_match = (sha1($user->id . $user->password . $isLogged->time) == $_token);
+			$user = $CI->users_model->getById((int) $isLogged->id);
+			if ($user) {
+				// verify login_token
+				$login_token_match = (sha1($user->id . $user->password . $isLogged->time) == $_token);
+			}
 		}
 		return $isLogged && $login_token_match;
 	}

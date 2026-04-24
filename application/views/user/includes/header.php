@@ -67,7 +67,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
         <div class="col-1"><img src="<?= base_url('assets/images/Logo_1.png'); ?>" alt="Logo 1" style="height:80px" /></div>
         <div class="col-9 mt-2 ml-5">
           <h4><span style="font-weight:bold">PECTAA LSA 2026 - DIGITAL WEB SOLUTION</span></h4>
-          <h5><span>Public School Support Program Spell - <?php print $this->settings_model->getValueByKey('spell'); ?></span></h5>
+          <h5><span>Digital Barcoding, Scanning, Emarking, AI Analysis - A Complete Solution</span></h5>
         </div>
       </div>
       <!-- Left navbar links -->
