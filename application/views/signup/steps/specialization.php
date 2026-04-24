@@ -9,8 +9,10 @@
 			<option value="">Select</option>
 			<?php
 				$options = [
-					'MATH','ENGLISH','URDU','ISLAMIAT','PHYSICS','CHEMISTRY','BIOLOGY',
-					'COMPUTER SCIENCE','GENERAL SCIENCE','PAK STUDIES'
+					'ENGLISH',
+					'URDU',
+					'MATH',
+					'SCIENCE',
 				];
 			?>
 			<?php foreach ($options as $opt): ?>
@@ -19,4 +21,3 @@
 		</select>
 	</div>
 </form>
-

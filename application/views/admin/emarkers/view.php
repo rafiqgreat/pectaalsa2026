@@ -10,20 +10,31 @@ defined('BASEPATH') or exit('No direct script access allowed');
 	$img = (!empty($u->profile_picture)) ? base_url($u->profile_picture) : base_url('assets/img/avatar5.png');
 	$is_active = !empty($u) && (int) ($u->status ?? 0) === 1;
 	$is_completed = !empty($steps) && (int) ($steps->registration_completed ?? 0) === 1;
+	$doc_verified = $is_active ? 'Verified' : 'Not-Verified';
+	$eligible = $is_completed ? 'Eligible' : 'Not-Eligible';
 ?>
 
 <section class="content-header">
 	<div class="container-fluid">
 		<div class="row mb-2">
 			<div class="col-sm-6">
-				<h1>E-Marker Profile</h1>
+				<ol class="breadcrumb">
+					<li class="breadcrumb-item"><a href="<?php echo url('/admin/'); ?>"><?php echo lang('home'); ?></a></li>
+					<li class="breadcrumb-item"><a href="<?php echo url('admin/emarkers'); ?>">Evaluator</a></li>
+					<li class="breadcrumb-item active"><?php echo $is_active ? 'Approved Profiles' : 'Pending Profiles'; ?></li>
+					<li class="breadcrumb-item active"><?php echo (int) ($u->id ?? 0); ?></li>
+				</ol>
 			</div>
 			<div class="col-sm-6">
-				<ol class="breadcrumb float-sm-right">
-					<li class="breadcrumb-item"><a href="<?php echo url('/admin/'); ?>"><?php echo lang('home'); ?></a></li>
-					<li class="breadcrumb-item"><a href="<?php echo url('admin/emarkers'); ?>">E-Markers</a></li>
-					<li class="breadcrumb-item active">View</li>
-				</ol>
+				<div class="float-sm-right" style="display:flex;gap:10px;justify-content:flex-end;">
+					<a href="<?php echo url('admin/emarkers/edit/' . (int) $u->id . '/1'); ?>" target="_blank" rel="noopener" class="btn btn-outline-primary">Edit Profile</a>
+					<a href="<?php echo url('admin/emarkers/change_password/' . (int) $u->id); ?>" class="btn btn-primary">Change Password</a>
+				</div>
+			</div>
+		</div>
+		<div class="row mb-2">
+			<div class="col-sm-12">
+				<a href="<?php echo url('admin/emarkers'); ?>" style="font-weight:600;">Back to List</a>
 			</div>
 		</div>
 	</div>
@@ -37,112 +48,267 @@ defined('BASEPATH') or exit('No direct script access allowed');
 			</div>
 		<?php endif; ?>
 
-		<div class="card">
-			<div class="card-header d-flex align-items-center">
-				<h3 class="card-title mb-0">Evaluator Detail</h3>
-				<div class="ml-auto">
-					<?php if (!$is_active): ?>
-						<?php echo form_open('admin/emarkers/approve/' . (int) $u->id, ['method' => 'POST', 'style' => 'display:inline']); ?>
-							<button type="submit" class="btn btn-success btn-sm js-approve" <?php echo !$is_completed ? 'disabled' : ''; ?>>
-								<i class="fas fa-check"></i> Approve & Activate
-							</button>
-						<?php echo form_close(); ?>
-					<?php else: ?>
-						<span class="badge badge-success p-2">Active</span>
-					<?php endif; ?>
-				</div>
+		<style>
+			.profile-card { border:1px solid #d6defa; border-radius:10px; }
+			.profile-label strong { font-weight:700; }
+			.doc-missing { color:#e11d48; font-weight:600; }
+			.section-title { font-size:28px; font-weight:700; margin:26px 0 10px; }
+			.section-card { border:1px solid #d6defa; border-radius:10px; padding:18px 22px; background:#fff; }
+			.table-clean th { border-top:0; color:#111827; font-weight:700; }
+			.table-clean td { color:#6b7280; vertical-align:middle; }
+			.eye-link { color:#1e5aa8; font-size:18px; }
+		</style>
+
+		<div class="section-card profile-card">
+			<div class="text-center mb-3">
+				<img src="<?php echo $img; ?>" alt="Profile Photo" style="width:120px;height:150px;object-fit:cover;border:1px solid #e5e7eb;">
+				<div style="font-weight:700;margin-top:6px;">Profile Photo</div>
 			</div>
-			<div class="card-body">
-				<div class="row">
-					<div class="col-md-4">
-						<img src="<?php echo $img; ?>" alt="Profile" style="width:150px;height:180px;object-fit:cover;border:1px solid #e5e7eb;">
-					</div>
-					<div class="col-md-8">
-						<div class="row">
-							<div class="col-md-6">
-								<p><strong>Name:</strong> <?php echo htmlspecialchars((string) ($u->name ?? '')); ?></p>
-								<p><strong>Father Name:</strong> <?php echo htmlspecialchars((string) ($u->father_name ?? '')); ?></p>
-								<p><strong>Email:</strong> <?php echo htmlspecialchars((string) ($u->email ?? '')); ?></p>
-								<p><strong>Phone:</strong> <?php echo htmlspecialchars((string) ($u->phone ?? '')); ?></p>
-							</div>
-							<div class="col-md-6">
-								<p><strong>CNIC:</strong> <?php echo htmlspecialchars((string) ($u->cnic ?? '')); ?></p>
-								<p><strong>Blood Group:</strong> <?php echo htmlspecialchars((string) ($u->blood_group ?? '')); ?></p>
-								<p><strong>Gender:</strong> <?php echo htmlspecialchars((string) ($u->gender ?? '')); ?></p>
-								<p><strong>DOB:</strong> <?php echo !empty($u->dob) ? date('M d, Y', strtotime($u->dob)) : ''; ?></p>
-							</div>
+
+			<div class="row">
+				<div class="col-md-4 profile-label">
+					<p><strong>Name:</strong> <?php echo htmlspecialchars((string) ($u->name ?? '')); ?></p>
+					<p><strong>Phone:</strong> <?php echo htmlspecialchars((string) ($u->phone ?? '')); ?></p>
+					<p><strong>Email:</strong> <?php echo htmlspecialchars((string) ($u->email ?? '')); ?></p>
+					<p><strong>Status:</strong> <?php echo $eligible; ?></p>
+					<p class="d-flex align-items-center" style="gap:10px;">
+						<strong style="margin:0;">Active Status:</strong>
+						<input type="checkbox"
+							class="js-status-switch"
+							data-user-id="<?php echo (int) ($u->id ?? 0); ?>"
+							<?php echo $is_active ? 'checked' : ''; ?>
+							data-bootstrap-switch
+							data-off-color="secondary"
+							data-on-color="success"
+							data-off-text="Inactive"
+							data-on-text="Active"
+						>
+					</p>
+				</div>
+				<div class="col-md-4 profile-label">
+					<p><strong>Father Name:</strong> <?php echo htmlspecialchars((string) ($u->father_name ?? '')); ?></p>
+					<p><strong>Date of Birth:</strong> <?php echo !empty($u->dob) ? date('M j, Y', strtotime($u->dob)) : ''; ?></p>
+					<p><strong>Doc Status:</strong> <?php echo $doc_verified; ?></p>
+					<p>
+						<strong>Security Document:</strong>
+						<?php if (!empty($security) && !empty($security->document_file)): ?>
+							<a href="javascript:void(0)" class="js-doc-view eye-link" data-title="Security Document" data-url="<?php echo base_url($security->document_file); ?>"><i class="far fa-eye"></i></a>
+						<?php else: ?>
+							<span class="doc-missing">Not attached</span>
+						<?php endif; ?>
+					</p>
+				</div>
+				<div class="col-md-4 profile-label">
+					<p><strong>CNIC:</strong> <?php echo htmlspecialchars((string) ($u->cnic ?? '')); ?></p>
+					<p><strong>Blood Group:</strong> <?php echo htmlspecialchars((string) ($u->blood_group ?? '')); ?></p>
+					<p><strong>Gender:</strong> <?php echo htmlspecialchars((string) ($u->gender ?? '')); ?></p>
+
+					<?php if (!$is_active): ?>
+						<div style="margin-top:14px;">
+							<?php echo form_open('admin/emarkers/approve/' . (int) $u->id, ['method' => 'POST', 'style' => 'display:inline']); ?>
+								<button type="submit" class="btn btn-success js-approve" <?php echo !$is_completed ? 'disabled' : ''; ?>>
+									<i class="fas fa-check"></i> Approve & Activate
+								</button>
+							<?php echo form_close(); ?>
 						</div>
-						<hr>
-						<p>
-							<strong>Registration:</strong>
-							<?php if ($is_completed): ?>
-								<span class="badge badge-success">Completed</span>
-							<?php else: ?>
-								<span class="badge badge-secondary">Incomplete</span>
-							<?php endif; ?>
-						</p>
-						<p>
-							<strong>Security Document:</strong>
-							<?php if (!empty($security) && !empty($security->document_file)): ?>
-								<a href="<?php echo base_url($security->document_file); ?>" target="_blank" class="btn btn-sm btn-outline-primary"><i class="far fa-eye"></i> View</a>
-							<?php else: ?>
-								<span class="text-muted">Missing</span>
-							<?php endif; ?>
-						</p>
-					</div>
+					<?php endif; ?>
 				</div>
 			</div>
 		</div>
 
-		<div class="card">
-			<div class="card-header"><h3 class="card-title mb-0">Uploaded Documents</h3></div>
-			<div class="card-body">
-				<div class="row">
-					<div class="col-md-6">
-						<h6 class="font-weight-bold">Education Documents</h6>
-						<?php if (!empty($educations)): ?>
-							<ul class="mb-0">
-								<?php foreach ($educations as $e): ?>
-									<li>
-										<?php echo htmlspecialchars((string) $e->degree); ?> -
-										<?php if (!empty($e->transcript_file)): ?>
-											<a href="<?php echo base_url($e->transcript_file); ?>" target="_blank">View</a>
-										<?php else: ?>
-											<span class="text-muted">Missing</span>
-										<?php endif; ?>
-									</li>
-								<?php endforeach; ?>
-							</ul>
-						<?php else: ?>
-							<p class="text-muted mb-0">No education records.</p>
-						<?php endif; ?>
-					</div>
-					<div class="col-md-6">
-						<h6 class="font-weight-bold">Experience Documents</h6>
-						<?php if (!empty($experiences)): ?>
-							<ul class="mb-0">
-								<?php foreach ($experiences as $x): ?>
-									<li>
-										<?php echo htmlspecialchars((string) $x->department); ?> -
-										<?php if (!empty($x->document_file)): ?>
-											<a href="<?php echo base_url($x->document_file); ?>" target="_blank">View</a>
-										<?php else: ?>
-											<span class="text-muted">Missing</span>
-										<?php endif; ?>
-									</li>
-								<?php endforeach; ?>
-							</ul>
-						<?php else: ?>
-							<p class="text-muted mb-0">No experience records.</p>
-						<?php endif; ?>
-					</div>
+		<?php $a = isset($address) && is_object($address) ? $address : null; ?>
+		<div class="section-title">Address Details:</div>
+		<div class="section-card">
+			<div class="row table-clean">
+				<div class="col-md-6">
+					<div style="font-weight:700;">Address</div>
+					<div><?php echo htmlspecialchars((string) ($a->address ?? '')); ?></div>
+				</div>
+				<div class="col-md-2">
+					<div style="font-weight:700;">District</div>
+					<div><?php echo htmlspecialchars((string) ($a->district ?? '')); ?></div>
+				</div>
+				<div class="col-md-1">
+					<div style="font-weight:700;">City</div>
+					<div><?php echo htmlspecialchars((string) ($a->city ?? '')); ?></div>
+				</div>
+				<div class="col-md-2">
+					<div style="font-weight:700;">Province</div>
+					<div><?php echo htmlspecialchars((string) ($a->province ?? '')); ?></div>
+				</div>
+				<div class="col-md-1">
+					<div style="font-weight:700;">Country</div>
+					<div><?php echo htmlspecialchars((string) ($a->country ?? '')); ?></div>
 				</div>
 			</div>
+		</div>
+
+		<div class="section-title">Educational Details:</div>
+		<div class="section-card p-0">
+			<table class="table mb-0 table-clean">
+				<thead>
+					<tr>
+						<th>Degree</th>
+						<th>Institute</th>
+						<th>Passing Year</th>
+						<th>CGPA/Percentage</th>
+						<th style="width:140px;">View Document</th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php if (!empty($educations)): ?>
+						<?php foreach ($educations as $e): ?>
+							<tr>
+								<td><?php echo htmlspecialchars((string) ($e->degree ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($e->institute ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($e->passing_year ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($e->cgpa_percentage ?? '')); ?></td>
+								<td>
+									<?php if (!empty($e->transcript_file)): ?>
+										<a href="javascript:void(0)" class="js-doc-view eye-link" data-title="Education Document" data-url="<?php echo base_url($e->transcript_file); ?>"><i class="far fa-eye"></i></a>
+									<?php else: ?>
+										<span class="doc-missing">Not attached</span>
+									<?php endif; ?>
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					<?php else: ?>
+						<tr><td colspan="5" class="text-center text-muted">No education records.</td></tr>
+					<?php endif; ?>
+				</tbody>
+			</table>
+		</div>
+
+		<div class="section-title">Experience Details:</div>
+		<div class="section-card p-0">
+			<table class="table mb-0 table-clean">
+				<thead>
+					<tr>
+						<th>Department</th>
+						<th>Sector</th>
+						<th>Experience Type</th>
+						<th>Job Type</th>
+						<th>Teaching Level</th>
+						<th>BPS</th>
+						<th>Start Date</th>
+						<th>End Date</th>
+						<th style="width:140px;">View Document</th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php if (!empty($experiences)): ?>
+						<?php foreach ($experiences as $x): ?>
+							<tr>
+								<td><?php echo htmlspecialchars((string) ($x->department ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($x->sector ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($x->experience_type ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($x->job_type ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($x->teaching_level ?? '')); ?></td>
+								<td><?php echo htmlspecialchars((string) ($x->bps ?? '')); ?></td>
+								<td><?php echo !empty($x->start_date) ? date('M j, Y', strtotime($x->start_date)) : ''; ?></td>
+								<td>
+									<?php if (!empty($x->currently_working)): ?>
+										Currently Working
+									<?php else: ?>
+										<?php echo !empty($x->end_date) ? date('M j, Y', strtotime($x->end_date)) : ''; ?>
+									<?php endif; ?>
+								</td>
+								<td>
+									<?php if (!empty($x->document_file)): ?>
+										<a href="javascript:void(0)" class="js-doc-view eye-link" data-title="Experience Document" data-url="<?php echo base_url($x->document_file); ?>"><i class="far fa-eye"></i></a>
+									<?php else: ?>
+										<span class="doc-missing">Not attached</span>
+									<?php endif; ?>
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					<?php else: ?>
+						<tr><td colspan="9" class="text-center text-muted">No experience records.</td></tr>
+					<?php endif; ?>
+				</tbody>
+			</table>
+		</div>
+
+		<?php $b = isset($bank) && is_object($bank) ? $bank : null; ?>
+		<div class="section-title">Bank Details:</div>
+		<div class="section-card p-0">
+			<table class="table mb-0 table-clean">
+				<thead>
+					<tr>
+						<th>Bank Name</th>
+						<th>Branch Name</th>
+						<th>Account/IBAN Number</th>
+						<th>Branch Code</th>
+						<th>Account Title</th>
+						<th>International User</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td><?php echo htmlspecialchars((string) ($b->bank_name ?? '')); ?></td>
+						<td><?php echo htmlspecialchars((string) ($b->branch_name ?? '')); ?></td>
+						<td><?php echo htmlspecialchars((string) ($b->iban_account_no ?? '')); ?></td>
+						<td><?php echo htmlspecialchars((string) ($b->branch_code ?? '')); ?></td>
+						<td><?php echo htmlspecialchars((string) ($b->account_title ?? '')); ?></td>
+						<td><?php echo !empty($b->international_user) ? 'Yes' : 'No'; ?></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+
+		<?php $s = isset($specialization) && is_object($specialization) ? $specialization : null; ?>
+		<div class="section-title">Area Of Specialization</div>
+		<div class="section-card">
+			<?php echo htmlspecialchars((string) ($s->specialization ?? '')); ?>
+		</div>
+
+		<div class="section-title">E-marking Experience:</div>
+		<div class="section-card p-0">
+			<table class="table mb-0 table-clean">
+				<thead>
+					<tr>
+						<th>Department</th>
+						<th>From Date</th>
+						<th>To Date</th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php if (!empty($emarking)): ?>
+						<?php foreach ($emarking as $m): ?>
+							<tr>
+								<td><?php echo htmlspecialchars((string) ($m->department ?? '')); ?></td>
+								<td><?php echo !empty($m->from_date) ? date('M j, Y', strtotime($m->from_date)) : ''; ?></td>
+								<td><?php echo !empty($m->to_date) ? date('M j, Y', strtotime($m->to_date)) : ''; ?></td>
+							</tr>
+						<?php endforeach; ?>
+					<?php else: ?>
+						<tr><td colspan="3" class="text-center text-muted">No e-marking records.</td></tr>
+					<?php endif; ?>
+				</tbody>
+			</table>
 		</div>
 	</div>
 </section>
 
 <?php include viewPath('admin/includes/footer'); ?>
+
+<!-- Document Modal -->
+<div class="modal fade" id="docModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+		<div class="modal-content" style="border-radius:10px;">
+			<div class="modal-header">
+				<h5 class="modal-title" id="docModalLabel">View Document</h5>
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+				</button>
+			</div>
+			<div class="modal-body" style="min-height:70vh;">
+				<img id="docModalImg" src="" alt="Document" style="max-width:100%;max-height:70vh;display:none;margin:0 auto;">
+				<iframe id="docModalFrame" src="" style="width:100%;height:70vh;border:0;display:none;"></iframe>
+			</div>
+		</div>
+	</div>
+</div>
 
 <script>
 	$(function () {
@@ -152,6 +318,50 @@ defined('BASEPATH') or exit('No direct script access allowed');
 				return false;
 			}
 		});
+
+		$(document).on('click', '.js-doc-view', function (e) {
+			e.preventDefault();
+			var url = $(this).data('url') || '';
+			var title = $(this).data('title') || 'View Document';
+			if (!url) return;
+
+			$('#docModalLabel').text(title);
+			var lower = url.toLowerCase();
+			var isImg = (lower.indexOf('.jpg') > -1 || lower.indexOf('.jpeg') > -1 || lower.indexOf('.png') > -1 || lower.indexOf('.gif') > -1 || lower.indexOf('.webp') > -1);
+			if (isImg) {
+				$('#docModalFrame').hide().attr('src', '');
+				$('#docModalImg').show().attr('src', url);
+			} else {
+				$('#docModalImg').hide().attr('src', '');
+				$('#docModalFrame').show().attr('src', url);
+			}
+			$('#docModal').modal('show');
+		});
+		$('#docModal').on('hidden.bs.modal', function () {
+			$('#docModalImg').hide().attr('src', '');
+			$('#docModalFrame').hide().attr('src', '');
+		});
+
+		// Toggle active status
+		$('.js-status-switch').on('switchChange.bootstrapSwitch', function (event, state) {
+			var $sw = $(this);
+			var id = $sw.data('user-id');
+			if (!id) return;
+
+			if (!confirm('Change account status?')) {
+				$sw.bootstrapSwitch('state', !state, true);
+				return;
+			}
+
+			$.get('<?php echo url('admin/emarkers/change_status'); ?>/' + id, { status: state }, function (data) {
+				if (data !== 'done') {
+					alert('Unable to change status.');
+					$sw.bootstrapSwitch('state', !state, true);
+				}
+			}).fail(function () {
+				alert('Unable to change status.');
+				$sw.bootstrapSwitch('state', !state, true);
+			});
+		});
 	});
 </script>
-

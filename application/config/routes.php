@@ -102,6 +102,10 @@ $route['user/(:any)/(:any)/(:any)'] = 'user/$1/$2/$3';
 
 
 // [AdminLTE]
-// $route['adminlte/(:any)'] = 'adminlte/main/$1';
+// $route['adminlte/(:any)'] = 'adminlte/main/$1';
+
+// Admin E-Marker edit wizard (extra segments beyond default admin routes)
+$route['admin/emarkers/edit/(:num)'] = 'admin/emarkers/edit/$1';
+$route['admin/emarkers/edit/(:num)/(:num)'] = 'admin/emarkers/edit/$1/$2';
 
 

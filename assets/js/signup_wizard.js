@@ -236,6 +236,27 @@
 		return ok;
 	}
 
+	function normalizeIban(val) {
+		return (val || '').toString().replace(/\s+/g, '').toUpperCase();
+	}
+
+	function validateIbanInline($input) {
+		if ($input.length === 0) return true;
+		var raw = $input.val();
+		var norm = normalizeIban(raw);
+		if (raw !== norm) $input.val(norm);
+		var ok = (/^[A-Z0-9]{24}$/).test(norm);
+		var $fb = $input.siblings('.invalid-feedback').first();
+		if (!ok && norm !== '') {
+			$input.addClass('is-invalid');
+			if ($fb.length) $fb.show();
+		} else if (ok) {
+			$input.removeClass('is-invalid');
+			if ($fb.length) $fb.hide();
+		}
+		return ok;
+	}
+
 	function nextIndex($wrap) {
 		var max = -1;
 		$wrap.find('.js-repeat-item').each(function () {
@@ -357,6 +378,11 @@
 
 			// CNIC uses its own validator
 			if ($el.hasClass('js-cnic')) return;
+			// IBAN uses its own validator
+			if ($el.hasClass('js-iban')) {
+				validateIbanInline($el);
+				return;
+			}
 
 			var el = this;
 			var valid = true;
@@ -373,6 +399,11 @@
 			$el.siblings('.js-dyn-feedback').remove();
 			// Also remove immediate next dynamic feedback if inserted after element
 			if ($el.next('.js-dyn-feedback').length) $el.next('.js-dyn-feedback').remove();
+		});
+
+		// IBAN normalize + inline validation (step 5)
+		$(document).on('input blur change', '.js-iban', function () {
+			validateIbanInline($(this));
 		});
 
 		// Upload widget
@@ -508,6 +539,13 @@
 					var $cnic = $('.js-cnic').first();
 					if ($cnic.length && !validateCnicInline($cnic)) {
 						toast('error', 'Please enter valid CNIC.');
+						return;
+					}
+				}
+				if (step === 5) {
+					var $iban = $('.js-iban').first();
+					if ($iban.length && !validateIbanInline($iban)) {
+						toast('error', 'Please enter a valid 24-character IBAN.');
 						return;
 					}
 				}

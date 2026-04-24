@@ -545,12 +545,22 @@ class Signup extends CI_Controller
 			return;
 		}
 
+		$iban = strtoupper(preg_replace('/\s+/', '', (string) post('iban_account_no')));
+		if (strlen($iban) !== 24 || !ctype_alnum($iban)) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['iban_account_no' => 'IBAN must be exactly 24 characters (letters/numbers only).'],
+			], 422);
+			return;
+		}
+
 		$data = [
 			'bank_name' => post('bank_name'),
 			'branch_name' => post('branch_name'),
 			'branch_code' => post('branch_code'),
 			'account_title' => post('account_title'),
-			'iban_account_no' => post('iban_account_no'),
+			'iban_account_no' => $iban,
 			'international_user' => $this->input->post('international_user', true) ? 1 : 0,
 		];
 
@@ -574,7 +584,18 @@ class Signup extends CI_Controller
 			return;
 		}
 
-		$result = $this->signup->save_specialization($user_id, ['specialization' => post('specialization')]);
+		$allowed = ['ENGLISH', 'URDU', 'MATH', 'SCIENCE'];
+		$spec = strtoupper(trim((string) post('specialization')));
+		if (!in_array($spec, $allowed, true)) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['specialization' => 'Please select a valid specialization.'],
+			], 422);
+			return;
+		}
+
+		$result = $this->signup->save_specialization($user_id, ['specialization' => $spec]);
 		if (!$result['success']) {
 			$this->json($result, 422);
 			return;

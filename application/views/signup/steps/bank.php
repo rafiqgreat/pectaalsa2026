@@ -24,7 +24,8 @@
 		</div>
 		<div class="form-group col-md-5">
 			<label>Account/IBAN Number<span class="text-danger">*</span></label>
-			<input type="text" class="form-control" name="iban_account_no" placeholder="e.g. PK12XXXX0000000000" value="<?php echo html_escape($b['iban_account_no'] ?? ''); ?>" required>
+			<input type="text" class="form-control js-iban" name="iban_account_no" placeholder="e.g. PK12XXXX0000000000000000" value="<?php echo html_escape($b['iban_account_no'] ?? ''); ?>" required minlength="24" maxlength="24" pattern="[A-Za-z0-9]{24}">
+			<div class="invalid-feedback" style="display:none;">IBAN must be exactly 24 characters (letters/numbers only).</div>
 		</div>
 		<div class="form-group col-md-3 d-flex align-items-end">
 			<div class="form-check">
