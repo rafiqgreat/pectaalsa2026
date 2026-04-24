@@ -94,7 +94,16 @@ class Users_model extends MY_Model {
 		$query = $this->db->get($this->table);
 
 		if (!empty($query) && $query->num_rows() > 0) {
-			if ($query->row()->password == hash("sha256", $data['password'])) {
+			$stored = (string) $query->row()->password;
+			$info = password_get_info($stored);
+			$is_valid = false;
+			if (!empty($info['algo'])) {
+				$is_valid = password_verify((string) $data['password'], $stored);
+			} else {
+				$is_valid = ($stored === hash("sha256", (string) $data['password']));
+			}
+
+			if ($is_valid) {
 				return ($query->row()->status === '1') ? 'valid' : 'not_allowed';
 			}
 			return 'invalid_password';

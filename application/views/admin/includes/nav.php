@@ -16,6 +16,15 @@
     </li>
   <?php endif; ?>
 
+  <?php if ((int) logged('role') === 1): ?>
+    <li class="nav-item">
+      <a href="<?php echo url('admin/emarkers'); ?>" class="nav-link <?php echo ($page->menu == 'emarkers') ? 'active' : ''; ?>">
+        <i class="nav-icon fas fa-user-check"></i>
+        <p>E-Markers</p>
+      </a>
+    </li>
+  <?php endif; ?>
+
   <?php if (
     hasPermissions('location_management') ||
     hasPermissions('state_list') ||

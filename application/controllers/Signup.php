@@ -1,147 +1,183 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
-class Profile extends MY_Controller {
+
+class Signup extends CI_Controller
+{
+	private $canonical_base = 'singup';
+	private $register_base = 'user/login/register';
+
+	private $step_titles = [
+		1 => 'Personal Information',
+		2 => 'Address Details',
+		3 => 'Educational Details',
+		4 => 'Experience Details',
+		5 => 'Bank Detail',
+		6 => 'Area of Specialization',
+		7 => 'Security Setup',
+		8 => 'Emarking Experience',
+	];
+
+	private $step_keys = [
+		1 => 'personal',
+		2 => 'address',
+		3 => 'education',
+		4 => 'experience',
+		5 => 'bank',
+		6 => 'specialization',
+		7 => 'security',
+		8 => 'emarking',
+	];
+
 	public function __construct()
 	{
 		parent::__construct();
-		$this->page_data['page']->title = 'Profile Management';
-		$this->page_data['page']->menu = 'evaluator_profile';
 		$this->load->model('Signup_model', 'signup');
 	}
 
-	public function index($tab = null)
+	public function index()
 	{
-		// Backward compatibility: keep password/picture tabs accessible.
-		if (in_array((string) $tab, ['change_password', 'change_pic'], true)) {
-			if ((string) $tab === 'change_password') {
-				$this->page_data['page']->menu = 'change_password';
-				$this->page_data['page']->title = 'Change Password';
-				$this->page_data['user'] = $this->users_model->getById(logged('id'));
-				$this->page_data['user']->role = $this->roles_model->getById(logged('role'));
-				$this->load->view('user/account/change_password', $this->page_data);
+		$base = $this->wizard_base();
+		$user_id = (int) $this->session->userdata('signup_user_id');
+		if ($user_id > 0) {
+			$steps = $this->signup->get_steps($user_id);
+			if ($steps && (int) $steps->registration_completed === 0) {
+				redirect($base . '/step/' . (int) $steps->current_step);
 				return;
 			}
-			$this->page_data['user'] = $this->users_model->getById(logged('id'));
-			$this->page_data['user']->role = $this->roles_model->getById(logged('role'));
-			$this->page_data['activeTab'] = (string) $tab;
-			$this->load->view('user/account/profile', $this->page_data);
-			return;
+			$this->session->unset_userdata('signup_user_id');
 		}
-
-		redirect('user/profile/step/1', 'refresh');
-	}
-
-	public function change_password()
-	{
-		redirect('user/profile/index/change_password', 'refresh');
-	}
-
-	public function change_pic()
-	{
-		redirect('user/profile/index/change_pic', 'refresh');
+		redirect($base . '/step/1');
 	}
 
 	public function step($step = 1)
 	{
+		$base = $this->wizard_base();
 		$step = (int) $step;
 		if ($step < 1 || $step > 8) {
 			show_404();
 		}
 
-		$user_id = (int) logged('id');
-		$steps = $this->signup->get_steps($user_id);
+		$user_id = (int) $this->session->userdata('signup_user_id');
+		$steps = $user_id > 0 ? $this->signup->get_steps($user_id) : null;
+		$allowed_step = $this->get_allowed_step($steps);
 
-		$step_titles = [
-			1 => 'Personal Information',
-			2 => 'Address Details',
-			3 => 'Educational Details',
-			4 => 'Experience Details',
-			5 => 'Bank Detail',
-			6 => 'Area of Specialization',
-			7 => 'Security Setup',
-			8 => 'Emarking Experience',
-		];
-		$step_keys = [
-			1 => 'personal',
-			2 => 'address',
-			3 => 'education',
-			4 => 'experience',
-			5 => 'bank',
-			6 => 'specialization',
-			7 => 'security',
-			8 => 'emarking',
+		if ($step !== 1 && (!$user_id || !$steps)) {
+			redirect($base . '/step/1');
+			return;
+		}
+		if ($step > $allowed_step) {
+			redirect($base . '/step/' . $allowed_step);
+			return;
+		}
+
+		$data = [
+			'assets' => assets_url(),
+			'step' => $step,
+			'wizard_base' => $base,
+			'step_titles' => $this->step_titles,
+			'step_keys' => $this->step_keys,
+			'steps_row' => $steps,
+			'user_id' => $user_id,
+			'allowed_step' => $allowed_step,
+			'form_action' => $this->get_step_action($step),
+			'step_view' => $this->get_step_view($step),
+			'form_data' => $this->get_step_data($step, $user_id),
 		];
 
-		$view_map = [
-			1 => 'user/profile_wizard/steps/personal',
+		$this->load->view('signup/step_layout', $data, false);
+	}
+
+	private function get_allowed_step($steps_row)
+	{
+		if (!$steps_row) {
+			return 1;
+		}
+		$allowed = (int) $steps_row->current_step;
+		return max(1, min(8, $allowed));
+	}
+
+	private function get_step_view($step)
+	{
+		$map = [
+			1 => 'signup/steps/personal',
 			2 => 'signup/steps/address',
 			3 => 'signup/steps/education',
 			4 => 'signup/steps/experience',
 			5 => 'signup/steps/bank',
 			6 => 'signup/steps/specialization',
-			7 => 'user/profile_wizard/steps/security',
+			7 => 'signup/steps/security',
 			8 => 'signup/steps/emarking',
 		];
+		return $map[$step];
+	}
 
-		$action_map = [
-			1 => site_url('user/profile/save_personal'),
-			2 => site_url('user/profile/save_address'),
-			3 => site_url('user/profile/save_education'),
-			4 => site_url('user/profile/save_experience'),
-			5 => site_url('user/profile/save_bank'),
-			6 => site_url('user/profile/save_specialization'),
-			7 => site_url('user/profile/save_security'),
-			8 => site_url('user/profile/save_emarking'),
+	private function get_step_action($step)
+	{
+		$base = $this->wizard_base();
+		$map = [
+			1 => site_url($base . '/save_personal'),
+			2 => site_url($base . '/save_address'),
+			3 => site_url($base . '/save_education'),
+			4 => site_url($base . '/save_experience'),
+			5 => site_url($base . '/save_bank'),
+			6 => site_url($base . '/save_specialization'),
+			7 => site_url($base . '/save_security'),
+			8 => site_url($base . '/save_emarking'),
 		];
+		return $map[$step];
+	}
 
-		$form_data = [];
-		switch ($step) {
+	private function wizard_base()
+	{
+		$s1 = strtolower((string) $this->uri->segment(1));
+		$s2 = strtolower((string) $this->uri->segment(2));
+		$s3 = strtolower((string) $this->uri->segment(3));
+
+		if ($s1 === 'user' && $s2 === 'login' && $s3 === 'register') {
+			return $this->register_base;
+		}
+		if ($s1 === 'signup' || $s1 === 'singup') {
+			return $this->canonical_base;
+		}
+		return $this->canonical_base;
+	}
+
+	private function get_step_data($step, $user_id)
+	{
+		if ((int) $user_id <= 0) {
+			return [];
+		}
+		switch ((int) $step) {
 			case 1:
-				$form_data = ['user' => $this->signup->get_user($user_id)];
-				break;
+				return ['user' => $this->signup->get_user($user_id)];
 			case 2:
-				$form_data = ['address' => $this->signup->get_address($user_id)];
-				break;
+				return ['address' => $this->signup->get_address($user_id)];
 			case 3:
-				$form_data = ['educations' => $this->signup->get_educations($user_id)];
-				break;
+				return ['educations' => $this->signup->get_educations($user_id)];
 			case 4:
-				$form_data = [
+				$steps = $this->signup->get_steps($user_id);
+				return [
 					'experiences' => $this->signup->get_experiences($user_id),
 					'no_experience' => $steps ? (int) $steps->no_experience : 0,
 				];
-				break;
 			case 5:
-				$form_data = ['bank' => $this->signup->get_bank($user_id)];
-				break;
+				return ['bank' => $this->signup->get_bank($user_id)];
 			case 6:
-				$form_data = ['specialization' => $this->signup->get_specialization($user_id)];
-				break;
+				return ['specialization' => $this->signup->get_specialization($user_id)];
 			case 7:
-				$form_data = [
+				return [
 					'security' => $this->signup->get_security($user_id),
 					'user' => $this->signup->get_user($user_id),
 				];
-				break;
 			case 8:
-				$form_data = [
+				$steps = $this->signup->get_steps($user_id);
+				return [
 					'emarking' => $this->signup->get_emarking($user_id),
 					'no_emarking_experience' => $steps ? (int) $steps->no_emarking_experience : 0,
 				];
-				break;
+			default:
+				return [];
 		}
-
-		$this->page_data['assets'] = assets_url();
-		$this->page_data['wizard_base'] = 'user/profile';
-		$this->page_data['step'] = $step;
-		$this->page_data['step_titles'] = $step_titles;
-		$this->page_data['step_keys'] = $step_keys;
-		$this->page_data['steps_row'] = $steps;
-		$this->page_data['step_view'] = $view_map[$step];
-		$this->page_data['form_action'] = $action_map[$step];
-		$this->page_data['form_data'] = $form_data;
-
-		$this->load->view('user/profile_wizard/step_layout', $this->page_data);
 	}
 
 	private function json($payload, $http_code = 200)
@@ -162,6 +198,26 @@ class Profile extends MY_Controller {
 		return $dt && $dt->format('Y-m-d') === $date;
 	}
 
+	private function require_user_for_step($expected_step)
+	{
+		$user_id = (int) $this->session->userdata('signup_user_id');
+		if ($user_id <= 0) {
+			$this->json(['success' => false, 'message' => 'Session expired. Please start again.'], 401);
+			return [0, null];
+		}
+		$steps = $this->signup->get_steps($user_id);
+		if (!$steps) {
+			$this->json(['success' => false, 'message' => 'Registration session not found.'], 401);
+			return [0, null];
+		}
+		$allowed = $this->get_allowed_step($steps);
+		if ((int) $expected_step > $allowed) {
+			$this->json(['success' => false, 'message' => 'Please complete previous steps first.'], 403);
+			return [0, null];
+		}
+		return [$user_id, $steps];
+	}
+
 	public function upload_file()
 	{
 		if (empty($_FILES['file'])) {
@@ -169,16 +225,31 @@ class Profile extends MY_Controller {
 			return;
 		}
 
-		$user_id = (int) logged('id');
-		$relative_dir = 'uploads/teacher_registration/' . $user_id . '/';
+		$field = (string) $this->input->post('field', true);
+		$field = preg_replace('/[^a-zA-Z0-9_\\-]/', '', $field);
+		if ($field === '') {
+			$field = 'file';
+		}
+
+		$user_id = (int) $this->session->userdata('signup_user_id');
+		$temp_key = (string) $this->session->userdata('signup_temp_key');
+		if ($temp_key === '') {
+			$temp_key = bin2hex(random_bytes(16));
+			$this->session->set_userdata('signup_temp_key', $temp_key);
+		}
+		$relative_dir = $user_id > 0
+			? 'uploads/teacher_registration/' . $user_id . '/'
+			: 'uploads/teacher_registration/temp/' . $temp_key . '/';
+
 		$abs_dir = FCPATH . rtrim(str_replace(['\\', '//'], ['/', '/'], $relative_dir), '/') . '/';
 		if (!is_dir($abs_dir)) {
 			@mkdir($abs_dir, 0777, true);
 		}
 
+		$allowed = 'jpg|jpeg|png|pdf';
 		$config = [
 			'upload_path' => $abs_dir,
-			'allowed_types' => 'jpg|jpeg|png|pdf',
+			'allowed_types' => $allowed,
 			'max_size' => 5120,
 			'encrypt_name' => true,
 			'remove_spaces' => true,
@@ -196,6 +267,7 @@ class Profile extends MY_Controller {
 
 		$this->json([
 			'success' => true,
+			'field' => $field,
 			'file_name' => $info['client_name'],
 			'file_path' => $relative_path,
 		]);
@@ -203,6 +275,7 @@ class Profile extends MY_Controller {
 
 	public function delete_file()
 	{
+		postAllowed();
 		$relative_path = (string) $this->input->post('file_path', true);
 		$relative_path = str_replace(['\\', '//'], ['/', '/'], $relative_path);
 		if ($relative_path === '' || strpos($relative_path, '..') !== false) {
@@ -210,8 +283,16 @@ class Profile extends MY_Controller {
 			return;
 		}
 
-		$user_id = (int) logged('id');
-		$allowed = (strpos($relative_path, 'uploads/teacher_registration/' . $user_id . '/') === 0);
+		$user_id = (int) $this->session->userdata('signup_user_id');
+		$temp_key = (string) $this->session->userdata('signup_temp_key');
+
+		$allowed = false;
+		if ($user_id > 0) {
+			$allowed = (strpos($relative_path, 'uploads/teacher_registration/' . $user_id . '/') === 0);
+		} else if ($temp_key !== '') {
+			$allowed = (strpos($relative_path, 'uploads/teacher_registration/temp/' . $temp_key . '/') === 0);
+		}
+
 		if (!$allowed) {
 			$this->json(['success' => false, 'message' => 'Not allowed.'], 403);
 			return;
@@ -221,15 +302,13 @@ class Profile extends MY_Controller {
 		if (is_file($abs)) {
 			@unlink($abs);
 		}
+
 		$this->json(['success' => true, 'message' => 'File removed.']);
 	}
 
 	public function save_personal()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
-		$current = $this->signup->get_user($user_id);
-
 		$this->form_validation->set_rules('name', 'Name', 'trim|required|max_length[150]|xss_clean');
 		$this->form_validation->set_rules('father_name', 'Father Name', 'trim|required|max_length[150]|xss_clean');
 		$this->form_validation->set_rules('blood_group', 'Blood Group', 'trim|required|max_length[10]|xss_clean');
@@ -239,19 +318,21 @@ class Profile extends MY_Controller {
 		$this->form_validation->set_rules('email', 'Email Address', 'trim|required|valid_email|max_length[150]|xss_clean');
 		$this->form_validation->set_rules('cnic', 'CNIC', 'trim|required|regex_match[/^(\\d{13}|\\d{5}-\\d{7}-\\d)$/]|xss_clean');
 		$this->form_validation->set_rules('employee_no', 'Personal No/Employee Id', 'trim|required|max_length[100]|xss_clean');
+		$this->form_validation->set_rules('profile_picture_path', 'Profile Picture', 'trim|required|xss_clean');
 
 		if ($this->form_validation->run() === false) {
 			$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => $this->form_validation->error_array()], 422);
 			return;
 		}
 
-		// CNIC is read-only; prevent changing.
-		$cnic_digits = preg_replace('/\\D+/', '', (string) post('cnic'));
-		$cnic_fmt = substr($cnic_digits, 0, 5) . '-' . substr($cnic_digits, 5, 7) . '-' . substr($cnic_digits, 12, 1);
-		if (!empty($current->cnic) && (string) $current->cnic !== (string) $cnic_fmt) {
-			$this->json(['success' => false, 'message' => 'CNIC cannot be changed.'], 422);
+		$user_id = (int) $this->session->userdata('signup_user_id');
+		$cnic_raw = (string) post('cnic');
+		$cnic_digits = preg_replace('/\\D+/', '', $cnic_raw);
+		if (strlen($cnic_digits) !== 13) {
+			$this->json(['success' => false, 'message' => 'Invalid CNIC.', 'errors' => ['cnic' => 'CNIC must be 13 digits.']], 422);
 			return;
 		}
+		$cnic_fmt = substr($cnic_digits, 0, 5) . '-' . substr($cnic_digits, 5, 7) . '-' . substr($cnic_digits, 12, 1);
 
 		$payload = [
 			'name' => post('name'),
@@ -264,21 +345,28 @@ class Profile extends MY_Controller {
 			'cnic' => $cnic_fmt,
 			'employee_no' => post('employee_no'),
 		];
-
 		$profile_path = (string) post('profile_picture_path');
-		$result = $this->signup->save_personal($user_id, $payload, $profile_path, false);
+
+		$result = $this->signup->save_personal($user_id, $payload, $profile_path, true);
 		if (!$result['success']) {
 			$this->json($result, 422);
 			return;
 		}
 
-		$this->json(['success' => true, 'message' => 'Profile updated.', 'next_url' => site_url('user/profile/step/2')]);
+		$this->session->set_userdata('signup_user_id', (int) $result['user_id']);
+		$this->session->unset_userdata('signup_temp_key');
+		$this->json([
+			'success' => true,
+			'message' => 'Personal information saved.',
+			'next_url' => site_url($this->wizard_base() . '/step/2'),
+		]);
 	}
 
 	public function save_address()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
+		[$user_id, $steps] = $this->require_user_for_step(2);
+		if ($user_id <= 0) return;
 
 		$this->form_validation->set_rules('address', 'Address', 'trim|required|xss_clean');
 		$this->form_validation->set_rules('district', 'District', 'trim|xss_clean|max_length[100]');
@@ -298,18 +386,20 @@ class Profile extends MY_Controller {
 			'province' => post('province'),
 			'country' => post('country'),
 		];
+
 		$result = $this->signup->save_address($user_id, $data);
 		if (!$result['success']) {
 			$this->json($result, 422);
 			return;
 		}
-		$this->json(['success' => true, 'message' => 'Address updated.', 'next_url' => site_url('user/profile/step/3')]);
+		$this->json(['success' => true, 'message' => 'Address saved.', 'next_url' => site_url($this->wizard_base() . '/step/3')]);
 	}
 
 	public function save_education()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
+		[$user_id] = $this->require_user_for_step(3);
+		if ($user_id <= 0) return;
 
 		$degrees = (array) $this->input->post('degree', true);
 		$institutes = (array) $this->input->post('institute', true);
@@ -343,13 +433,14 @@ class Profile extends MY_Controller {
 			$this->json($result, 422);
 			return;
 		}
-		$this->json(['success' => true, 'message' => 'Education updated.', 'next_url' => site_url('user/profile/step/4')]);
+		$this->json(['success' => true, 'message' => 'Educational details saved.', 'next_url' => site_url($this->wizard_base() . '/step/4')]);
 	}
 
 	public function save_experience()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
+		[$user_id] = $this->require_user_for_step(4);
+		if ($user_id <= 0) return;
 
 		$no_experience = $this->input->post('no_experience', true) ? 1 : 0;
 		if ($no_experience) {
@@ -358,7 +449,7 @@ class Profile extends MY_Controller {
 				$this->json($result, 422);
 				return;
 			}
-			$this->json(['success' => true, 'message' => 'Experience updated.', 'next_url' => site_url('user/profile/step/5')]);
+			$this->json(['success' => true, 'message' => 'Experience saved.', 'next_url' => site_url('Signup/step/5')]);
 			return;
 		}
 
@@ -405,7 +496,7 @@ class Profile extends MY_Controller {
 				return;
 			}
 			if (!$this->is_valid_ymd($row['start_date'])) {
-				$this->json(['success' => false, 'message' => 'Invalid Start Date.'], 422);
+				$this->json(['success' => false, 'message' => 'Invalid Start Date.', 'errors' => ['start_date' => 'Invalid Start Date.']], 422);
 				return;
 			}
 			if (!$currently && empty($row['end_date'])) {
@@ -414,7 +505,7 @@ class Profile extends MY_Controller {
 			}
 			if (!$currently) {
 				if (!$this->is_valid_ymd($row['end_date'])) {
-					$this->json(['success' => false, 'message' => 'Invalid End Date.'], 422);
+					$this->json(['success' => false, 'message' => 'Invalid End Date.', 'errors' => ['end_date' => 'Invalid End Date.']], 422);
 					return;
 				}
 				if ($row['end_date'] < $row['start_date']) {
@@ -434,13 +525,14 @@ class Profile extends MY_Controller {
 			$this->json($result, 422);
 			return;
 		}
-		$this->json(['success' => true, 'message' => 'Experience updated.', 'next_url' => site_url('user/profile/step/5')]);
+		$this->json(['success' => true, 'message' => 'Experience saved.', 'next_url' => site_url($this->wizard_base() . '/step/5')]);
 	}
 
 	public function save_bank()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
+		[$user_id] = $this->require_user_for_step(5);
+		if ($user_id <= 0) return;
 
 		$this->form_validation->set_rules('bank_name', 'Bank Name', 'trim|required|xss_clean|max_length[150]');
 		$this->form_validation->set_rules('branch_name', 'Branch Name', 'trim|required|xss_clean|max_length[150]');
@@ -467,13 +559,14 @@ class Profile extends MY_Controller {
 			$this->json($result, 422);
 			return;
 		}
-		$this->json(['success' => true, 'message' => 'Bank details updated.', 'next_url' => site_url('user/profile/step/6')]);
+		$this->json(['success' => true, 'message' => 'Bank details saved.', 'next_url' => site_url($this->wizard_base() . '/step/6')]);
 	}
 
 	public function save_specialization()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
+		[$user_id] = $this->require_user_for_step(6);
+		if ($user_id <= 0) return;
 
 		$this->form_validation->set_rules('specialization', 'Area of specialization', 'trim|required|xss_clean|max_length[150]');
 		if ($this->form_validation->run() === false) {
@@ -486,31 +579,21 @@ class Profile extends MY_Controller {
 			$this->json($result, 422);
 			return;
 		}
-		$this->json(['success' => true, 'message' => 'Specialization updated.', 'next_url' => site_url('user/profile/step/7')]);
+		$this->json(['success' => true, 'message' => 'Specialization saved.', 'next_url' => site_url($this->wizard_base() . '/step/7')]);
 	}
 
 	public function save_security()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
+		[$user_id] = $this->require_user_for_step(7);
+		if ($user_id <= 0) return;
 
 		$this->form_validation->set_rules('document_type', 'Document Type', 'trim|required|xss_clean|max_length[100]');
 		$this->form_validation->set_rules('identification_number', 'Identification Number', 'trim|required|xss_clean|max_length[100]');
 		$this->form_validation->set_rules('expiry_date', 'Expiry Date', 'trim|required|xss_clean');
 		$this->form_validation->set_rules('document_file', 'Upload Document', 'trim|required|xss_clean');
-
-		$password = (string) $this->input->post('password', false);
-		$confirm = (string) $this->input->post('confirm_password', false);
-		if ($password !== '') {
-			if (strlen($password) < 6) {
-				$this->json(['success' => false, 'message' => 'Password must be at least 6 characters.'], 422);
-				return;
-			}
-			if ($password !== $confirm) {
-				$this->json(['success' => false, 'message' => 'Password and confirm password must match.'], 422);
-				return;
-			}
-		}
+		$this->form_validation->set_rules('password', 'Password', 'required|min_length[6]');
+		$this->form_validation->set_rules('confirm_password', 'Confirm Password', 'required|matches[password]');
 
 		if ($this->form_validation->run() === false) {
 			$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => $this->form_validation->error_array()], 422);
@@ -522,7 +605,7 @@ class Profile extends MY_Controller {
 			'identification_number' => post('identification_number'),
 			'expiry_date' => post('expiry_date'),
 			'document_file' => post('document_file'),
-			'password' => $password,
+			'password' => (string) $this->input->post('password', false),
 		];
 
 		$result = $this->signup->save_security($user_id, $data);
@@ -530,13 +613,14 @@ class Profile extends MY_Controller {
 			$this->json($result, 422);
 			return;
 		}
-		$this->json(['success' => true, 'message' => 'Security updated.', 'next_url' => site_url('user/profile/step/8')]);
+		$this->json(['success' => true, 'message' => 'Security setup saved.', 'next_url' => site_url($this->wizard_base() . '/step/8')]);
 	}
 
 	public function save_emarking()
 	{
 		postAllowed();
-		$user_id = (int) logged('id');
+		[$user_id, $steps] = $this->require_user_for_step(8);
+		if ($user_id <= 0) return;
 
 		$no_exp = $this->input->post('no_emarking_experience', true) ? 1 : 0;
 		if ($no_exp) {
@@ -545,7 +629,18 @@ class Profile extends MY_Controller {
 				$this->json($result, 422);
 				return;
 			}
-			$this->json(['success' => true, 'message' => 'Profile updated.', 'next_url' => site_url('user/evaluator_profile')]);
+			$final = $this->signup->finalize_registration($user_id);
+			if (!$final['success']) {
+				$this->json($final, 422);
+				return;
+			}
+			$this->session->unset_userdata('signup_user_id');
+			$this->json([
+				'success' => true,
+				'message' => 'Signup completed.',
+				'completed' => true,
+				'login_url' => site_url('user/login'),
+			]);
 			return;
 		}
 
@@ -585,104 +680,18 @@ class Profile extends MY_Controller {
 			$this->json($result, 422);
 			return;
 		}
-		$this->json(['success' => true, 'message' => 'Profile updated.', 'next_url' => site_url('user/evaluator_profile')]);
+
+		$final = $this->signup->finalize_registration($user_id);
+		if (!$final['success']) {
+			$this->json($final, 422);
+			return;
+		}
+		$this->session->unset_userdata('signup_user_id');
+		$this->json([
+			'success' => true,
+			'message' => 'Signup completed.',
+			'completed' => true,
+			'login_url' => site_url('user/login'),
+		]);
 	}
-	public function updateProfile()
-	{
-		$id = logged('id');
-		
-		postAllowed();
-		$data = [
-			'role' => post('role'),
-			'name' => post('name'),
-			'username' => post('username'),
-			'email' => post('email'),
-			'phone' => post('contact'),
-			'address' => post('address'),
-		];
-		$id = $this->users_model->update($id, $data);
-		$this->activity_model->add("User #$id updated the profile");
-		$this->session->set_flashdata('alert-type', 'success');
-		$this->session->set_flashdata('alert', 'Profile has been Updated Successfully');
-		
-		redirect('user/profile/index/edit');
-	}
-	public function updatePassword()
-	{
-		$id = logged('id');
-		
-		postAllowed();
-		if ( post('password') !== post('password_confirm') ) {
-			$this->session->set_flashdata('alert-type', 'danger');
-			$this->session->set_flashdata('alert', 'Password does not matches with Confirm Password !');
-			redirect('user/profile/index/change_password');
-		}
-		
-		if ( strlen(post('password')) < 6 ) {
-			$this->session->set_flashdata('alert-type', 'danger');
-			$this->session->set_flashdata('alert', 'Password must have atleast 6 Characters');
-			redirect('user/profile/index/change_password');
-		}
-
-		$stored_hash = (string) $this->users_model->getRowById($id, 'password');
-		$old_ok = false;
-		if ($stored_hash !== '' && strpos($stored_hash, '$') === 0) {
-			$old_ok = password_verify((string) post('old_password'), $stored_hash);
-		} else {
-			$old_ok = (hash('sha256', (string) post('old_password')) === $stored_hash);
-		}
-
-		if (!$old_ok) {
-			$this->session->set_flashdata('alert-type', 'danger');
-			$this->session->set_flashdata('alert', 'Invalid Old Password !');
-			redirect('user/profile/index/change_password');
-		}
-
-		$password = post('password');
-		$data['password'] = password_hash((string) $password, PASSWORD_DEFAULT);
-		$id = $this->users_model->update($id, $data);
-		$this->activity_model->add("User #$id changed the password !");
-
-		// Force logout and ask user to login again with new password.
-		$this->load->model('user/Users_model', 'user_users_model');
-		$this->user_users_model->logout();
-
-		$this->session->set_flashdata('message_type', 'success');
-		$this->session->set_flashdata('message', 'Password changed successfully. Please login again with your new password.');
-		redirect('user/login', 'refresh');
-	}
-	public function updateProfilePic()
-	{
-		$id = logged('id');
-		
-		if (!empty($_FILES['image']['name'])) {
-			$path = $_FILES['image']['name'];
-			$ext = pathinfo($path, PATHINFO_EXTENSION);
-			$this->uploadlib->initialize([
-				'file_name' => $id.'.'.$ext
-			]);
-			$image = $this->uploadlib->uploadImage('image', '/users');
-			if($image['status']){
-				$this->users_model->update($id, ['img_type' => $ext]);
-			}
-			$this->activity_model->add("User #$id Updated his/her Profile Image.");
-			$this->session->set_flashdata('alert-type', 'success');
-			$this->session->set_flashdata('alert', 'Profile Image has been Updated Successfully');
-		}
-		else{
-			$this->session->set_flashdata('alert-type', 'danger');
-			$this->session->set_flashdata('alert', 'Server Error Occured while Uploading Image !');
-		}
-		redirect('user/profile/index/change_pic');
-	}
-	public function change_language($code = '')
-	{
-		// $this->lang->load('basic', 'spanish');
-		// die(var_dump( $this->lang->language ));
-		setUserlang($code);
-		redirect(!empty($_REQUEST['back']) ? urldecode($_REQUEST['back']) : '' );
-	}
-
 }
-/* End of file Profile.php */
-/* Location: ./application/controllers/Profile.php */

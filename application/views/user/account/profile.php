@@ -95,9 +95,9 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
                
                 <label for="inputContact" class="col-sm-2 control-label"><?php echo lang('confirm_new_password') ?></label>
                 <div class="col-sm-10">
-                  <div class="input-group">
+                    <div class="input-group">
                     <div class="input-group-append"><span class="input-group-text"><i class="fa fa-lock"></i></span></div>
-                    <input type="password" class="form-control" equalTo="#password" placeholder="<?php echo lang('confirm)new_password') ?>" required name="password_confirm" />
+                    <input type="password" class="form-control" equalTo="#password" placeholder="<?php echo lang('confirm_new_password') ?>" required name="password_confirm" />
                   </div>
                 </div>
               </div>

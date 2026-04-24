@@ -59,16 +59,28 @@ if (!function_exists('userProfile')) {
 		if ($id === 'default' || empty($id)) {
 			return $default;
 		}
+
+		// Prefer new registration/profile wizard path.
+		$profile_picture = (string) $CI->users_model->getRowById($id, 'profile_picture');
+		if ($profile_picture !== '' && strpos($profile_picture, '..') === false) {
+			$relative = str_replace(['\\', '//'], ['/', '/'], ltrim($profile_picture, '/'));
+			$path = FCPATH . $relative;
+			if (file_exists($path)) {
+				return base_url($relative) . '?' . time();
+			}
+		}
+
+		// Backward compatible legacy profile image.
 		$img_type = $CI->users_model->getRowById($id, 'img_type');
-		if (empty($img_type)) {
-			return $default;
+		if (!empty($img_type)) {
+			$relative = 'uploads/users/' . $id . '.' . $img_type;
+			$path = FCPATH . $relative;
+			if (file_exists($path)) {
+				return base_url($relative) . '?' . time();
+			}
 		}
-		$relative = 'uploads/users/' . $id . '.' . $img_type;
-		$path = FCPATH . $relative;
-		if (!file_exists($path)) {
-			return $default;
-		}
-		return base_url($relative) . '?' . time();
+
+		return $default;
 	}
 }
 /**

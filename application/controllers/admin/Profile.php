@@ -64,7 +64,15 @@ class Profile extends MY_Controller {
 			redirect('admin/profile/index/change_password');
 		}
 
-		if ( hash('sha256', post('old_password')) != $this->users_model->getRowById($id, 'password') ) {
+		$stored_hash = (string) $this->users_model->getRowById($id, 'password');
+		$old_ok = false;
+		if ($stored_hash !== '' && strpos($stored_hash, '$') === 0) {
+			$old_ok = password_verify((string) post('old_password'), $stored_hash);
+		} else {
+			$old_ok = (hash('sha256', (string) post('old_password')) === $stored_hash);
+		}
+
+		if (!$old_ok) {
 			$this->session->set_flashdata('alert-type', 'danger');
 			$this->session->set_flashdata('alert', 'Invalid Old Password !');
 			redirect('admin/profile/index/change_password');
@@ -73,7 +81,7 @@ class Profile extends MY_Controller {
 
 		$password = post('password');
 
-		$data['password'] = hash( "sha256", $password );
+		$data['password'] = password_hash((string) $password, PASSWORD_DEFAULT);
 
 		$id = $this->users_model->update($id, $data);
 

@@ -98,6 +98,12 @@ defined('BASEPATH') OR exit('No direct script access allowed');
   
   
 </script>
+<?php
+  // Allow pages to inject extra scripts before closing body.
+  if (!empty($extra_scripts)) {
+    echo $extra_scripts;
+  }
+?>
 
 </body>
 </html>

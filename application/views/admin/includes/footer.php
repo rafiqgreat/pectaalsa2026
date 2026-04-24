@@ -81,7 +81,8 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
     if ($.fn.bootstrapSwitch) {
       $("input[data-bootstrap-switch]").each(function () {
-        $(this).bootstrapSwitch('state', $(this).prop('checked'));
+        // Initialize without firing change events
+        $(this).bootstrapSwitch('state', $(this).prop('checked'), true);
       });
     }
 
