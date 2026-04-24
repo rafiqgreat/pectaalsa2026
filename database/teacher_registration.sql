@@ -7,13 +7,13 @@
 -- - New registrations are created with `users.status = 0` (pending admin approval).
 
 -- Users table additions (run only if columns are missing)
--- ALTER TABLE `users` ADD COLUMN `father_name` VARCHAR(150) DEFAULT NULL AFTER `name`;
--- ALTER TABLE `users` ADD COLUMN `blood_group` VARCHAR(10) DEFAULT NULL AFTER `phone`;
--- ALTER TABLE `users` ADD COLUMN `gender` ENUM('Male','Female','Other') DEFAULT NULL AFTER `blood_group`;
--- ALTER TABLE `users` ADD COLUMN `dob` DATE DEFAULT NULL AFTER `gender`;
--- ALTER TABLE `users` ADD COLUMN `cnic` VARCHAR(20) DEFAULT NULL AFTER `dob`;
--- ALTER TABLE `users` ADD COLUMN `employee_no` VARCHAR(100) DEFAULT NULL AFTER `cnic`;
--- ALTER TABLE `users` ADD COLUMN `profile_picture` VARCHAR(255) DEFAULT NULL AFTER `employee_no`;
+ ALTER TABLE `users` ADD COLUMN `father_name` VARCHAR(150) DEFAULT NULL AFTER `name`;
+ ALTER TABLE `users` ADD COLUMN `blood_group` VARCHAR(10) DEFAULT NULL AFTER `phone`;
+ ALTER TABLE `users` ADD COLUMN `gender` ENUM('Male','Female','Other') DEFAULT NULL AFTER `blood_group`;
+ ALTER TABLE `users` ADD COLUMN `dob` DATE DEFAULT NULL AFTER `gender`;
+ ALTER TABLE `users` ADD COLUMN `cnic` VARCHAR(20) DEFAULT NULL AFTER `dob`;
+ ALTER TABLE `users` ADD COLUMN `employee_no` VARCHAR(100) DEFAULT NULL AFTER `cnic`;
+ ALTER TABLE `users` ADD COLUMN `profile_picture` VARCHAR(255) DEFAULT NULL AFTER `employee_no`;
 
 CREATE TABLE IF NOT EXISTS `teacher_addresses` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
