@@ -14,7 +14,7 @@
 	<style>
 		body { background: #f3f4f6; }
 		.wizard-topbar { padding: 14px 12px; background: #f3f4f6; }
-		.wizard-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+		.wizard-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
 		.wizard-steps li { display: flex; align-items: center; color: #6b7280; font-size: 14px; }
 		.wizard-steps a { color: inherit; text-decoration: none; }
 		.wizard-steps .sep { margin: 0 6px; color: #94a3b8; }
@@ -79,7 +79,7 @@
 			</div>
 		<?php endif; ?>
 
-		<div class="alert alert-warning" style="border-radius:6px;">
+		<div class="alert alert-success" style="border-radius:6px;">
 			<strong>Integrity Affidavit Required:</strong>
 			Please download the affidavit, sign it, and upload the signed copy in <strong>Step 7 (Security Setup)</strong> to complete registration.
 			<a href="<?php echo base_url('assets/IntegrityAffidavit/IntegrityAffidavit.pdf'); ?>" target="_blank" style="font-weight:600;">Download IntegrityAffidavit.pdf</a>
