@@ -82,6 +82,18 @@ class Login extends CI_Controller
 				$this->users_model->login($user, post('remember_me'));
 				redirect('admin/dashboard','refresh');
 				
+			}elseif($user->role==17){	
+				$this->users_model->login($user, post('remember_me'));
+				redirect('admin/dashboard','refresh');
+				
+			}elseif($user->role==18){	
+				$this->users_model->login($user, post('remember_me'));
+				redirect('admin/dashboard','refresh');
+				
+			}elseif($user->role==19){	
+				$this->users_model->login($user, post('remember_me'));
+				redirect('admin/dashboard','refresh');
+				
 			}else{				
 				$this->session->set_flashdata('message', 'You are not valid User.');
 				$this->session->set_flashdata('message_type', 'danger'); // 'success', 'info', 'warning', or 'danger'
