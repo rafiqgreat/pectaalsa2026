@@ -23,7 +23,7 @@
 	<?php $max_dob = date('Y-m-d', strtotime('-18 years')); ?>
 
 	<div class="cardx mb-3">
-		<div class="alert alert-warning" style="border-radius:6px;">
+		<div class="alert alert-success" style="border-radius:6px;">
 			<strong>Integrity Affidavit Required:</strong>
 			Please download the affidavit, sign it, and upload the signed copy in <strong>Step 7 (Security Setup)</strong> to complete registration.
 			<a href="<?php echo base_url('assets/IntegrityAffidavit/IntegrityAffidavit.pdf'); ?>" target="_blank" style="font-weight:600;">Download IntegrityAffidavit.pdf</a>
