@@ -2,6 +2,14 @@
 defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 <?php include viewPath('admin/includes/header'); ?>
+<?php
+  $subject_options = ['ENGLISH', 'MATH', 'SCIENCE', 'URDU'];
+  $selected_subjects = [];
+  if (!empty($User) && isset($User->subjects) && $User->subjects) {
+    $decoded = json_decode((string) $User->subjects, true);
+    if (is_array($decoded)) $selected_subjects = $decoded;
+  }
+?>
 
 <!-- Content Header (Page header) -->
 
@@ -116,6 +124,17 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
             </select>
           </div>
 
+          <div class="form-group js-subjects-wrap" style="display:none;">
+            <label>Subjects<span class="text-danger">*</span></label>
+            <select class="form-control select2 js-subjects" name="subjects[]" multiple="multiple" style="width:100%;">
+              <?php foreach ($subject_options as $opt): ?>
+                <?php $sel = in_array($opt, $selected_subjects, true) ? 'selected' : ''; ?>
+                <option value="<?php echo $opt; ?>" <?php echo $sel; ?>><?php echo $opt; ?></option>
+              <?php endforeach; ?>
+            </select>
+            <small class="text-muted">Required for roles 18 and 19.</small>
+          </div>
+
           <?php if (logged('id') != $User->id): ?>
 
           <?php endif ?>
@@ -183,6 +202,24 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
     //Initialize Select2 Elements
     $('.select2').select2()
+
+    function syncSubjectsVisibility() {
+      var role = parseInt($('#formClient-Role').val() || '0', 10);
+      var show = (role === 18 || role === 19);
+      var $wrap = $('.js-subjects-wrap');
+      var $sel = $('.js-subjects');
+      if (show) {
+        $wrap.show();
+        $sel.prop('required', true);
+      } else {
+        $wrap.hide();
+        $sel.prop('required', false);
+        $sel.val(null).trigger('change');
+      }
+    }
+
+    $('#formClient-Role').on('change', syncSubjectsVisibility);
+    syncSubjectsVisibility();
 
   })
 

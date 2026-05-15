@@ -73,6 +73,18 @@
 
 <div class="wizard-card-wrap">
 	<div class="wizard-card">
+		<?php if (!empty($resume_success)): ?>
+			<div class="alert alert-success" style="border-radius:6px;">
+				<?php echo html_escape((string) $resume_success); ?>
+			</div>
+		<?php endif; ?>
+
+		<div class="alert alert-warning" style="border-radius:6px;">
+			<strong>Integrity Affidavit Required:</strong>
+			Please download the affidavit, sign it, and upload the signed copy in <strong>Step 7 (Security Setup)</strong> to complete registration.
+			<a href="<?php echo base_url('assets/IntegrityAffidavit/IntegrityAffidavit.pdf'); ?>" target="_blank" style="font-weight:600;">Download IntegrityAffidavit.pdf</a>
+		</div>
+
 		<?php $this->load->view($step_view, $form_data); ?>
 
 		<div class="mt-4">

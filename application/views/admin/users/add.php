@@ -26,6 +26,9 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
 
 <?php echo form_open_multipart('admin/users/save', [ 'class' => 'form-validate', 'autocomplete' => 'off' ]); ?>
 
+<?php
+  $subject_options = ['ENGLISH', 'MATH', 'SCIENCE', 'URDU'];
+?>
 
   <div class="row">
     <div class="col-sm-6">
@@ -110,6 +113,16 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
             </select>
           </div>
 
+          <div class="form-group js-subjects-wrap" style="display:none;">
+            <label>Subjects<span class="text-danger">*</span></label>
+            <select class="form-control select2 js-subjects" name="subjects[]" multiple="multiple" style="width:100%;">
+              <?php foreach ($subject_options as $opt): ?>
+                <option value="<?php echo $opt; ?>"><?php echo $opt; ?></option>
+              <?php endforeach; ?>
+            </select>
+            <small class="text-muted">Required for "Subject Specialist" and "Head Markers" Role.</small>
+          </div>
+
           <div class="form-group">
             <label for="formClient-Status"><?php echo lang('user_status') ?></label>
             <select name="status" id="formClient-Status" class="form-control">
@@ -173,6 +186,24 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
 
       //Initialize Select2 Elements
     $('.select2').select2()
+
+    function syncSubjectsVisibility() {
+      var role = parseInt($('#formClient-Role').val() || '0', 10);
+      var show = (role === 18 || role === 19);
+      var $wrap = $('.js-subjects-wrap');
+      var $sel = $('.js-subjects');
+      if (show) {
+        $wrap.show();
+        $sel.prop('required', true);
+      } else {
+        $wrap.hide();
+        $sel.prop('required', false);
+        $sel.val(null).trigger('change');
+      }
+    }
+
+    $('#formClient-Role').on('change', syncSubjectsVisibility);
+    syncSubjectsVisibility();
 
   })
 

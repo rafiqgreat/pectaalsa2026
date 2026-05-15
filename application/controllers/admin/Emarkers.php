@@ -434,7 +434,6 @@ class Emarkers extends MY_Controller
 
 		$this->form_validation->set_rules('name', 'Name', 'trim|required|max_length[150]|xss_clean');
 		$this->form_validation->set_rules('father_name', 'Father Name', 'trim|required|max_length[150]|xss_clean');
-		$this->form_validation->set_rules('blood_group', 'Blood Group', 'trim|required|max_length[10]|xss_clean');
 		$this->form_validation->set_rules('gender', 'Gender', 'trim|required|in_list[Male,Female,Other]|xss_clean');
 		$this->form_validation->set_rules('phone', 'Phone Number', 'trim|required|max_length[30]|xss_clean');
 		$this->form_validation->set_rules('dob', 'Date Of Birth', 'trim|required|xss_clean');
@@ -456,13 +455,34 @@ class Emarkers extends MY_Controller
 		}
 		$cnic_fmt = substr($cnic_digits, 0, 5) . '-' . substr($cnic_digits, 5, 7) . '-' . substr($cnic_digits, 12, 1);
 
+		$dob = (string) post('dob');
+		try {
+			$birth = new DateTime($dob);
+			$cutoff = (clone $birth)->modify('+18 years');
+			$today = new DateTime(date('Y-m-d'));
+			if ($cutoff > $today) {
+				$this->json([
+					'success' => false,
+					'message' => 'Please correct the highlighted errors.',
+					'errors' => ['dob' => 'User must be at least 18 years old.'],
+				], 422);
+				return;
+			}
+		} catch (Throwable $e) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['dob' => 'Invalid Date Of Birth.'],
+			], 422);
+			return;
+		}
+
 		$payload = [
 			'name' => post('name'),
 			'father_name' => post('father_name'),
-			'blood_group' => post('blood_group'),
 			'gender' => post('gender'),
 			'phone' => post('phone'),
-			'dob' => post('dob'),
+			'dob' => $dob,
 			'email' => post('email'),
 			'cnic' => $cnic_fmt,
 			'employee_no' => post('employee_no'),
@@ -554,10 +574,21 @@ class Emarkers extends MY_Controller
 			return;
 		}
 
+		$required_degree_16 = 'Master / M.A/ MSc./ BS (Hons) (16 years)';
+		$allowed_required_degrees = [
+			'PhD',
+			'MPhil. / MS (18 years)',
+			$required_degree_16,
+		];
+		$has_required_degree = false;
+
 		foreach ($rows as $idx => $r) {
 			if ($r['degree'] === '') {
 				$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => ['degree[]' => 'Degree is required.']], 422);
 				return;
+			}
+			if (in_array((string) $r['degree'], $allowed_required_degrees, true)) {
+				$has_required_degree = true;
 			}
 			if ($r['institute'] === '') {
 				$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => ['institute[]' => 'Institute/University is required.']], 422);
@@ -575,6 +606,15 @@ class Emarkers extends MY_Controller
 				$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => ['transcript_file[]' => 'Upload Degree/Transcript is required.']], 422);
 				return;
 			}
+		}
+
+		if (!$has_required_degree) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['degree[]' => "At least one education entry must be '{$required_degree_16}' (or higher)."],
+			], 422);
+			return;
 		}
 
 		$result = $this->signup->save_education($id, $rows);
@@ -767,6 +807,7 @@ class Emarkers extends MY_Controller
 		$this->form_validation->set_rules('identification_number', 'Identification Number', 'trim|required|xss_clean|max_length[100]');
 		$this->form_validation->set_rules('expiry_date', 'Expiry Date', 'trim|required|xss_clean');
 		$this->form_validation->set_rules('document_file', 'Upload Document', 'trim|required|xss_clean');
+		$this->form_validation->set_rules('integrity_affidavit_file', 'Integrity Affidavit', 'trim|required|xss_clean');
 
 		if ($this->form_validation->run() === false) {
 			$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => $this->form_validation->error_array()], 422);
@@ -791,6 +832,7 @@ class Emarkers extends MY_Controller
 			'identification_number' => post('identification_number'),
 			'expiry_date' => post('expiry_date'),
 			'document_file' => post('document_file'),
+			'integrity_affidavit_file' => post('integrity_affidavit_file'),
 			'password' => $password,
 		];
 		$result = $this->signup->save_security($id, $data);

@@ -1,30 +1,18 @@
 <?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>
 <?php $u = isset($user) && is_object($user) ? $user : null; ?>
+<?php $max_dob = date('Y-m-d', strtotime('-18 years')); ?>
 
 <form id="signupFormStep1" class="signup-step-form" autocomplete="off">
 	<div class="form-row">
-		<div class="form-group col-md-3">
+		<div class="form-group col-md-4">
 			<label>Name<span class="text-danger">*</span></label>
 			<input type="text" class="form-control" name="name" placeholder="Enter full name" value="<?php echo html_escape($u->name ?? ''); ?>" required>
 		</div>
-		<div class="form-group col-md-3">
+		<div class="form-group col-md-4">
 			<label>Father Name<span class="text-danger">*</span></label>
 			<input type="text" class="form-control" name="father_name" placeholder="Enter father name" value="<?php echo html_escape($u->father_name ?? ''); ?>" required>
 		</div>
-		<div class="form-group col-md-3">
-			<label>Blood Group<span class="text-danger">*</span></label>
-			<select class="form-control" name="blood_group" required>
-				<?php
-					$bg = $u->blood_group ?? '';
-					$options = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
-				?>
-				<option value="">Select</option>
-				<?php foreach ($options as $opt): ?>
-					<option value="<?php echo $opt; ?>" <?php echo ($bg === $opt) ? 'selected' : ''; ?>><?php echo $opt; ?></option>
-				<?php endforeach; ?>
-			</select>
-		</div>
-		<div class="form-group col-md-3">
+		<div class="form-group col-md-4">
 			<label>Gender<span class="text-danger">*</span></label>
 			<?php $g = $u->gender ?? ''; ?>
 			<select class="form-control" name="gender" required>
@@ -43,7 +31,7 @@
 		</div>
 		<div class="form-group col-md-3">
 			<label>Date Of Birth<span class="text-danger">*</span></label>
-			<input type="date" class="form-control" name="dob" value="<?php echo html_escape($u->dob ?? ''); ?>" required>
+			<input type="date" class="form-control" name="dob" max="<?php echo html_escape($max_dob); ?>" value="<?php echo html_escape($u->dob ?? ''); ?>" required>
 		</div>
 		<div class="form-group col-md-3">
 			<label>Email Address<span class="text-danger">*</span></label>

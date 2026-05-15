@@ -108,10 +108,17 @@ defined('BASEPATH') or exit('No direct script access allowed');
 							<span class="doc-missing">Not attached</span>
 						<?php endif; ?>
 					</p>
+					<p>
+						<strong>Integrity Affidavit:</strong>
+						<?php if (!empty($security) && !empty($security->integrity_affidavit_file)): ?>
+							<a href="javascript:void(0)" class="js-doc-view eye-link" data-title="Integrity Affidavit" data-url="<?php echo base_url($security->integrity_affidavit_file); ?>"><i class="far fa-eye"></i></a>
+						<?php else: ?>
+							<span class="doc-missing">Not attached</span>
+						<?php endif; ?>
+					</p>
 				</div>
 				<div class="col-md-4 profile-label">
 					<p><strong>CNIC:</strong> <?php echo htmlspecialchars((string) ($u->cnic ?? '')); ?></p>
-					<p><strong>Blood Group:</strong> <?php echo htmlspecialchars((string) ($u->blood_group ?? '')); ?></p>
 					<p><strong>Gender:</strong> <?php echo htmlspecialchars((string) ($u->gender ?? '')); ?></p>
 
 					<?php if (!$is_active): ?>

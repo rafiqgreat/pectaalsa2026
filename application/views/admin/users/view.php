@@ -78,6 +78,15 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
       						<td><strong><?php echo lang('user_role') ?></strong>:</td>
       						<td><?php echo $User->role->title ?></td>
       					</tr>
+      					<?php if (!empty($User->subjects)): ?>
+      						<?php $subs = json_decode((string) $User->subjects, true); ?>
+      						<?php if (is_array($subs) && count($subs)): ?>
+      							<tr>
+      								<td><strong>Subjects</strong>:</td>
+      								<td><?php echo html_escape(implode(', ', $subs)); ?></td>
+      							</tr>
+      						<?php endif; ?>
+      					<?php endif; ?>
       				</tbody>
       			</table>
       		</div>

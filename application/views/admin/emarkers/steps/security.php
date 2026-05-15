@@ -39,6 +39,19 @@
 		</div>
 	</div>
 
+	<div class="form-group">
+		<label>Upload Signed Integrity Affidavit<span class="text-danger">*</span></label>
+		<div class="upload-box js-upload-box" data-field="integrity_affidavit">
+			<span>Upload Signed Affidavit</span>
+			<input type="file" class="d-none js-upload-input" accept=".jpg,.jpeg,.png,.pdf">
+		</div>
+		<input type="hidden" name="integrity_affidavit_file" class="js-upload-path js-required-upload" data-label="Integrity Affidavit" value="<?php echo html_escape($sec['integrity_affidavit_file'] ?? ''); ?>">
+		<div class="upload-meta js-upload-meta">
+			<span class="label">File name:</span> <?php echo !empty($sec['integrity_affidavit_file']) ? html_escape(basename($sec['integrity_affidavit_file'])) : '-'; ?>
+			<span class="remove-link js-remove-upload" style="margin-left:10px;<?php echo empty($sec['integrity_affidavit_file']) ? 'display:none' : ''; ?>">Remove</span>
+		</div>
+	</div>
+
 	<div class="alert alert-info" style="margin-top:10px;">
 		Leave password blank if you do not want to change it.
 	</div>
@@ -54,4 +67,3 @@
 		</div>
 	</div>
 </form>
-

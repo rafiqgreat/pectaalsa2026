@@ -69,6 +69,8 @@ $route['singup/delete_file'] = 'signup/delete_file';
 
 // Host the wizard on the existing registration URL
 $route['user/login/register'] = 'signup/index';
+$route['user/login/register/resume'] = 'signup/resume';
+$route['user/login/register/resume_submit'] = 'signup/resume_submit';
 $route['user/login/register/step/(:num)'] = 'signup/step/$1';
 $route['user/login/register/save_personal'] = 'signup/save_personal';
 $route['user/login/register/save_address'] = 'signup/save_address';

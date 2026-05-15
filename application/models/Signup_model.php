@@ -135,7 +135,6 @@ class Signup_model extends CI_Model
 			$row = [
 				'name' => $payload['name'],
 				'father_name' => $payload['father_name'],
-				'blood_group' => $payload['blood_group'],
 				'gender' => $payload['gender'],
 				'phone' => $payload['phone'],
 				'dob' => $payload['dob'],
@@ -143,6 +142,9 @@ class Signup_model extends CI_Model
 				'cnic' => $cnic,
 				'employee_no' => $payload['employee_no'],
 			];
+			if ($this->db->field_exists('blood_group', 'users') && array_key_exists('blood_group', $payload)) {
+				$row['blood_group'] = $payload['blood_group'];
+			}
 
 			$new_user_id = $user_id;
 			if ($user_id <= 0) {
@@ -384,9 +386,16 @@ class Signup_model extends CI_Model
 			'expiry_date' => $data['expiry_date'],
 			'document_file' => $data['document_file'],
 		];
+		if ($this->db->field_exists('integrity_affidavit_file', 'teacher_security_documents') && array_key_exists('integrity_affidavit_file', $data)) {
+			$doc_row['integrity_affidavit_file'] = $data['integrity_affidavit_file'];
+		}
 		if (!$this->is_valid_user_upload_path($user_id, $doc_row['document_file'] ?? '')) {
 			$this->db->trans_rollback();
 			return ['success' => false, 'message' => 'Invalid document upload. Please upload again.'];
+		}
+		if (!empty($doc_row['integrity_affidavit_file']) && !$this->is_valid_user_upload_path($user_id, $doc_row['integrity_affidavit_file'])) {
+			$this->db->trans_rollback();
+			return ['success' => false, 'message' => 'Invalid affidavit upload. Please upload again.'];
 		}
 
 		$exists = $this->db->get_where('teacher_security_documents', ['user_id' => $user_id])->row();

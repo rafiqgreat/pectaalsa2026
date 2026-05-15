@@ -59,18 +59,46 @@ class Users extends MY_Controller {
 		$this->load->view('admin/users/add', $this->page_data);
 	}
 
+	// Alias for legacy/expected URL: /admin/users/create
+	public function create()
+	{
+		$this->add();
+	}
+
 	public function save()
 	{
 		ifPermissions('users_add');
 		postAllowed();
 
+		$role = (int) post('role');
+		if (in_array($role, [18, 19], true) && (int) logged('role') !== 1) {
+			$this->session->set_flashdata('alert-type', 'danger');
+			$this->session->set_flashdata('alert', 'Only Administrator can create/update users for this role.');
+			redirect('admin/users/add');
+			return;
+		}
+
+		$subjects_json = null;
+		if (in_array($role, [18, 19], true)) {
+			$subjects = (array) $this->input->post('subjects', true);
+			$subjects = array_values(array_unique(array_filter(array_map('trim', $subjects), function ($v) { return $v !== ''; })));
+			if (count($subjects) < 1) {
+				$this->session->set_flashdata('alert-type', 'danger');
+				$this->session->set_flashdata('alert', 'Please select at least one subject.');
+				redirect('admin/users/add?role=' . $role);
+				return;
+			}
+			$subjects_json = json_encode($subjects);
+		}
+
 		$id = $this->users_model->create([
-			'role' => post('role'),
+			'role' => $role,
 			'name' => post('name'),
 			'username' => post('username'),
 			'email' => post('email'),
 			'phone' => post('phone'),
 			'address' => post('address'),
+			'subjects' => ($this->db->field_exists('subjects', 'users') ? $subjects_json : null),
 			'status' => (int) post('status'),
 			'password' => hash( "sha256", post('password') ),
 		]);
@@ -139,14 +167,38 @@ class Users extends MY_Controller {
 		
 		postAllowed();
 
+		$role = (int) post('role');
+		if (in_array($role, [18, 19], true) && (int) logged('role') !== 1) {
+			$this->session->set_flashdata('alert-type', 'danger');
+			$this->session->set_flashdata('alert', 'Only Administrator can create/update users for this role.');
+			redirect('admin/users/edit/' . (int) $id);
+			return;
+		}
+
+		$subjects_json = null;
+		if (in_array($role, [18, 19], true)) {
+			$subjects = (array) $this->input->post('subjects', true);
+			$subjects = array_values(array_unique(array_filter(array_map('trim', $subjects), function ($v) { return $v !== ''; })));
+			if (count($subjects) < 1) {
+				$this->session->set_flashdata('alert-type', 'danger');
+				$this->session->set_flashdata('alert', 'Please select at least one subject.');
+				redirect('admin/users/edit/' . (int) $id);
+				return;
+			}
+			$subjects_json = json_encode($subjects);
+		}
+
 		$data = [
-			'role' => post('role'),
+			'role' => $role,
 			'name' => post('name'),
 			'username' => post('username'),
 			'email' => post('email'),
 			'phone' => post('phone'),
 			'address' => post('address'),
 		];
+		if ($this->db->field_exists('subjects', 'users')) {
+			$data['subjects'] = $subjects_json;
+		}
 
 		$password = post('password');
 

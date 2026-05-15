@@ -3,6 +3,10 @@
 	$sec = isset($security) && is_array($security) ? $security : [];
 	$u = isset($user) && is_object($user) ? $user : null;
 	$prefill_id = $sec['identification_number'] ?? ($u->cnic ?? '');
+	$role_val = null;
+	if ($u && isset($u->role_id)) $role_val = (int) $u->role_id;
+	else if ($u && isset($u->role)) $role_val = (int) $u->role;
+	$is_emarker = ($role_val === null) ? true : ($role_val === 2);
 ?>
 
 <form id="signupFormStep7" class="signup-step-form" autocomplete="off">
@@ -38,6 +42,21 @@
 		<span class="remove-link js-remove-upload" style="margin-left:10px;<?php echo empty($sec['document_file']) ? 'display:none' : ''; ?>">Remove</span>
 	</div>
 </div>
+
+	<?php if ($is_emarker): ?>
+		<div class="form-group">
+			<label>Upload Signed Integrity Affidavit<span class="text-danger">*</span></label>
+			<div class="upload-box js-upload-box" data-field="integrity_affidavit">
+				<span>Upload Signed Affidavit</span>
+				<input type="file" class="d-none js-upload-input" accept=".jpg,.jpeg,.png,.pdf">
+			</div>
+			<input type="hidden" name="integrity_affidavit_file" class="js-upload-path js-required-upload" data-label="Integrity Affidavit" value="<?php echo html_escape($sec['integrity_affidavit_file'] ?? ''); ?>">
+			<div class="upload-meta js-upload-meta">
+				<span class="label">File name:</span> <?php echo !empty($sec['integrity_affidavit_file']) ? html_escape(basename($sec['integrity_affidavit_file'])) : '-'; ?>
+				<span class="remove-link js-remove-upload" style="margin-left:10px;<?php echo empty($sec['integrity_affidavit_file']) ? 'display:none' : ''; ?>">Remove</span>
+			</div>
+		</div>
+	<?php endif; ?>
 
 	<div class="form-row">
 		<div class="form-group col-md-6">

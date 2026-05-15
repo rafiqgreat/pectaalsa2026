@@ -34,6 +34,17 @@ class Signup extends CI_Controller
 		$this->load->model('Signup_model', 'signup');
 	}
 
+	private function role_column()
+	{
+		if ($this->db->field_exists('role', 'users')) {
+			return 'role';
+		}
+		if ($this->db->field_exists('role_id', 'users')) {
+			return 'role_id';
+		}
+		return 'role';
+	}
+
 	public function index()
 	{
 		$base = $this->wizard_base();
@@ -46,7 +57,102 @@ class Signup extends CI_Controller
 			}
 			$this->session->unset_userdata('signup_user_id');
 		}
+		// For the public registration entrypoint, show resume/start screen.
+		if ($base === $this->register_base) {
+			$this->resume();
+			return;
+		}
 		redirect($base . '/step/1');
+	}
+
+	public function resume()
+	{
+		$base = $this->wizard_base();
+		if ($base !== $this->register_base) {
+			redirect($base . '/step/1');
+			return;
+		}
+
+		$data = [
+			'assets' => assets_url(),
+			'wizard_base' => $base,
+			'resume_error' => (string) $this->session->flashdata('resume_error'),
+			'resume_cnic' => (string) $this->session->flashdata('resume_cnic'),
+			'resume_dob' => (string) $this->session->flashdata('resume_dob'),
+		];
+		$this->load->view('signup/resume', $data, false);
+	}
+
+	private function normalize_cnic($cnic)
+	{
+		$digits = preg_replace('/\\D+/', '', (string) $cnic);
+		if (strlen($digits) !== 13) {
+			return '';
+		}
+		return substr($digits, 0, 5) . '-' . substr($digits, 5, 7) . '-' . substr($digits, 12, 1);
+	}
+
+	public function resume_submit()
+	{
+		$base = $this->wizard_base();
+		if ($base !== $this->register_base) {
+			show_404();
+		}
+
+		postAllowed();
+		$cnic_in = (string) $this->input->post('cnic', true);
+		$dob = (string) $this->input->post('dob', true);
+
+		$cnic = $this->normalize_cnic($cnic_in);
+		if ($cnic === '') {
+			$this->session->set_flashdata('resume_error', 'Invalid CNIC. Please enter 13 digits (with or without dashes).');
+			$this->session->set_flashdata('resume_cnic', $cnic_in);
+			$this->session->set_flashdata('resume_dob', $dob);
+			redirect($base);
+			return;
+		}
+		if (!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $dob) || !$this->is_valid_ymd($dob)) {
+			$this->session->set_flashdata('resume_error', 'Invalid Date of Birth.');
+			$this->session->set_flashdata('resume_cnic', $cnic_in);
+			$this->session->set_flashdata('resume_dob', $dob);
+			redirect($base);
+			return;
+		}
+		if (!$this->is_at_least_years_old($dob, 18)) {
+			$this->session->set_flashdata('resume_error', 'You must be at least 18 years old to register.');
+			$this->session->set_flashdata('resume_cnic', $cnic_in);
+			$this->session->set_flashdata('resume_dob', $dob);
+			redirect($base);
+			return;
+		}
+
+		$role_col = $this->role_column();
+
+		$this->db->select('u.id, u.dob, s.current_step, s.registration_completed');
+		$this->db->from('users u');
+		$this->db->join('teacher_registration_steps s', 's.user_id = u.id', 'inner');
+		$this->db->where('u.cnic', $cnic);
+		$this->db->where('u.dob', $dob);
+		$this->db->where('u.' . $role_col, 2);
+		$this->db->where('s.registration_completed', 0);
+		$row = $this->db->get()->row();
+
+		if (!$row) {
+			$this->session->set_flashdata('resume_error', 'No in-progress registration found for the provided CNIC and Date of Birth.');
+			$this->session->set_flashdata('resume_cnic', $cnic_in);
+			$this->session->set_flashdata('resume_dob', $dob);
+			redirect($base);
+			return;
+		}
+
+		$step = (int) ($row->current_step ?? 1);
+		$step = max(1, min(8, $step));
+
+		$this->session->set_userdata('signup_user_id', (int) $row->id);
+		$this->session->unset_userdata('signup_temp_key');
+
+		$this->session->set_flashdata('resume_success', 'Resumed registration for CNIC ' . $cnic . '.');
+		redirect($base . '/step/' . $step);
 	}
 
 	public function step($step = 1)
@@ -79,6 +185,7 @@ class Signup extends CI_Controller
 			'steps_row' => $steps,
 			'user_id' => $user_id,
 			'allowed_step' => $allowed_step,
+			'resume_success' => (string) $this->session->flashdata('resume_success'),
 			'form_action' => $this->get_step_action($step),
 			'step_view' => $this->get_step_view($step),
 			'form_data' => $this->get_step_data($step, $user_id),
@@ -204,6 +311,23 @@ class Signup extends CI_Controller
 		return $dt && $dt->format('Y-m-d') === $date;
 	}
 
+	private function is_at_least_years_old($dob, $years)
+	{
+		$dob = (string) $dob;
+		$years = (int) $years;
+		if ($years < 0) $years = 0;
+		if (!$this->is_valid_ymd($dob)) return false;
+
+		try {
+			$birth = new DateTime($dob);
+			$cutoff = (clone $birth)->modify('+' . $years . ' years');
+			$today = new DateTime(date('Y-m-d'));
+			return $cutoff <= $today;
+		} catch (Throwable $e) {
+			return false;
+		}
+	}
+
 	private function require_user_for_step($expected_step)
 	{
 		$user_id = (int) $this->session->userdata('signup_user_id');
@@ -317,7 +441,6 @@ class Signup extends CI_Controller
 		postAllowed();
 		$this->form_validation->set_rules('name', 'Name', 'trim|required|max_length[150]|xss_clean');
 		$this->form_validation->set_rules('father_name', 'Father Name', 'trim|required|max_length[150]|xss_clean');
-		$this->form_validation->set_rules('blood_group', 'Blood Group', 'trim|required|max_length[10]|xss_clean');
 		$this->form_validation->set_rules('gender', 'Gender', 'trim|required|in_list[Male,Female,Other]|xss_clean');
 		$this->form_validation->set_rules('phone', 'Phone Number', 'trim|required|max_length[30]|xss_clean');
 		$this->form_validation->set_rules('dob', 'Date Of Birth', 'trim|required|xss_clean');
@@ -339,14 +462,22 @@ class Signup extends CI_Controller
 			return;
 		}
 		$cnic_fmt = substr($cnic_digits, 0, 5) . '-' . substr($cnic_digits, 5, 7) . '-' . substr($cnic_digits, 12, 1);
+		$dob = (string) post('dob');
+		if (!$this->is_at_least_years_old($dob, 18)) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['dob' => 'You must be at least 18 years old.'],
+			], 422);
+			return;
+		}
 
 		$payload = [
 			'name' => post('name'),
 			'father_name' => post('father_name'),
-			'blood_group' => post('blood_group'),
 			'gender' => post('gender'),
 			'phone' => post('phone'),
-			'dob' => post('dob'),
+			'dob' => $dob,
 			'email' => post('email'),
 			'cnic' => $cnic_fmt,
 			'employee_no' => post('employee_no'),
@@ -418,7 +549,15 @@ class Signup extends CI_Controller
 			return;
 		}
 
+		$required_degree_16 = 'Master / M.A/ MSc./ BS (Hons) (16 years)';
+		$allowed_required_degrees = [
+			'PhD',
+			'MPhil. / MS (18 years)',
+			$required_degree_16,
+		];
+
 		$rows = [];
+		$has_required_degree = false;
 		for ($i = 0; $i < count($degrees); $i++) {
 			$row = [
 				'degree' => trim((string) ($degrees[$i] ?? '')),
@@ -431,7 +570,19 @@ class Signup extends CI_Controller
 				$this->json(['success' => false, 'message' => 'All education fields and uploads are required.'], 422);
 				return;
 			}
+			if (in_array($row['degree'], $allowed_required_degrees, true)) {
+				$has_required_degree = true;
+			}
 			$rows[] = $row;
+		}
+
+		if (!$has_required_degree) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['degree[]' => "At least one education entry must be '{$required_degree_16}' (or higher)."],
+			], 422);
+			return;
 		}
 
 		$result = $this->signup->save_education($user_id, $rows);
@@ -610,6 +761,14 @@ class Signup extends CI_Controller
 		$this->form_validation->set_rules('identification_number', 'Identification Number', 'trim|required|xss_clean|max_length[100]');
 		$this->form_validation->set_rules('expiry_date', 'Expiry Date', 'trim|required|xss_clean');
 		$this->form_validation->set_rules('document_file', 'Upload Document', 'trim|required|xss_clean');
+
+		$user = $this->signup->get_user($user_id);
+		$role_col = $this->role_column();
+		$is_emarker = ($user && isset($user->{$role_col}) && (int) $user->{$role_col} === 2);
+		if ($is_emarker) {
+			$this->form_validation->set_rules('integrity_affidavit_file', 'Integrity Affidavit', 'trim|required|xss_clean');
+		}
+
 		$this->form_validation->set_rules('password', 'Password', 'required|min_length[6]');
 		$this->form_validation->set_rules('confirm_password', 'Confirm Password', 'required|matches[password]');
 
@@ -623,6 +782,7 @@ class Signup extends CI_Controller
 			'identification_number' => post('identification_number'),
 			'expiry_date' => post('expiry_date'),
 			'document_file' => post('document_file'),
+			'integrity_affidavit_file' => $is_emarker ? post('integrity_affidavit_file') : null,
 			'password' => (string) $this->input->post('password', false),
 		];
 

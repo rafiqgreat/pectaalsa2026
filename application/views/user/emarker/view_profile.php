@@ -101,7 +101,6 @@
 								</div>
 								<hr>
 								<div class="mb-2"><span class="detail-label">CNIC:</span> <?php echo html_escape((string) ($u->cnic ?? '')); ?></div>
-								<div class="mb-2"><span class="detail-label">Blood Group:</span> <?php echo html_escape((string) ($u->blood_group ?? '')); ?></div>
 								<div class="mb-2"><span class="detail-label">Gender:</span> <?php echo html_escape((string) ($u->gender ?? '')); ?></div>
 							</div>
 						</div>
@@ -289,4 +288,3 @@
 </section>
 
 <?php include viewPath('user/includes/footer'); ?>
-

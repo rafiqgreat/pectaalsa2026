@@ -168,6 +168,23 @@ class Profile extends MY_Controller {
 		return $dt && $dt->format('Y-m-d') === $date;
 	}
 
+	private function is_at_least_years_old($dob, $years)
+	{
+		$dob = (string) $dob;
+		$years = (int) $years;
+		if ($years < 0) $years = 0;
+		if (!$this->is_valid_ymd($dob)) return false;
+
+		try {
+			$birth = new DateTime($dob);
+			$cutoff = (clone $birth)->modify('+' . $years . ' years');
+			$today = new DateTime(date('Y-m-d'));
+			return $cutoff <= $today;
+		} catch (Throwable $e) {
+			return false;
+		}
+	}
+
 	public function upload_file()
 	{
 		if (empty($_FILES['file'])) {
@@ -238,7 +255,6 @@ class Profile extends MY_Controller {
 
 		$this->form_validation->set_rules('name', 'Name', 'trim|required|max_length[150]|xss_clean');
 		$this->form_validation->set_rules('father_name', 'Father Name', 'trim|required|max_length[150]|xss_clean');
-		$this->form_validation->set_rules('blood_group', 'Blood Group', 'trim|required|max_length[10]|xss_clean');
 		$this->form_validation->set_rules('gender', 'Gender', 'trim|required|in_list[Male,Female,Other]|xss_clean');
 		$this->form_validation->set_rules('phone', 'Phone Number', 'trim|required|max_length[30]|xss_clean');
 		$this->form_validation->set_rules('dob', 'Date Of Birth', 'trim|required|xss_clean');
@@ -259,13 +275,22 @@ class Profile extends MY_Controller {
 			return;
 		}
 
+		$dob = (string) post('dob');
+		if (!$this->is_at_least_years_old($dob, 18)) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['dob' => 'You must be at least 18 years old.'],
+			], 422);
+			return;
+		}
+
 		$payload = [
 			'name' => post('name'),
 			'father_name' => post('father_name'),
-			'blood_group' => post('blood_group'),
 			'gender' => post('gender'),
 			'phone' => post('phone'),
-			'dob' => post('dob'),
+			'dob' => $dob,
 			'email' => post('email'),
 			'cnic' => $cnic_fmt,
 			'employee_no' => post('employee_no'),
@@ -328,7 +353,15 @@ class Profile extends MY_Controller {
 			return;
 		}
 
+		$required_degree_16 = 'Master / M.A/ MSc./ BS (Hons) (16 years)';
+		$allowed_required_degrees = [
+			'PhD',
+			'MPhil. / MS (18 years)',
+			$required_degree_16,
+		];
+
 		$rows = [];
+		$has_required_degree = false;
 		for ($i = 0; $i < count($degrees); $i++) {
 			$row = [
 				'degree' => trim((string) ($degrees[$i] ?? '')),
@@ -341,7 +374,19 @@ class Profile extends MY_Controller {
 				$this->json(['success' => false, 'message' => 'All education fields and uploads are required.'], 422);
 				return;
 			}
+			if (in_array($row['degree'], $allowed_required_degrees, true)) {
+				$has_required_degree = true;
+			}
 			$rows[] = $row;
+		}
+
+		if (!$has_required_degree) {
+			$this->json([
+				'success' => false,
+				'message' => 'Please correct the highlighted errors.',
+				'errors' => ['degree[]' => "At least one education entry must be '{$required_degree_16}' (or higher)."],
+			], 422);
+			return;
 		}
 
 		$result = $this->signup->save_education($user_id, $rows);
