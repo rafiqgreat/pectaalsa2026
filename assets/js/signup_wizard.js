@@ -295,6 +295,73 @@
 		return ok;
 	}
 
+	function educationListDegrees($container) {
+		var degrees = [];
+		$container.find('input[name="degree[]"]').each(function () {
+			var v = ($(this).val() || '').toString().trim();
+			if (v) degrees.push(v);
+		});
+		return degrees;
+	}
+
+	function educationClearEntryForm($form) {
+		$form.find('[name="degree_new"]').val('');
+		$form.find('[name="institute_new"]').val('');
+		$form.find('[name="passing_year_new"]').val('');
+		$form.find('[name="cgpa_percentage_new"]').val('');
+		$form.find('[name="transcript_file_new"]').val('');
+		$form.find('.js-upload-input').val('');
+		$form.find('.js-upload-box').removeClass('is-invalid');
+		var $meta = $form.find('.js-upload-meta').first();
+		if ($meta.length) {
+			$meta.html('<span class="label">File name:</span> - <span class="remove-link js-remove-upload" style="margin-left:10px;display:none">Remove</span>');
+		}
+		$form.find('.js-edu-cancel').hide();
+		$form.find('.js-edu-add').text('Add');
+		$form.data('editing', null);
+		$form.data('editingData', null);
+	}
+
+	function educationSetEntryForm($form, data) {
+		$form.find('[name="degree_new"]').val(data.degree || '');
+		$form.find('[name="institute_new"]').val(data.institute || '');
+		$form.find('[name="passing_year_new"]').val(data.passing_year || '');
+		$form.find('[name="cgpa_percentage_new"]').val(data.cgpa_percentage || '');
+		$form.find('[name="transcript_file_new"]').val(data.transcript_file || '');
+
+		var $meta = $form.find('.js-upload-meta').first();
+		if ($meta.length) {
+			var base = (data.transcript_file || '').toString().split('/').pop().split('\\').pop();
+			$meta.html('<span class="label">File name:</span> ' + (base || '-') + ' <span class="remove-link js-remove-upload" style="margin-left:10px;' + (base ? '' : 'display:none') + '">Remove</span>');
+		}
+		$form.find('.js-edu-cancel').show();
+		$form.find('.js-edu-add').text('Edit');
+	}
+
+	function educationBuildItem(data) {
+		var base = (data.transcript_file || '').toString().split('/').pop().split('\\').pop();
+		var html = ''
+			+ '<div class="border rounded p-3 mb-3 js-edu-item" data-degree="' + $('<div>').text(data.degree).html() + '">'
+			+ '  <div class="d-flex justify-content-between align-items-center">'
+			+ '    <div>'
+			+ '      <div style="font-weight:700;">' + $('<div>').text(data.degree).html() + '</div>'
+			+ '      <div class="text-muted" style="font-size:13px;">' + $('<div>').text(data.institute).html() + ' &middot; ' + $('<div>').text(data.passing_year).html() + ' &middot; ' + $('<div>').text(data.cgpa_percentage).html() + '</div>'
+			+ '      <div class="text-muted" style="font-size:12px;">File: ' + $('<div>').text(base || '-').html() + '</div>'
+			+ '    </div>'
+			+ '    <div style="display:flex;gap:8px;">'
+			+ '      <button type="button" class="btn btn-sm btn-outline-primary js-edu-edit">Edit</button>'
+			+ '      <button type="button" class="btn btn-sm btn-outline-danger js-edu-remove">Remove</button>'
+			+ '    </div>'
+			+ '  </div>'
+			+ '  <input type="hidden" name="degree[]" value="' + $('<div>').text(data.degree).html() + '">'
+			+ '  <input type="hidden" name="institute[]" value="' + $('<div>').text(data.institute).html() + '">'
+			+ '  <input type="hidden" name="passing_year[]" value="' + $('<div>').text(data.passing_year).html() + '">'
+			+ '  <input type="hidden" name="cgpa_percentage[]" value="' + $('<div>').text(data.cgpa_percentage).html() + '">'
+			+ '  <input type="hidden" name="transcript_file[]" value="' + $('<div>').text(data.transcript_file).html() + '">'
+			+ '</div>';
+		return $(html);
+	}
+
 	function nextIndex($wrap) {
 		var max = -1;
 		$wrap.find('.js-repeat-item').each(function () {
@@ -585,6 +652,13 @@
 						return;
 					}
 				}
+				if (step === 3) {
+					// Ensure at least one education record has been added.
+					if ($form.find('input[name="degree[]"]').length < 1) {
+						toast('error', 'Please add at least one education record using Add.');
+						return;
+					}
+				}
 				if (step === 5) {
 					var $iban = $('.js-iban').first();
 					if ($iban.length && !validateIbanInline($iban)) {
@@ -605,5 +679,90 @@
 		$(document).on('click', '.js-confirm-cancel', function () {
 			pendingSubmit = null;
 		});
+
+		// Step 3 education add/edit list
+		if (window.SIGNUP_WIZARD && parseInt(window.SIGNUP_WIZARD.step, 10) === 3) {
+			var $eduForm = $('#educationEntryForm');
+			var $eduList = $('#educationList');
+
+			$(document).on('click', '.js-edu-add', function () {
+				var $mainForm = $('.signup-step-form').first();
+				clearValidation($mainForm);
+
+				var data = {
+					degree: ($eduForm.find('[name="degree_new"]').val() || '').toString().trim(),
+					institute: ($eduForm.find('[name="institute_new"]').val() || '').toString().trim(),
+					passing_year: ($eduForm.find('[name="passing_year_new"]').val() || '').toString().trim(),
+					cgpa_percentage: ($eduForm.find('[name="cgpa_percentage_new"]').val() || '').toString().trim(),
+					transcript_file: ($eduForm.find('[name="transcript_file_new"]').val() || '').toString().trim()
+				};
+
+				var ok = true;
+				if (!data.degree) { ok = false; markInvalid($eduForm.find('[name="degree_new"]'), 'Degree is required.'); }
+				if (!data.institute) { ok = false; markInvalid($eduForm.find('[name="institute_new"]'), 'Institute/University is required.'); }
+				if (!data.passing_year) { ok = false; markInvalid($eduForm.find('[name="passing_year_new"]'), 'Passing Year is required.'); }
+				if (!data.cgpa_percentage) { ok = false; markInvalid($eduForm.find('[name="cgpa_percentage_new"]'), 'CGPA/Percentage is required.'); }
+				if (!data.transcript_file) {
+					ok = false;
+					$eduForm.find('.js-upload-box').addClass('is-invalid');
+					var $meta = $eduForm.find('.js-upload-meta').first();
+					if ($meta.length) $meta.html('<span class="label">File name:</span> <span class="text-danger">Required (Degree/Transcript)</span>');
+				}
+				if (!ok) {
+					toast('error', 'Please fill all required fields.');
+					return;
+				}
+
+				var degrees = educationListDegrees($eduList);
+				var editing = $eduForm.data('editing');
+				var already = degrees.indexOf(data.degree) !== -1;
+				if (already && !editing) {
+					toast('error', 'This degree is already added.');
+					return;
+				}
+				if (already && editing) {
+					// Editing item was removed from list, so duplicate means another item exists.
+					toast('error', 'This degree is already added.');
+					return;
+				}
+
+				var $item = educationBuildItem(data);
+				$eduList.append($item);
+				educationClearEntryForm($eduForm);
+				toast('success', 'Degree added.');
+			});
+
+			$(document).on('click', '.js-edu-edit', function () {
+				var $item = $(this).closest('.js-edu-item');
+				if ($item.length === 0) return;
+
+				var data = {
+					degree: ($item.find('input[name="degree[]"]').val() || '').toString().trim(),
+					institute: ($item.find('input[name="institute[]"]').val() || '').toString().trim(),
+					passing_year: ($item.find('input[name="passing_year[]"]').val() || '').toString().trim(),
+					cgpa_percentage: ($item.find('input[name="cgpa_percentage[]"]').val() || '').toString().trim(),
+					transcript_file: ($item.find('input[name="transcript_file[]"]').val() || '').toString().trim()
+				};
+
+				$eduForm.data('editing', '1');
+				$eduForm.data('editingData', data);
+				educationSetEntryForm($eduForm, data);
+				$item.remove();
+				toast('info', 'Edit the fields and click Add to update.');
+			});
+
+			$(document).on('click', '.js-edu-remove', function () {
+				$(this).closest('.js-edu-item').remove();
+			});
+
+			$(document).on('click', '.js-edu-cancel', function () {
+				var editingData = $eduForm.data('editingData');
+				if (editingData && editingData.degree) {
+					// Restore the removed item back to the list
+					$eduList.append(educationBuildItem(editingData));
+				}
+				educationClearEntryForm($eduForm);
+			});
+		}
 	});
 })(jQuery);
