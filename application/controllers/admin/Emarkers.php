@@ -575,21 +575,20 @@ class Emarkers extends MY_Controller
 		}
 
 		$required_degree_16 = 'Master / M.A/ MSc./ BS (Hons) (16 years)';
-		$allowed_required_degrees = [
-			'PhD',
-			'MPhil. / MS (18 years)',
-			$required_degree_16,
-		];
-		$has_required_degree = false;
+		$required_degree_hssc = 'HSSC';
+		$required_degree_ssc = 'SSC';
+		$has_16 = false;
+		$has_hssc = false;
+		$has_ssc = false;
 
 		foreach ($rows as $idx => $r) {
 			if ($r['degree'] === '') {
 				$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => ['degree[]' => 'Degree is required.']], 422);
 				return;
 			}
-			if (in_array((string) $r['degree'], $allowed_required_degrees, true)) {
-				$has_required_degree = true;
-			}
+			if ((string) $r['degree'] === $required_degree_16) $has_16 = true;
+			if ((string) $r['degree'] === $required_degree_hssc) $has_hssc = true;
+			if ((string) $r['degree'] === $required_degree_ssc) $has_ssc = true;
 			if ($r['institute'] === '') {
 				$this->json(['success' => false, 'message' => 'Please correct the highlighted errors.', 'errors' => ['institute[]' => 'Institute/University is required.']], 422);
 				return;
@@ -608,11 +607,16 @@ class Emarkers extends MY_Controller
 			}
 		}
 
-		if (!$has_required_degree) {
+		if (!$has_16 || !$has_hssc || !$has_ssc) {
+			$missing = [];
+			if (!$has_16) $missing[] = $required_degree_16;
+			if (!$has_hssc) $missing[] = $required_degree_hssc;
+			if (!$has_ssc) $missing[] = $required_degree_ssc;
+			$missing_text = implode(', ', $missing);
 			$this->json([
 				'success' => false,
 				'message' => 'Please correct the highlighted errors.',
-				'errors' => ['degree[]' => "At least one education entry must be '{$required_degree_16}' (or higher)."],
+				'errors' => ['degree[]' => 'Required degrees missing: ' . $missing_text . '. Please add them using Add More.'],
 			], 422);
 			return;
 		}

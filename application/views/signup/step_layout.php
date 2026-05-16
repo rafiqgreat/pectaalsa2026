@@ -127,8 +127,10 @@
 	window.SIGNUP_WIZARD = {
 		uploadUrl: "<?php echo site_url(rtrim($wizard_base, '/') . '/upload_file'); ?>",
 		deleteUrl: "<?php echo site_url(rtrim($wizard_base, '/') . '/delete_file'); ?>",
+		checkResumeUrl: "<?php echo site_url(rtrim($wizard_base, '/') . '/check_resume'); ?>",
 		loginUrl: "<?php echo site_url('user/login'); ?>",
-		step: <?php echo (int) $step; ?>
+		step: <?php echo (int) $step; ?>,
+		userId: <?php echo (int) $user_id; ?>
 	};
 </script>
 <script src="<?php echo base_url('assets/js/signup_wizard.js'); ?>"></script>

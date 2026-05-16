@@ -45,7 +45,12 @@ class Login extends CI_Controller {
 			$this->session->set_flashdata('message_type', 'danger');
 		}
 		if(is_logged()){
-			redirect('user/dashboard','refresh');
+			$role = (int) ($this->session->userdata('logged')['role'] ?? 0);
+			// Only role 2 users should access the user area; admin should stay in admin area.
+			if ($role === 2) {
+				redirect('user/dashboard','refresh');
+			}
+			redirect('admin', 'refresh');
 		}
 		$this->data = [
 			'assets' => assets_url(),

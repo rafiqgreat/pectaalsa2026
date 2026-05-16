@@ -236,6 +236,44 @@
 		return ok;
 	}
 
+	function tryAutoResumeFromStep1() {
+		var wiz = window.SIGNUP_WIZARD || {};
+		if (parseInt(wiz.step, 10) !== 1) return;
+		if (parseInt(wiz.userId, 10) > 0) return; // already in-session
+
+		var $form = $('.signup-step-form').first();
+		if ($form.length === 0) return;
+
+		var $cnic = $form.find('.js-cnic').first();
+		var $dob = $form.find('[name="dob"]').first();
+		if ($cnic.length === 0 || $dob.length === 0) return;
+
+		var cnicVal = ($cnic.val() || '').toString().trim();
+		var dobVal = ($dob.val() || '').toString().trim();
+		if (!cnicVal || !dobVal) return;
+
+		if (!validateCnicInline($cnic)) return;
+		if (!isValidYmd(dobVal)) return;
+
+		var url = wiz.checkResumeUrl || '';
+		if (!url) return;
+
+		$.ajax({
+			url: url,
+			type: 'POST',
+			data: { cnic: cnicVal, dob: dobVal },
+			success: function (res) {
+				if (!res || !res.success) return;
+				if (!res.found) return;
+				toast('success', res.message || 'Resumed registration.');
+				if (res.resume_url) {
+					window.location.href = res.resume_url;
+				}
+			},
+			error: function () {}
+		});
+	}
+
 	function normalizeIban(val) {
 		return (val || '').toString().replace(/\s+/g, '').toUpperCase();
 	}
@@ -366,8 +404,13 @@
 		if ($.fn.inputmask) {
 			$('.js-cnic').inputmask('99999-9999999-9', { placeholder: '_____-_______-_' });
 		}
-		$(document).on('keyup blur change', '.js-cnic', function () {
+		$(document).on('keyup blur change', '.js-cnic', function (e) {
 			validateCnicInline($(this));
+			// Only try auto-resume when leaving CNIC with both valid values present
+			if (e && e.type === 'blur') tryAutoResumeFromStep1();
+		});
+		$(document).on('blur', '.signup-step-form [name="dob"]', function () {
+			tryAutoResumeFromStep1();
 		});
 
 		// Clear inline validation once corrected

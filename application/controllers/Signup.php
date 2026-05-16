@@ -57,11 +57,7 @@ class Signup extends CI_Controller
 			}
 			$this->session->unset_userdata('signup_user_id');
 		}
-		// For the public registration entrypoint, show resume/start screen.
-		if ($base === $this->register_base) {
-			$this->resume();
-			return;
-		}
+		// For the public registration entrypoint, go directly to step 1.
 		redirect($base . '/step/1');
 	}
 
@@ -153,6 +149,72 @@ class Signup extends CI_Controller
 
 		$this->session->set_flashdata('resume_success', 'Resumed registration for CNIC ' . $cnic . '.');
 		redirect($base . '/step/' . $step);
+	}
+
+	public function check_resume()
+	{
+		postAllowed();
+		$base = $this->wizard_base();
+
+		// Only allow this endpoint on the public registration wizard URL(s).
+		if ($base !== $this->register_base && $base !== $this->canonical_base) {
+			$this->json(['success' => false, 'message' => 'Not allowed.'], 403);
+			return;
+		}
+
+		// If already in a signup session, do not auto-resume over it.
+		$existing_user_id = (int) $this->session->userdata('signup_user_id');
+		if ($existing_user_id > 0) {
+			$this->json(['success' => true, 'found' => false]);
+			return;
+		}
+
+		$cnic_in = (string) $this->input->post('cnic', true);
+		$dob = (string) $this->input->post('dob', true);
+
+		$cnic = $this->normalize_cnic($cnic_in);
+		if ($cnic === '') {
+			$this->json(['success' => false, 'message' => 'Invalid CNIC.']);
+			return;
+		}
+		if (!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $dob) || !$this->is_valid_ymd($dob)) {
+			$this->json(['success' => false, 'message' => 'Invalid Date of Birth.']);
+			return;
+		}
+		if (!$this->is_at_least_years_old($dob, 18)) {
+			$this->json(['success' => false, 'message' => 'You must be at least 18 years old to register.']);
+			return;
+		}
+
+		$role_col = $this->role_column();
+
+		$this->db->select('u.id, s.current_step, s.registration_completed');
+		$this->db->from('users u');
+		$this->db->join('teacher_registration_steps s', 's.user_id = u.id', 'inner');
+		$this->db->where('u.cnic', $cnic);
+		$this->db->where('u.dob', $dob);
+		$this->db->where('u.' . $role_col, 2);
+		$this->db->where('s.registration_completed', 0);
+		$row = $this->db->get()->row();
+
+		if (!$row) {
+			$this->json(['success' => true, 'found' => false]);
+			return;
+		}
+
+		$step = (int) ($row->current_step ?? 1);
+		$step = max(1, min(8, $step));
+
+		$this->session->set_userdata('signup_user_id', (int) $row->id);
+		$this->session->unset_userdata('signup_temp_key');
+		$this->session->set_flashdata('resume_success', 'Resumed registration for CNIC ' . $cnic . '.');
+
+		$this->json([
+			'success' => true,
+			'found' => true,
+			'resume_url' => site_url($this->register_base . '/step/' . $step),
+			'message' => 'Resumed registration.',
+		]);
 	}
 
 	public function step($step = 1)
@@ -371,9 +433,31 @@ class Signup extends CI_Controller
 			? 'uploads/teacher_registration/' . $user_id . '/'
 			: 'uploads/teacher_registration/temp/' . $temp_key . '/';
 
-		$abs_dir = FCPATH . rtrim(str_replace(['\\', '//'], ['/', '/'], $relative_dir), '/') . '/';
+		$relative_dir = str_replace(['\\', '//'], ['/', '/'], $relative_dir);
+		$abs_dir = rtrim(FCPATH, "\\/") . DIRECTORY_SEPARATOR
+			. str_replace('/', DIRECTORY_SEPARATOR, trim($relative_dir, '/'))
+			. DIRECTORY_SEPARATOR;
+
 		if (!is_dir($abs_dir)) {
-			@mkdir($abs_dir, 0777, true);
+			$made = @mkdir($abs_dir, 0777, true);
+			$last_err = error_get_last();
+			clearstatcache(true, $abs_dir);
+			if (!$made && !is_dir($abs_dir)) {
+				$detail = '';
+				if ($last_err && !empty($last_err['message'])) {
+					$detail = ' (' . $last_err['message'] . ')';
+				}
+				$this->json(['success' => false, 'message' => 'Upload directory could not be created: ' . $abs_dir . $detail], 422);
+				return;
+			}
+		}
+		if (!is_writable($abs_dir)) {
+			$this->json(['success' => false, 'message' => 'Upload directory is not writable.'], 422);
+			return;
+		}
+		$real = realpath($abs_dir);
+		if ($real !== false) {
+			$abs_dir = rtrim($real, "\\/") . DIRECTORY_SEPARATOR;
 		}
 
 		$allowed = 'jpg|jpeg|png|pdf';
@@ -550,14 +634,13 @@ class Signup extends CI_Controller
 		}
 
 		$required_degree_16 = 'Master / M.A/ MSc./ BS (Hons) (16 years)';
-		$allowed_required_degrees = [
-			'PhD',
-			'MPhil. / MS (18 years)',
-			$required_degree_16,
-		];
+		$required_degree_hssc = 'HSSC';
+		$required_degree_ssc = 'SSC';
 
 		$rows = [];
-		$has_required_degree = false;
+		$has_16 = false;
+		$has_hssc = false;
+		$has_ssc = false;
 		for ($i = 0; $i < count($degrees); $i++) {
 			$row = [
 				'degree' => trim((string) ($degrees[$i] ?? '')),
@@ -570,17 +653,22 @@ class Signup extends CI_Controller
 				$this->json(['success' => false, 'message' => 'All education fields and uploads are required.'], 422);
 				return;
 			}
-			if (in_array($row['degree'], $allowed_required_degrees, true)) {
-				$has_required_degree = true;
-			}
+			if ($row['degree'] === $required_degree_16) $has_16 = true;
+			if ($row['degree'] === $required_degree_hssc) $has_hssc = true;
+			if ($row['degree'] === $required_degree_ssc) $has_ssc = true;
 			$rows[] = $row;
 		}
 
-		if (!$has_required_degree) {
+		if (!$has_16 || !$has_hssc || !$has_ssc) {
+			$missing = [];
+			if (!$has_16) $missing[] = $required_degree_16;
+			if (!$has_hssc) $missing[] = $required_degree_hssc;
+			if (!$has_ssc) $missing[] = $required_degree_ssc;
+			$missing_text = implode(', ', $missing);
 			$this->json([
 				'success' => false,
 				'message' => 'Please correct the highlighted errors.',
-				'errors' => ['degree[]' => "At least one education entry must be '{$required_degree_16}' (or higher)."],
+				'errors' => ['degree[]' => 'Required degrees missing: ' . $missing_text . '. Please add them using Add More.'],
 			], 422);
 			return;
 		}

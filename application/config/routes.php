@@ -66,6 +66,7 @@ $route['singup/save_security'] = 'signup/save_security';
 $route['singup/save_emarking'] = 'signup/save_emarking';
 $route['singup/upload_file'] = 'signup/upload_file';
 $route['singup/delete_file'] = 'signup/delete_file';
+$route['singup/check_resume'] = 'signup/check_resume';
 
 // Host the wizard on the existing registration URL
 $route['user/login/register'] = 'signup/index';
@@ -82,6 +83,7 @@ $route['user/login/register/save_security'] = 'signup/save_security';
 $route['user/login/register/save_emarking'] = 'signup/save_emarking';
 $route['user/login/register/upload_file'] = 'signup/upload_file';
 $route['user/login/register/delete_file'] = 'signup/delete_file';
+$route['user/login/register/check_resume'] = 'signup/check_resume';
 
 // Backward-compatible aliases
 $route['signup'] = 'signup/index';

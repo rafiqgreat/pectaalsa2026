@@ -47,7 +47,18 @@ class MY_Controller extends CI_Controller {
 				redirect('user/login', 'refresh');
 			}
 
-		$this->page_data['url'] = (object) [
+
+			// Only e-marker users (role 2) can access the user area.
+			if ($segment === 'user' && (int) logged('role') !== 2) {
+				$this->session->set_flashdata('message', 'Access denied. Only e-marker users can access this area.');
+				$this->session->set_flashdata('message_type', 'danger');
+				if ((int) logged('role') === 1) {
+					redirect('admin', 'refresh');
+				}
+				redirect('user/login', 'refresh');
+			}
+
+		$this->page_data['url'] = (object) [
 			'assets' => assets_url().'/'
 		];
 
