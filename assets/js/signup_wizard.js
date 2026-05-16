@@ -362,6 +362,86 @@
 		return $(html);
 	}
 
+	function experienceClearEntryForm($form) {
+		$form.find('[name="department_new"]').val('');
+		$form.find('[name="sector_new"]').val('');
+		$form.find('[name="experience_type_new"]').val('');
+		$form.find('[name="job_type_new"]').val('');
+		$form.find('[name="start_date_new"]').val('');
+		$form.find('[name="end_date_new"]').val('').prop('disabled', false);
+		$form.find('[name="currently_working_new"]').prop('checked', false);
+		$form.find('[name="teaching_level_new"]').val('');
+		$form.find('[name="bps_new"]').val('');
+		$form.find('.js-exp-bps-wrap').hide();
+		$form.find('[name="document_file_new"]').val('');
+		$form.find('.js-upload-input').val('');
+		$form.find('.js-upload-box').removeClass('is-invalid');
+		var $meta = $form.find('.js-upload-meta').first();
+		if ($meta.length) {
+			$meta.html('<span class="label">File name:</span> - <span class="remove-link js-remove-upload" style="margin-left:10px;display:none">Remove</span>');
+		}
+		$form.find('.js-exp-cancel').hide();
+		$form.find('.js-exp-add').text('Add');
+		$form.data('editing', null);
+		$form.data('editingData', null);
+	}
+
+	function experienceSetEntryForm($form, data) {
+		$form.find('[name="department_new"]').val(data.department || '');
+		$form.find('[name="sector_new"]').val(data.sector || '');
+		$form.find('[name="experience_type_new"]').val(data.experience_type || '');
+		$form.find('[name="job_type_new"]').val(data.job_type || '');
+		$form.find('[name="start_date_new"]').val(data.start_date || '');
+		$form.find('[name="end_date_new"]').val(data.end_date || '');
+		$form.find('[name="currently_working_new"]').prop('checked', data.currently_working_pos === '1');
+		$form.find('[name="end_date_new"]').prop('disabled', data.currently_working_pos === '1');
+		$form.find('[name="teaching_level_new"]').val(data.teaching_level || '');
+		$form.find('[name="bps_new"]').val(data.bps || '');
+		$form.find('.js-exp-bps-wrap').toggle((data.sector || '') === 'Government');
+		$form.find('[name="document_file_new"]').val(data.document_file || '');
+
+		var $meta = $form.find('.js-upload-meta').first();
+		if ($meta.length) {
+			var base = (data.document_file || '').toString().split('/').pop().split('\\').pop();
+			$meta.html('<span class="label">File name:</span> ' + (base || '-') + ' <span class="remove-link js-remove-upload" style="margin-left:10px;' + (base ? '' : 'display:none') + '">Remove</span>');
+		}
+		$form.find('.js-exp-cancel').show();
+		$form.find('.js-exp-add').text('Edit');
+	}
+
+	function experienceBuildItem(data) {
+		var safe = function (v) { return $('<div>').text((v || '').toString()).html(); };
+		var base = (data.document_file || '').toString().split('/').pop().split('\\').pop();
+		var dateText = safe(data.start_date) + ' &rarr; ' + (data.currently_working_pos === '1' ? 'Present' : safe(data.end_date));
+		var bpsText = ((data.sector || '') === 'Government' && (data.bps || '').toString().trim() !== '') ? (' &middot; BPS ' + safe(data.bps)) : '';
+		var html = ''
+			+ '<div class="border rounded p-3 mb-3 js-exp-item">'
+			+ '  <div class="d-flex justify-content-between align-items-center">'
+			+ '    <div>'
+			+ '      <div style="font-weight:700;">' + safe(data.department) + ' <span class="text-muted" style="font-weight:400;">(' + safe(data.sector) + ')</span></div>'
+			+ '      <div class="text-muted" style="font-size:13px;">' + safe(data.experience_type) + ' &middot; ' + safe(data.job_type) + ' &middot; ' + safe(data.teaching_level) + '</div>'
+			+ '      <div class="text-muted" style="font-size:12px;">' + dateText + bpsText + '</div>'
+			+ '      <div class="text-muted" style="font-size:12px;">File: ' + safe(base || '-') + '</div>'
+			+ '    </div>'
+			+ '    <div style="display:flex;gap:8px;">'
+			+ '      <button type="button" class="btn btn-sm btn-outline-primary js-exp-edit">Edit</button>'
+			+ '      <button type="button" class="btn btn-sm btn-outline-danger js-exp-remove">Remove</button>'
+			+ '    </div>'
+			+ '  </div>'
+			+ '  <input type="hidden" name="department[]" value="' + safe(data.department) + '">'
+			+ '  <input type="hidden" name="sector[]" value="' + safe(data.sector) + '">'
+			+ '  <input type="hidden" name="experience_type[]" value="' + safe(data.experience_type) + '">'
+			+ '  <input type="hidden" name="job_type[]" value="' + safe(data.job_type) + '">'
+			+ '  <input type="hidden" name="start_date[]" value="' + safe(data.start_date) + '">'
+			+ '  <input type="hidden" name="end_date[]" value="' + safe(data.currently_working_pos === '1' ? '' : data.end_date) + '">'
+			+ '  <input type="hidden" name="currently_working_pos[]" value="' + safe(data.currently_working_pos) + '">'
+			+ '  <input type="hidden" name="teaching_level[]" value="' + safe(data.teaching_level) + '">'
+			+ '  <input type="hidden" name="bps[]" value="' + safe(data.bps) + '">'
+			+ '  <input type="hidden" name="document_file[]" value="' + safe(data.document_file) + '">'
+			+ '</div>';
+		return $(html);
+	}
+
 	function nextIndex($wrap) {
 		var max = -1;
 		$wrap.find('.js-repeat-item').each(function () {
@@ -570,34 +650,116 @@
 		$(document).on('change', '.js-no-experience', function () {
 			$('.js-experience-wrap').toggle(!$(this).is(':checked'));
 		});
-		$(document).on('change', '.js-currently-working', function () {
-			var $item = $(this).closest('.js-repeat-item');
-			var $end = $item.find('.js-end-date');
-			if ($(this).is(':checked')) {
-				$end.val('').prop('disabled', true);
-				$end.removeClass('is-invalid');
-				$end.siblings('.invalid-feedback').hide();
-				if ($end.next('.js-dyn-feedback').length) $end.next('.js-dyn-feedback').remove();
-			} else {
-				$end.prop('disabled', false);
-			}
-		});
-		$(document).on('change blur', '.js-start-date, .js-end-date', function () {
-			var $item = $(this).closest('.js-repeat-item');
-			var $start = $item.find('.js-start-date').first();
-			var $end = $item.find('.js-end-date').first();
-			if ($start.length && $end.length) {
-				var startVal = ($start.val() || '').toString().trim();
-				if (startVal) $end.attr('min', startVal);
-			}
-		});
-		$(document).on('change', '.js-sector', function () {
-			var $item = $(this).closest('.js-repeat-item');
-			var isGov = $(this).val() === 'Government';
-			$item.find('.js-bps-wrap').toggle(isGov);
-			if (!isGov) $item.find('.js-bps').val('');
-		});
-		$('.js-repeat-item').each(function () { wireExperienceItem($(this)); });
+
+		// Step 4 experience add/edit list
+		if (window.SIGNUP_WIZARD && parseInt(window.SIGNUP_WIZARD.step, 10) === 4) {
+			var $expForm = $('#experienceEntryForm');
+			var $expList = $('#experienceList');
+
+			$(document).on('change', '#experienceEntryForm .js-exp-sector', function () {
+				var isGov = ($(this).val() || '') === 'Government';
+				$expForm.find('.js-exp-bps-wrap').toggle(isGov);
+				if (!isGov) $expForm.find('[name="bps_new"]').val('');
+			});
+			$(document).on('change', '#experienceEntryForm .js-exp-current', function () {
+				var on = $(this).is(':checked');
+				var $end = $expForm.find('[name="end_date_new"]');
+				if (on) {
+					$end.val('').prop('disabled', true);
+				} else {
+					$end.prop('disabled', false);
+				}
+			});
+			$(document).on('change blur', '#experienceEntryForm .js-exp-start', function () {
+				var startVal = ($expForm.find('[name="start_date_new"]').val() || '').toString().trim();
+				if (startVal) $expForm.find('[name="end_date_new"]').attr('min', startVal);
+			});
+
+			$(document).on('click', '.js-exp-add', function () {
+				var $mainForm = $('.signup-step-form').first();
+				clearValidation($mainForm);
+
+				var isGov = (($expForm.find('[name="sector_new"]').val() || '').toString() === 'Government');
+				var currently = $expForm.find('[name="currently_working_new"]').is(':checked') ? '1' : '0';
+
+				var data = {
+					department: ($expForm.find('[name="department_new"]').val() || '').toString().trim(),
+					sector: ($expForm.find('[name="sector_new"]').val() || '').toString().trim(),
+					experience_type: ($expForm.find('[name="experience_type_new"]').val() || '').toString().trim(),
+					job_type: ($expForm.find('[name="job_type_new"]').val() || '').toString().trim(),
+					start_date: ($expForm.find('[name="start_date_new"]').val() || '').toString().trim(),
+					end_date: ($expForm.find('[name="end_date_new"]').val() || '').toString().trim(),
+					currently_working_pos: currently,
+					teaching_level: ($expForm.find('[name="teaching_level_new"]').val() || '').toString().trim(),
+					bps: ($expForm.find('[name="bps_new"]').val() || '').toString().trim(),
+					document_file: ($expForm.find('[name="document_file_new"]').val() || '').toString().trim()
+				};
+
+				var ok = true;
+				if (!data.department) { ok = false; markInvalid($expForm.find('[name="department_new"]'), 'Department is required.'); }
+				if (!data.sector) { ok = false; markInvalid($expForm.find('[name="sector_new"]'), 'Sector is required.'); }
+				if (!data.experience_type) { ok = false; markInvalid($expForm.find('[name="experience_type_new"]'), 'Experience Type is required.'); }
+				if (!data.job_type) { ok = false; markInvalid($expForm.find('[name="job_type_new"]'), 'Job Type is required.'); }
+				if (!data.start_date || !isValidYmd(data.start_date)) { ok = false; markInvalid($expForm.find('[name="start_date_new"]'), 'Start Date is required.'); }
+				if (!data.teaching_level) { ok = false; markInvalid($expForm.find('[name="teaching_level_new"]'), 'Teaching Level is required.'); }
+				if (isGov && !data.bps) { ok = false; markInvalid($expForm.find('[name="bps_new"]'), 'BPS is required for Government sector.'); }
+				if (data.currently_working_pos !== '1') {
+					if (!data.end_date) { ok = false; markInvalid($expForm.find('[name="end_date_new"]'), 'End Date is required unless Currently Working is checked.'); }
+					else if (!isValidYmd(data.end_date)) { ok = false; markInvalid($expForm.find('[name="end_date_new"]'), 'Invalid End Date.'); }
+					else if (data.end_date < data.start_date) { ok = false; markInvalid($expForm.find('[name="end_date_new"]'), 'End Date must be greater than or equal to Start Date.'); }
+				}
+				if (!data.document_file) {
+					ok = false;
+					$expForm.find('.js-upload-box').addClass('is-invalid');
+					var $meta = $expForm.find('.js-upload-meta').first();
+					if ($meta.length) $meta.html('<span class="label">File name:</span> <span class="text-danger">Required (Relevant Document)</span>');
+				}
+				if (!ok) {
+					toast('error', 'Please fill all required fields.');
+					return;
+				}
+
+				$expList.append(experienceBuildItem(data));
+				experienceClearEntryForm($expForm);
+				toast('success', 'Experience added.');
+			});
+
+			$(document).on('click', '.js-exp-edit', function () {
+				var $item = $(this).closest('.js-exp-item');
+				if ($item.length === 0) return;
+
+				var data = {
+					department: ($item.find('input[name="department[]"]').val() || '').toString().trim(),
+					sector: ($item.find('input[name="sector[]"]').val() || '').toString().trim(),
+					experience_type: ($item.find('input[name="experience_type[]"]').val() || '').toString().trim(),
+					job_type: ($item.find('input[name="job_type[]"]').val() || '').toString().trim(),
+					start_date: ($item.find('input[name="start_date[]"]').val() || '').toString().trim(),
+					end_date: ($item.find('input[name="end_date[]"]').val() || '').toString().trim(),
+					currently_working_pos: ($item.find('input[name="currently_working_pos[]"]').val() || '').toString().trim() || '0',
+					teaching_level: ($item.find('input[name="teaching_level[]"]').val() || '').toString().trim(),
+					bps: ($item.find('input[name="bps[]"]').val() || '').toString().trim(),
+					document_file: ($item.find('input[name="document_file[]"]').val() || '').toString().trim()
+				};
+
+				$expForm.data('editing', '1');
+				$expForm.data('editingData', data);
+				experienceSetEntryForm($expForm, data);
+				$item.remove();
+				toast('info', 'Edit the fields and click Edit to update.');
+			});
+
+			$(document).on('click', '.js-exp-remove', function () {
+				$(this).closest('.js-exp-item').remove();
+			});
+
+			$(document).on('click', '.js-exp-cancel', function () {
+				var editingData = $expForm.data('editingData');
+				if (editingData && editingData.department) {
+					$expList.append(experienceBuildItem(editingData));
+				}
+				experienceClearEntryForm($expForm);
+			});
+		}
 
 		// Emarking rules
 		$(document).on('change', '.js-no-emarking', function () {
@@ -633,8 +795,9 @@
 				}
 
 				if (step === 4 && !$('.js-no-experience').is(':checked')) {
-					if (!validateExperienceDates($form)) {
-						toast('error', 'Please correct your experience dates.');
+					// Ensure at least one experience record has been added.
+					if ($form.find('input[name="department[]"]').length < 1) {
+						toast('error', 'Please add at least one experience record.');
 						return;
 					}
 				}
