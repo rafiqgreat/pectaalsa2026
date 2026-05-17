@@ -5,6 +5,22 @@ class Emarking extends MY_Controller
 {
 	private $allowed_roles = [1, 17, 18, 19];
 
+	private function rubric_active_max_total($question_id)
+	{
+		$total = 0.0;
+		$steps = $this->emarking->get_rubric_steps((int) $question_id);
+		foreach ($steps as $s) {
+			if ((int) ($s->status ?? 0) !== 1) continue;
+			$type = (string) ($s->marking_type ?? 'ZERO_ONE');
+			if ($type === 'RANGE') {
+				$total += (float) ($s->max_marks ?? 0);
+			} else {
+				$total += (float) ($s->step_marks ?? 0);
+			}
+		}
+		return (float) $total;
+	}
+
 	private function current_user_id()
 	{
 		$id = (int) $this->session->userdata('id');
@@ -41,6 +57,7 @@ class Emarking extends MY_Controller
 		$this->load->model('Emarking_model', 'emarking');
 		$this->load->model('Emarking_batch_model', 'emarking_batch');
 		$this->load->model('Emarking_report_model', 'emarking_report');
+		$this->load->model('Emarking_settings_model', 'emarking_settings');
 	}
 
 	public function questions()
@@ -80,10 +97,34 @@ class Emarking extends MY_Controller
 
 			if ($this->form_validation->run() !== false) {
 				$payload = $this->emarking->build_question_payload_from_post($this->current_user_id());
+				$rubric_warning = null;
+				if ((int) ($payload['status'] ?? 0) === 1) {
+					$rubric_total = (float) $this->rubric_active_max_total(0); // new question has no steps yet
+					$question_max = (float) ($payload['max_marks'] ?? 0);
+					if ($question_max > 0) {
+						// Allow activation when rubric total is <= question max (warn if not equal),
+						// but prevent activation when rubric total exceeds question max.
+						if ($rubric_total - $question_max > 0.0001) {
+							$this->session->set_flashdata('message', 'Cannot activate question: rubric total (' . number_format($rubric_total, 2) . ') exceeds max marks (' . number_format($question_max, 2) . ').');
+							$this->session->set_flashdata('message_type', 'danger');
+							redirect('admin/emarking/add_question');
+							return;
+						}
+						if (abs($rubric_total - $question_max) > 0.0001) {
+							$rubric_warning = 'Warning: rubric total (' . number_format($rubric_total, 2) . ') does not match max marks (' . number_format($question_max, 2) . '). You can continue, but please review rubric steps.';
+						}
+					}
+				}
 				$id = $this->emarking->save_question($payload);
 				if ($id) {
-					$this->session->set_flashdata('message', 'Question saved.');
-					$this->session->set_flashdata('message_type', 'success');
+					$msg = 'Question saved.';
+					$type = 'success';
+					if (!empty($rubric_warning)) {
+						$msg .= ' ' . $rubric_warning;
+						$type = 'warning';
+					}
+					$this->session->set_flashdata('message', $msg);
+					$this->session->set_flashdata('message_type', $type);
 					redirect('admin/emarking/questions');
 					return;
 				}
@@ -122,10 +163,34 @@ class Emarking extends MY_Controller
 
 			if ($this->form_validation->run() !== false) {
 				$payload = $this->emarking->build_question_payload_from_post($this->current_user_id());
+				$rubric_warning = null;
+				if ((int) ($payload['status'] ?? 0) === 1) {
+					$rubric_total = (float) $this->rubric_active_max_total((int) $id);
+					$question_max = (float) ($payload['max_marks'] ?? 0);
+					if ($question_max > 0) {
+						// Allow activation when rubric total is <= question max (warn if not equal),
+						// but prevent activation when rubric total exceeds question max.
+						if ($rubric_total - $question_max > 0.0001) {
+							$this->session->set_flashdata('message', 'Cannot activate question: rubric total (' . number_format($rubric_total, 2) . ') exceeds max marks (' . number_format($question_max, 2) . ').');
+							$this->session->set_flashdata('message_type', 'danger');
+							redirect('admin/emarking/edit_question/' . (int) $id);
+							return;
+						}
+						if (abs($rubric_total - $question_max) > 0.0001) {
+							$rubric_warning = 'Warning: rubric total (' . number_format($rubric_total, 2) . ') does not match max marks (' . number_format($question_max, 2) . '). You can continue, but please review rubric steps.';
+						}
+					}
+				}
 				$ok = $this->emarking->save_question($payload, (int) $id);
 				if ($ok) {
-					$this->session->set_flashdata('message', 'Question updated.');
-					$this->session->set_flashdata('message_type', 'success');
+					$msg = 'Question updated.';
+					$type = 'success';
+					if (!empty($rubric_warning)) {
+						$msg .= ' ' . $rubric_warning;
+						$type = 'warning';
+					}
+					$this->session->set_flashdata('message', $msg);
+					$this->session->set_flashdata('message_type', $type);
 					redirect('admin/emarking/questions');
 					return;
 				}
@@ -162,6 +227,8 @@ class Emarking extends MY_Controller
 		$question = $this->emarking->get_question($question_id);
 		if (!$question) show_404();
 
+		$id = (int) $this->input->post('id', true);
+
 		$payload = [
 			'question_id' => $question_id,
 			'step_order' => (int) $this->input->post('step_order', true),
@@ -174,11 +241,93 @@ class Emarking extends MY_Controller
 			'max_marks' => (float) $this->input->post('max_marks', true),
 			'status' => (int) $this->input->post('status', true) ? 1 : 0,
 		];
-		$id = (int) $this->input->post('id', true);
+
+		$payload['marking_type'] = strtoupper(trim((string) $payload['marking_type']));
+		if (!in_array($payload['marking_type'], ['ZERO_ONE', 'RANGE', 'FIXED'], true)) {
+			$payload['marking_type'] = 'ZERO_ONE';
+		}
+
+		// Basic normalization / validation
+		$payload['step_order'] = max(1, (int) $payload['step_order']);
+		$payload['step_marks'] = max(0, (float) $payload['step_marks']);
+		$payload['min_marks'] = max(0, (float) $payload['min_marks']);
+		$payload['max_marks'] = max(0, (float) $payload['max_marks']);
+
+		if ($payload['marking_type'] === 'RANGE') {
+			if ($payload['step_marks'] <= 0) {
+				// Not used for RANGE, but keep a sensible value for display/consistency
+				$payload['step_marks'] = $payload['max_marks'];
+			}
+			if ($payload['max_marks'] < $payload['min_marks']) {
+				$this->session->set_flashdata('message', 'Invalid RANGE: Max Marks must be greater than or equal to Min Marks.');
+				$this->session->set_flashdata('message_type', 'danger');
+				redirect('admin/emarking/rubric_steps/' . $question_id);
+				return;
+			}
+		} else {
+			// For ZERO_ONE/FIXED, keep range fields aligned to step_marks for clarity
+			$payload['min_marks'] = 0.0;
+			$payload['max_marks'] = (float) $payload['step_marks'];
+		}
+
+		// Enforce max 15 ACTIVE steps per question
+		$active_steps = array_filter($this->emarking->get_rubric_steps($question_id), function ($s) {
+			return (int) ($s->status ?? 0) === 1;
+		});
+		$active_count_excluding_current = 0;
+		$max_total_excluding_current = 0.0;
+
+		foreach ($active_steps as $s) {
+			if ($id > 0 && (int) $s->id === $id) continue;
+			$active_count_excluding_current++;
+			$type = (string) ($s->marking_type ?? 'ZERO_ONE');
+			if ($type === 'RANGE') {
+				$max_total_excluding_current += (float) ($s->max_marks ?? 0);
+			} else {
+				$max_total_excluding_current += (float) ($s->step_marks ?? 0);
+			}
+		}
+
+		$new_active_count = $active_count_excluding_current + ((int) $payload['status'] === 1 ? 1 : 0);
+		if ($new_active_count > 15) {
+			$this->session->set_flashdata('message', 'You can configure a maximum of 15 active rubric steps per question.');
+			$this->session->set_flashdata('message_type', 'danger');
+			redirect('admin/emarking/rubric_steps/' . $question_id);
+			return;
+		}
+
+		$new_step_max = 0.0;
+		if ($payload['status'] === 1) {
+			$new_step_max = ($payload['marking_type'] === 'RANGE') ? (float) $payload['max_marks'] : (float) $payload['step_marks'];
+		}
+		$new_max_total = $max_total_excluding_current + $new_step_max;
+		$question_max = (float) ($question->max_marks ?? 0);
+		$rubric_warning = null;
+		if ($question_max > 0 && $new_max_total - $question_max > 0.0001) {
+			$this->session->set_flashdata('message', 'Rubric maximum total (' . number_format($new_max_total, 2) . ') exceeds question max marks (' . number_format($question_max, 2) . ').');
+			$this->session->set_flashdata('message_type', 'danger');
+			redirect('admin/emarking/rubric_steps/' . $question_id);
+			return;
+		}
+		if ((int) ($question->status ?? 0) === 1 && $question_max > 0 && abs($new_max_total - $question_max) > 0.0001) {
+			// Allow editing while ACTIVE as long as rubric total stays <= question max.
+			$rubric_warning = 'Warning: question is ACTIVE and rubric total (' . number_format($new_max_total, 2) . ') does not match question max marks (' . number_format($question_max, 2) . ').';
+		}
 
 		$ok = $this->emarking->save_rubric_step($payload, $id > 0 ? $id : null);
-		$this->session->set_flashdata('message', $ok ? 'Rubric step saved.' : 'Unable to save rubric step.');
-		$this->session->set_flashdata('message_type', $ok ? 'success' : 'danger');
+		if ($ok) {
+			$msg = 'Rubric step saved.';
+			$type = 'success';
+			if (!empty($rubric_warning)) {
+				$msg .= ' ' . $rubric_warning;
+				$type = 'warning';
+			}
+			$this->session->set_flashdata('message', $msg);
+			$this->session->set_flashdata('message_type', $type);
+		} else {
+			$this->session->set_flashdata('message', 'Unable to save rubric step.');
+			$this->session->set_flashdata('message_type', 'danger');
+		}
 		redirect('admin/emarking/rubric_steps/' . $question_id);
 	}
 
@@ -245,6 +394,10 @@ class Emarking extends MY_Controller
 		$this->page_data['page']->submenu = 'batches';
 		$this->page_data['page']->title = 'Create Batch';
 
+		// Default deadline is 3 days from now (prefilled in form)
+		$default_deadline_dt = date('Y-m-d H:i:s', time() + (3 * 24 * 60 * 60));
+		$this->page_data['default_deadline_dt'] = $default_deadline_dt;
+
 		// Optional filters for question list
 		$get_filters = [
 			'assessment_type' => trim((string) $this->input->get('assessment_type', true)),
@@ -264,7 +417,12 @@ class Emarking extends MY_Controller
 			$batch_size = (int) $this->input->post('batch_size', true);
 			$deadline = trim((string) $this->input->post('deadline', true));
 			if ($batch_size <= 0) $batch_size = 100;
-			$deadline_dt = $deadline !== '' ? date('Y-m-d H:i:s', strtotime($deadline)) : null;
+			$deadline_ts = $deadline !== '' ? strtotime($deadline) : false;
+			$deadline_dt = $deadline_ts !== false ? date('Y-m-d H:i:s', $deadline_ts) : $default_deadline_dt;
+			if ($deadline !== '' && $deadline_ts === false) {
+				$this->session->set_flashdata('message', 'Warning: invalid deadline entered, defaulted to +3 days.');
+				$this->session->set_flashdata('message_type', 'warning');
+			}
 
 			$q = $this->emarking->get_question($question_id);
 			if (!$q) {
@@ -272,6 +430,20 @@ class Emarking extends MY_Controller
 				$this->session->set_flashdata('message_type', 'danger');
 				redirect('admin/emarking/create_batch', 'refresh');
 				return;
+			}
+
+			// Enforce rubric total must match question max marks before allowing marking
+			$rubric_total = (float) $this->rubric_active_max_total((int) $question_id);
+			$question_max = (float) ($q->max_marks ?? 0);
+			if ($question_max > 0 && $rubric_total - $question_max > 0.0001) {
+				$this->session->set_flashdata('message', 'Cannot create batch: rubric total (' . number_format($rubric_total, 2) . ') exceeds question max marks (' . number_format($question_max, 2) . ').');
+				$this->session->set_flashdata('message_type', 'danger');
+				redirect('admin/emarking/create_batch', 'refresh');
+				return;
+			}
+			if ($question_max > 0 && abs($rubric_total - $question_max) > 0.0001) {
+				$this->session->set_flashdata('message', 'Warning: rubric total (' . number_format($rubric_total, 2) . ') does not match question max marks (' . number_format($question_max, 2) . ').');
+				$this->session->set_flashdata('message_type', 'warning');
 			}
 			if ($assessment_type !== '' && strtoupper((string) $q->assessment_type) !== strtoupper($assessment_type)) {
 				$this->session->set_flashdata('message', 'Assessment type does not match selected question.');
@@ -319,8 +491,35 @@ class Emarking extends MY_Controller
 
 		$this->page_data['filters'] = $get_filters;
 		$q_filters = array_merge($get_filters, ['status' => '1']);
-		$this->page_data['questions'] = $this->emarking->get_questions($q_filters);
+		$questions = $this->emarking->get_questions($q_filters);
+		$this->page_data['questions'] = $questions;
 		$this->page_data['emarkers'] = $this->emarking_batch->get_emarkers();
+
+		// Count images per question (for the dropdown display)
+		$uploaded_counts = [];
+		$total_counts = [];
+		$qids = [];
+		foreach (($questions ?? []) as $q) {
+			if (!empty($q->id)) $qids[] = (int) $q->id;
+		}
+		$qids = array_values(array_unique(array_filter($qids, function ($v) { return (int) $v > 0; })));
+		if (!empty($qids)) {
+			$rows = $this->db->select('question_id, COUNT(*) as total_cnt, SUM(UPPER(TRIM(status)) = \'UPLOADED\') as uploaded_cnt')
+				->from('emarking_question_images')
+				->where_in('question_id', $qids)
+				->group_by('question_id')
+				->get()
+				->result();
+			foreach (($rows ?? []) as $r) {
+				$qid = (int) ($r->question_id ?? 0);
+				if ($qid <= 0) continue;
+				$total_counts[$qid] = (int) ($r->total_cnt ?? 0);
+				$uploaded_counts[$qid] = (int) ($r->uploaded_cnt ?? 0);
+			}
+		}
+		$this->page_data['uploaded_counts'] = $uploaded_counts;
+		$this->page_data['total_counts'] = $total_counts;
+
 		$this->load->view('admin/emarking/create_batch', $this->page_data);
 	}
 
@@ -341,6 +540,40 @@ class Emarking extends MY_Controller
 		$this->page_data['filters'] = $filters;
 		$this->page_data['batches'] = $this->emarking_batch->get_batches($filters);
 		$this->load->view('admin/emarking/batches', $this->page_data);
+	}
+
+	public function emarker_timers()
+	{
+		$this->page_data['page']->submenu = 'batches';
+		$this->page_data['page']->title = 'eMarker Timers';
+
+		$emarkers = $this->emarking_batch->get_emarkers();
+		$this->page_data['emarkers'] = $emarkers;
+
+		$ids = [];
+		foreach (($emarkers ?? []) as $u) {
+			if (!empty($u->id)) $ids[] = (int) $u->id;
+		}
+		$this->page_data['timer_map'] = $this->emarking_settings->get_timer_map($ids);
+
+		if ($this->input->method(true) === 'POST') {
+			postAllowed();
+			$timers = (array) $this->input->post('timers');
+			$saved = 0;
+			foreach ($timers as $uid => $sec) {
+				$uid = (int) $uid;
+				if ($uid <= 0) continue;
+				if ($this->emarking_settings->set_timer_seconds($uid, (int) $sec)) {
+					$saved++;
+				}
+			}
+			$this->session->set_flashdata('message', 'Timers updated for ' . $saved . ' eMarkers.');
+			$this->session->set_flashdata('message_type', 'success');
+			redirect('admin/emarking/emarker_timers');
+			return;
+		}
+
+		$this->load->view('admin/emarking/emarker_timers', $this->page_data);
 	}
 
 	public function reports()

@@ -12,18 +12,22 @@
       <p>E-Marking</p>
     </a>
   </li>
+<?php if ((int) logged('role') !== 2): ?>
   <li class="nav-item">
     <a href="<?php echo url('user/invitation'); ?>" class="nav-link <?php echo ($page->menu == 'invitation') ? 'active' : ''; ?>">
       <i class="nav-icon fas fa-envelope-open-text"></i>
       <p>Invitation for Paper Checking</p>
     </a>
   </li>
+<?php endif; ?>
+<?php if ((int) logged('role') !== 2): ?>
   <li class="nav-item">
     <a href="<?php echo url('user/result'); ?>" class="nav-link <?php echo ($page->menu == 'result') ? 'active' : ''; ?>">
       <i class="nav-icon fas fa-poll"></i>
       <p>View Result</p>
     </a>
   </li>
+<?php endif; ?>
   <li class="nav-item">
     <a href="<?php echo url('user/evaluator_profile'); ?>" class="nav-link <?php echo ($page->menu == 'evaluator_profile') ? 'active' : ''; ?>">
       <i class="nav-icon fas fa-user-check"></i>

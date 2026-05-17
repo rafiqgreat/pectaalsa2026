@@ -26,9 +26,14 @@
       <div class="card-header">
         <div class="d-flex align-items-center justify-content-between">
           <h3 class="card-title mb-0">Batches</h3>
-          <a class="btn btn-primary btn-sm" href="<?php echo base_url('admin/emarking/create_batch'); ?>">
-            <i class="fas fa-plus"></i> Create Batch
-          </a>
+          <div>
+            <a class="btn btn-outline-secondary btn-sm" href="<?php echo base_url('admin/emarking/emarker_timers'); ?>">
+              <i class="fas fa-stopwatch"></i> eMarker Timers
+            </a>
+            <a class="btn btn-primary btn-sm" href="<?php echo base_url('admin/emarking/create_batch'); ?>">
+              <i class="fas fa-plus"></i> Create Batch
+            </a>
+          </div>
         </div>
       </div>
       <div class="card-body">
@@ -125,4 +130,3 @@
 </section>
 
 <?php include viewPath('admin/includes/footer'); ?>
-

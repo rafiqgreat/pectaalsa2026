@@ -9,6 +9,8 @@ $mark_steps = $marking['mark_steps'] ?? [];
 $image_url = base_url((string) $item->image_path);
 $total = (int) ($batch_total_items ?? 0);
 $idx = (int) ($batch_current_index ?? 0);
+$timer_seconds = (int) ($timer_seconds ?? 15);
+if ($timer_seconds < 0) $timer_seconds = 0;
 ?>
 
 <style>
@@ -64,7 +66,6 @@ $idx = (int) ($batch_current_index ?? 0);
             <div class="mb-2">
               <div class="d-flex justify-content-between align-items-center">
                 <div><strong>Student Cropped Answer Image</strong></div>
-                <a href="<?php echo $image_url; ?>" target="_blank">Open full image</a>
               </div>
               <div style="border:1px solid #e5e5e5; padding:8px; background:#fafafa;">
                 <img src="<?php echo $image_url; ?>" alt="Answer Image" style="width:100%; height:auto;">
@@ -126,7 +127,7 @@ $idx = (int) ($batch_current_index ?? 0);
                         <small class="text-muted d-block mt-1">Correct = <?php echo htmlspecialchars((string) $s->step_marks); ?>, Wrong = 0</small>
                       <?php elseif ((string) $s->marking_type === 'RANGE'): ?>
                         <input type="number"
-                          step="0.25"
+                          step="0.01"
                           min="<?php echo htmlspecialchars((string) $s->min_marks); ?>"
                           max="<?php echo htmlspecialchars((string) $s->max_marks); ?>"
                           class="form-control"
@@ -150,13 +151,20 @@ $idx = (int) ($batch_current_index ?? 0);
               </div>
             </div>
             <div class="card-footer">
+              <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+                <div class="text-muted">
+                  <strong>Timer:</strong>
+                  <span id="emarkingTimer" data-seconds="<?php echo (int) $timer_seconds; ?>"><?php echo (int) $timer_seconds; ?>s</span>
+                  <span id="emarkingTimerHint" class="ml-1">Submit buttons enable when timer ends.</span>
+                </div>
+              </div>
               <div class="d-flex justify-content-between flex-wrap">
                 <div class="mb-2">
-                  <button type="submit" name="action" value="SKIPPED" class="btn btn-outline-info" onclick="return confirm('Skip this image?');">Skip</button>
-                  <button type="submit" name="action" value="NOT_ATTEMPTED" class="btn btn-outline-secondary" onclick="return confirm('Mark as NOT ATTEMPTED?');">Not Attempted</button>
+                  <button type="submit" name="action" value="SKIPPED" class="btn btn-outline-info emarking-action-btn" disabled onclick="return confirm('Skip this image?');">Skip</button>
+                  <button type="submit" name="action" value="NOT_ATTEMPTED" class="btn btn-outline-secondary emarking-action-btn" disabled onclick="return confirm('Mark as NOT ATTEMPTED?');">Not Attempted</button>
                 </div>
                 <div class="mb-2">
-                  <button type="submit" name="action" value="MARKED" class="btn btn-success">Submit &amp; Next</button>
+                  <button type="submit" name="action" value="MARKED" class="btn btn-success emarking-action-btn" disabled>Submit &amp; Next</button>
                 </div>
               </div>
               <small class="text-muted d-block">Current item status: <?php echo html_escape((string) $item->status); ?></small>
@@ -216,3 +224,45 @@ $idx = (int) ($batch_current_index ?? 0);
 <?php endif; ?>
 
 <?php include viewPath('user/includes/footer'); ?>
+
+<script>
+(function(){
+  var timerEl = document.getElementById('emarkingTimer');
+  if (!timerEl) return;
+  var seconds = parseInt(timerEl.getAttribute('data-seconds') || '15', 10);
+  if (isNaN(seconds) || seconds < 0) seconds = 15;
+
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.emarking-action-btn'));
+  function setButtonsEnabled(enabled){
+    buttons.forEach(function(b){
+      if (!b) return;
+      b.disabled = !enabled;
+    });
+  }
+
+  // Start disabled, enable immediately if 0 seconds
+  setButtonsEnabled(false);
+  if (seconds <= 0) {
+    timerEl.textContent = '0s';
+    setButtonsEnabled(true);
+    return;
+  }
+
+  function render(){
+    timerEl.textContent = seconds + 's';
+  }
+  render();
+
+  var interval = setInterval(function(){
+    seconds -= 1;
+    if (seconds <= 0) {
+      seconds = 0;
+      render();
+      setButtonsEnabled(true);
+      clearInterval(interval);
+      return;
+    }
+    render();
+  }, 1000);
+})();
+</script>

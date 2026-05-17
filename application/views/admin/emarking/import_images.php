@@ -26,10 +26,11 @@
     <div class="alert alert-info">
       <div><strong>Rules enforced:</strong></div>
       <ul class="mb-0">
-        <li>Only source records where <code>paper_generated = 1</code></li>
-        <li>CRQ uses <code>paper_type_code = 1</code> (booklets tables)</li>
-        <li>Dictation uses <code>paper_type_code = 12</code> (English subject_code 1) and <code>13</code> (Urdu subject_code 2)</li>
+        <li>Tries to match source records where <code>paper_generated = 1</code> (if source columns exist)</li>
+        <li>CRQ uses <code>paper_type_code = 1</code> (booklets tables) when validating source</li>
+        <li>Dictation uses <code>paper_type_code = 12</code> (English subject_code 1) and <code>13</code> (Urdu subject_code 2) when validating source</li>
         <li>Folder structure must be: <code>{base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg</code></li>
+        <li>If source validation fails, image is still imported with <code>source_paper_id = 0</code> (see Errors list)</li>
       </ul>
     </div>
 

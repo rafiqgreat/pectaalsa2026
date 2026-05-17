@@ -436,11 +436,9 @@ class Emarking_model extends CI_Model
 			}
 
 			$cols = $this->resolve_source_columns($source_table);
-			if (empty($cols['barcode']) || empty($cols['paper_generated'])) {
-				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'Source table missing required columns', 'source_table' => $source_table];
-				continue;
-			}
+			// If source table structure doesn't match expectations, still allow import using source_paper_id=0.
+			// This supports cases where cropped images exist but source tables are incomplete/out-of-sync.
+			$can_validate_source = !empty($cols['barcode']) && !empty($cols['paper_generated']);
 
 			$paper_type_code = null;
 			if ($assessment_type === 'CRQ') {
@@ -449,24 +447,28 @@ class Emarking_model extends CI_Model
 				$paper_type_code = ($subject_code === 2) ? 13 : 12;
 			}
 
-			// Check barcode exists in source table and meets conditions
-			$this->db->from($source_table);
-			$this->db->where($cols['barcode'], $barcode);
-			$this->db->where($cols['paper_generated'], 1);
-			if (!empty($cols['paper_type_code']) && $paper_type_code !== null) {
-				$this->db->where($cols['paper_type_code'], (int) $paper_type_code);
+			// Try to validate/attach source row if possible; otherwise import with source_paper_id=0.
+			$source_row = null;
+			if ($can_validate_source) {
+				$this->db->from($source_table);
+				$this->db->where($cols['barcode'], $barcode);
+				$this->db->where($cols['paper_generated'], 1);
+				if (!empty($cols['paper_type_code']) && $paper_type_code !== null) {
+					$this->db->where($cols['paper_type_code'], (int) $paper_type_code);
+				}
+				if (!empty($cols['grade'])) $this->db->where($cols['grade'], (int) $grade);
+				if (!empty($cols['subject_code'])) $this->db->where($cols['subject_code'], (int) $subject_code);
+				if (!empty($cols['version'])) $this->db->where($cols['version'], (int) $version);
+				if (!empty($cols['page_no'])) $this->db->where($cols['page_no'], (string) $page_no);
+				$this->db->limit(1);
+				$source_row = $this->db->get()->row_array();
+			} else {
+				$errors[] = ['file' => $abs_path, 'reason' => 'Source validation skipped (missing source columns)', 'source_table' => $source_table];
 			}
-			if (!empty($cols['grade'])) $this->db->where($cols['grade'], (int) $grade);
-			if (!empty($cols['subject_code'])) $this->db->where($cols['subject_code'], (int) $subject_code);
-			if (!empty($cols['version'])) $this->db->where($cols['version'], (int) $version);
-			if (!empty($cols['page_no'])) $this->db->where($cols['page_no'], (string) $page_no);
-			$this->db->limit(1);
-			$source_row = $this->db->get()->row_array();
 
 			if (empty($source_row)) {
-				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'Barcode not eligible/not found in source table', 'source_table' => $source_table];
-				continue;
+				// Do not skip: allow import so batches/marking can proceed, but record why source attach failed.
+				$errors[] = ['file' => $abs_path, 'reason' => 'Source record not found/eligible (imported with source_paper_id=0)', 'source_table' => $source_table];
 			}
 
 			// Find matching emarking_questions record
@@ -507,11 +509,11 @@ class Emarking_model extends CI_Model
 				'source_paper_id' => (int) ($source_row['id'] ?? 0),
 				'paper_barcode' => $barcode,
 				'grade' => (int) $grade,
-				'school_id' => !empty($cols['school_id']) ? (int) ($source_row[$cols['school_id']] ?? null) : null,
-				'lsacode' => !empty($cols['lsacode']) ? (string) ($source_row[$cols['lsacode']] ?? null) : null,
+				'school_id' => (!empty($source_row) && !empty($cols['school_id'])) ? (int) ($source_row[$cols['school_id']] ?? null) : null,
+				'lsacode' => (!empty($source_row) && !empty($cols['lsacode'])) ? (string) ($source_row[$cols['lsacode']] ?? null) : null,
 				'subject_code' => (string) $subject_code,
 				'version' => (int) $version,
-				'roll_no' => !empty($cols['roll_no']) ? (string) ($source_row[$cols['roll_no']] ?? '') : '',
+				'roll_no' => (!empty($source_row) && !empty($cols['roll_no'])) ? (string) ($source_row[$cols['roll_no']] ?? '') : '',
 				'page_no' => (string) $page_no,
 				'question_id' => (int) $q->id,
 				'question_no' => (string) $question_no,

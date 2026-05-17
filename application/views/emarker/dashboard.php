@@ -22,6 +22,12 @@
 
     <?php include viewPath('user/includes/notifications'); ?>
 
+    <style>
+      .batch-meta { color:#6c757d; font-size:12px; }
+      .batch-kv { display:flex; gap:6px; flex-wrap:wrap; }
+      .batch-kv > div { min-width:140px; }
+    </style>
+
     <div class="row">
       <?php if (empty($batches)): ?>
         <div class="col-12">
@@ -39,7 +45,7 @@
 
           $deadline_ts = !empty($b->deadline) ? strtotime((string) $b->deadline) : false;
           $now_ts = time();
-          $time_left = '—';
+          $time_left = 'â€”';
           if ($deadline_ts !== false) {
             $diff = $deadline_ts - $now_ts;
             if ($diff <= 0) {
@@ -52,7 +58,7 @@
             }
           }
           ?>
-          <div class="col-lg-6">
+          <div class="col-12">
             <div class="card">
               <div class="card-header">
                 <div class="d-flex align-items-center justify-content-between">
@@ -64,36 +70,38 @@
                 </div>
               </div>
               <div class="card-body">
-                <div class="mb-2">
-                  <div><strong>Question:</strong> <?php echo html_escape((string) $b->question_no); ?> — <?php echo html_escape((string) $b->question_title); ?></div>
-                  <div class="text-muted"><strong>Batch Code:</strong> <?php echo html_escape((string) $b->batch_code); ?></div>
+                <div class="d-flex justify-content-between align-items-start flex-wrap">
+                  <div class="mb-2">
+                    <div class="batch-meta"><strong>Batch Code:</strong> <?php echo html_escape((string) $b->batch_code); ?></div>
+                    <div class="batch-meta"><strong>Question:</strong> <?php echo html_escape((string) $b->question_no); ?></div>
+                    <div class="batch-meta">
+                      <strong>Allotted:</strong> <?php echo html_escape((string) $b->created_at); ?>
+                      | <strong>Deadline:</strong> <?php echo html_escape((string) ($b->deadline ?: 'â€”')); ?>
+                      | <strong>Time Left:</strong> <?php echo html_escape((string) $time_left); ?>
+                    </div>
+                  </div>
+                  <div class="mb-2">
+                    <a class="btn btn-primary btn-sm" href="<?php echo base_url('emarker/marking/view_batch/' . (int) $b->id); ?>">View Batch</a>
+                    <?php if ($pending > 0): ?>
+                      <a class="btn btn-success btn-sm" href="<?php echo base_url('emarker/marking/start/' . (int) $b->id); ?>">Start Checking</a>
+                    <?php else: ?>
+                      <button type="button" class="btn btn-secondary btn-sm" disabled>Start Checking</button>
+                    <?php endif; ?>
+                  </div>
                 </div>
 
-                <div class="row">
-                  <div class="col-6 mb-2"><strong>Allotment:</strong> <?php echo $total; ?></div>
-                  <div class="col-6 mb-2"><strong>Checked:</strong> <?php echo $checked; ?></div>
-                  <div class="col-6 mb-2"><strong>Unchecked:</strong> <?php echo $pending; ?></div>
-                  <div class="col-6 mb-2"><strong>Skipped:</strong> <?php echo $skipped; ?></div>
-                  <div class="col-6 mb-2"><strong>Balance:</strong> <?php echo $balance; ?></div>
-                  <div class="col-6 mb-2"><strong>Percentage:</strong> <?php echo number_format($pct, 2); ?>%</div>
-                  <div class="col-6 mb-2"><strong>Allotted Date:</strong> <?php echo html_escape((string) $b->created_at); ?></div>
-                  <div class="col-6 mb-2"><strong>Deadline:</strong> <?php echo html_escape((string) ($b->deadline ?: '—')); ?></div>
-                  <div class="col-6 mb-2"><strong>Time Left:</strong> <?php echo html_escape((string) $time_left); ?></div>
+                <div class="batch-kv">
+                  <div><strong>Allotment:</strong> <?php echo $total; ?></div>
+                  <div><strong>Checked:</strong> <?php echo $checked; ?></div>
+                  <div><strong>Unchecked:</strong> <?php echo $pending; ?></div>
+                  <div><strong>Skipped:</strong> <?php echo $skipped; ?></div>
+                  <div><strong>Balance:</strong> <?php echo $balance; ?></div>
+                  <div><strong>Progress:</strong> <?php echo number_format($pct, 2); ?>%</div>
                 </div>
 
-                <div class="mt-2 d-flex gap-2">
-                  <a class="btn btn-primary btn-sm" href="<?php echo base_url('emarker/marking/view_batch/' . (int) $b->id); ?>">View Batch</a>
-                  <?php if ($pending > 0): ?>
-                    <a class="btn btn-success btn-sm" href="<?php echo base_url('emarker/marking/start/' . (int) $b->id); ?>">Start Checking</a>
-                  <?php else: ?>
-                    <button type="button" class="btn btn-secondary btn-sm" disabled>Start Checking</button>
-                  <?php endif; ?>
-                </div>
-
-                <div class="progress mt-3" style="height:10px;">
+                <div class="progress mt-2" style="height:10px;">
                   <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo (float) $pct; ?>%;" aria-valuenow="<?php echo (float) $pct; ?>" aria-valuemin="0" aria-valuemax="100"></div>
                 </div>
-                <small class="text-muted d-block mt-1">Progress: <?php echo number_format($pct, 2); ?>%</small>
               </div>
             </div>
           </div>
@@ -105,3 +113,4 @@
 </section>
 
 <?php include viewPath('user/includes/footer'); ?>
+

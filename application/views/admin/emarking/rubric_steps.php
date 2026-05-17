@@ -1,6 +1,25 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php include viewPath('admin/includes/header'); ?>
 
+<?php
+// Summary for configured (active) rubric steps
+$active_count = 0;
+$rubric_max_total = 0.0;
+if (!empty($rubric_steps)) {
+  foreach ($rubric_steps as $s) {
+    if ((int) ($s->status ?? 0) !== 1) continue;
+    $active_count++;
+    $type = (string) ($s->marking_type ?? 'ZERO_ONE');
+    if ($type === 'RANGE') {
+      $rubric_max_total += (float) ($s->max_marks ?? 0);
+    } else {
+      $rubric_max_total += (float) ($s->step_marks ?? 0);
+    }
+  }
+}
+$question_max = (float) ($question->max_marks ?? 0);
+?>
+
 <section class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
@@ -22,6 +41,14 @@
   <div class="container-fluid">
 
     <?php include viewPath('admin/includes/notifications'); ?>
+
+    <div class="alert alert-info">
+      <div><strong>Question Max Marks:</strong> <?php echo htmlspecialchars(number_format($question_max, 2)); ?></div>
+      <div><strong>Rubric Max Total (Active Steps):</strong> <?php echo htmlspecialchars(number_format($rubric_max_total, 2)); ?> | <strong>Active Steps:</strong> <?php echo (int) $active_count; ?> / 15</div>
+      <?php if ($question_max > 0 && abs($rubric_max_total - $question_max) > 0.0001): ?>
+        <div class="text-warning mt-1"><strong>Note:</strong> Rubric max total does not match question max marks.</div>
+      <?php endif; ?>
+    </div>
 
     <div class="card">
       <div class="card-header">
@@ -163,7 +190,11 @@ function editStep(id, order, label, title, detail, marks, type, minMarks, maxMar
   document.getElementById('min_marks').value = minMarks || '0.00';
   document.getElementById('max_marks').value = maxMarks || '1.00';
   document.getElementById('step_status').value = (status == 1) ? '1' : '0';
-  window.scrollTo({top: 0, behavior: 'smooth'});
+  try {
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  } catch (e) {
+    window.scrollTo(0, 0);
+  }
 }
 function resetStepForm() {
   document.getElementById('step_id').value = '';
@@ -180,4 +211,3 @@ function resetStepForm() {
 </script>
 
 <?php include viewPath('admin/includes/footer'); ?>
-

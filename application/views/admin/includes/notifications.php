@@ -4,6 +4,14 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 <?php
 $alert = $this->session->flashdata('alert');
 $type = (string) $this->session->flashdata('alert-type');
+
+// Backward compatibility: some controllers use message/message_type
+if (!$alert) {
+	$alert = $this->session->flashdata('message');
+}
+if ($type === '') {
+	$type = (string) $this->session->flashdata('message_type');
+}
 if ($type === 'error') {
 	$type = 'danger';
 }

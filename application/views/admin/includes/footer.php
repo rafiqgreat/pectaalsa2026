@@ -75,7 +75,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
     if ($.fn.DataTable) {
       $("#example1").DataTable({
         "responsive": true,
-        "autoWidth": false,
+        "autoWidth": false
       });
     }
 

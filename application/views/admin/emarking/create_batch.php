@@ -60,6 +60,12 @@
         </form>
 
         <form method="post" action="<?php echo base_url('admin/emarking/create_batch'); ?>">
+          <?php
+          $deadline_value = (string) ($this->input->post('deadline', true) ?? '');
+          if ($deadline_value === '') {
+            $deadline_value = date('Y-m-d\\TH:i', strtotime((string) ($default_deadline_dt ?? '+3 days')));
+          }
+          ?>
           <div class="form-row">
             <div class="form-group col-md-2">
               <label>Assessment Type</label>
@@ -74,8 +80,13 @@
               <select name="question_id" class="form-control" required>
                 <option value="">Select question</option>
                 <?php foreach (($questions ?? []) as $q): ?>
+                  <?php
+                    $qid = (int) $q->id;
+                    $uploadedCnt = (int) (($uploaded_counts[$qid] ?? 0));
+                    $totalCnt = (int) (($total_counts[$qid] ?? 0));
+                  ?>
                   <option value="<?php echo (int) $q->id; ?>">
-                    <?php echo htmlspecialchars((string) $q->assessment_type); ?> | G<?php echo (int) $q->grade; ?> | S<?php echo htmlspecialchars((string) $q->subject_code); ?> | V<?php echo (int) $q->version; ?> | P<?php echo htmlspecialchars((string) $q->page_no); ?> | <?php echo htmlspecialchars((string) $q->question_no); ?> — <?php echo htmlspecialchars((string) $q->question_title); ?>
+                    <?php echo htmlspecialchars((string) $q->assessment_type); ?> | G<?php echo (int) $q->grade; ?> | S<?php echo htmlspecialchars((string) $q->subject_code); ?> | V<?php echo (int) $q->version; ?> | P<?php echo htmlspecialchars((string) $q->page_no); ?> | <?php echo htmlspecialchars((string) $q->question_no); ?> â€” <?php echo htmlspecialchars((string) $q->question_title); ?> | Images: <?php echo $uploadedCnt; ?> (Total: <?php echo $totalCnt; ?>)
                   </option>
                 <?php endforeach; ?>
               </select>
@@ -110,7 +121,7 @@
             </div>
             <div class="form-group col-md-1">
               <label>Deadline</label>
-              <input type="datetime-local" name="deadline" class="form-control">
+              <input type="datetime-local" name="deadline" class="form-control" value="<?php echo htmlspecialchars($deadline_value); ?>">
             </div>
           </div>
           <button type="submit" class="btn btn-primary">Create</button>

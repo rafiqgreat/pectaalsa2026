@@ -39,6 +39,7 @@ class Marking extends MY_Controller
 		$this->page_data['page']->title = 'Marking';
 		$this->page_data['page']->menu = 'emarking';
 		$this->load->model('Marking_model', 'marking');
+		$this->load->model('Emarking_settings_model', 'emarking_settings');
 	}
 
 	public function index()
@@ -100,6 +101,7 @@ class Marking extends MY_Controller
 
 		$this->page_data['batch'] = $batch;
 		$this->page_data['marking'] = $data;
+		$this->page_data['timer_seconds'] = (int) $this->emarking_settings->get_timer_seconds($user_id, 15);
 		$this->page_data['batch_total_items'] = $this->marking->get_batch_total_items((int) $batch_id, $user_id);
 		$this->page_data['batch_current_index'] = $this->marking->get_batch_item_index((int) $batch_id, (int) $batch_item_id, $user_id);
 		$this->load->view('emarker/marking_screen', $this->page_data);

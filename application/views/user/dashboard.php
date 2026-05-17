@@ -24,7 +24,23 @@
         <h3 class="card-title">Account Overview</h3>
       </div>
       <div class="card-body">
-        <p class="mb-3">Legacy application workflows have been removed from this account area. This dashboard is now a clean base for the next phase of development.</p>
+        <p class="mb-2"><strong>Welcome</strong> <?php echo htmlspecialchars((string) ($user->name ?? '')); ?></p>
+        <?php if ((int) logged('role') === 2): ?>
+          <div class="mb-3">
+            <div class="text-muted mb-1">Assigned subjects</div>
+            <?php if (empty($assigned_subjects)): ?>
+              <div class="text-muted">No subjects assigned yet.</div>
+            <?php else: ?>
+              <?php foreach ($assigned_subjects as $s): ?>
+                <span class="badge badge-info mr-1 mb-1">
+                  <?php echo htmlspecialchars((string) ($s['assessment_type'] ?? '')); ?>
+                  | G<?php echo (int) ($s['grade'] ?? 0); ?>
+                  | S<?php echo htmlspecialchars((string) ($s['subject_code'] ?? '')); ?>
+                </span>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
         <table class="table table-bordered mb-0">
           <tr>
             <th style="width:220px;">Name</th>
