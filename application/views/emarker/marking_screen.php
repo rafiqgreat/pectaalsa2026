@@ -101,8 +101,12 @@ if ($timer_seconds < 0) $timer_seconds = 0;
                   <?php
                   $existing = $mark_steps[(int) $s->id] ?? null;
                   $existingVal = $existing ? (string) $existing->selected_value : '';
+                  $stepType = (string) $s->marking_type;
+                  $stepMarks = (float) ($s->step_marks ?? 0);
+                  $stepMin = (float) ($s->min_marks ?? 0);
+                  $stepMax = (float) ($s->max_marks ?? 0);
                   ?>
-                  <div class="rubric-card">
+                  <div class="rubric-card" data-step-id="<?php echo (int) $s->id; ?>" data-type="<?php echo html_escape($stepType); ?>" data-step-marks="<?php echo htmlspecialchars((string) $stepMarks); ?>" data-min="<?php echo htmlspecialchars((string) $stepMin); ?>" data-max="<?php echo htmlspecialchars((string) $stepMax); ?>">
                     <div class="d-flex justify-content-between">
                       <div class="rubric-title">
                         <?php echo html_escape((string) $s->step_label); ?>
@@ -117,11 +121,11 @@ if ($timer_seconds < 0) $timer_seconds = 0;
                     <div class="mt-2">
                       <?php if ((string) $s->marking_type === 'ZERO_ONE'): ?>
                         <div class="custom-control custom-radio">
-                          <input class="custom-control-input" type="radio" id="step_<?php echo (int) $s->id; ?>_c" name="steps[<?php echo (int) $s->id; ?>]" value="1" <?php echo ($existingVal === '1') ? 'checked' : ''; ?>>
+                          <input class="custom-control-input emarking-step-input" type="radio" id="step_<?php echo (int) $s->id; ?>_c" name="steps[<?php echo (int) $s->id; ?>]" value="1" <?php echo ($existingVal === '1') ? 'checked' : ''; ?>>
                           <label class="custom-control-label" for="step_<?php echo (int) $s->id; ?>_c">Correct</label>
                         </div>
                         <div class="custom-control custom-radio">
-                          <input class="custom-control-input" type="radio" id="step_<?php echo (int) $s->id; ?>_w" name="steps[<?php echo (int) $s->id; ?>]" value="0" <?php echo ($existingVal === '0' || $existingVal === '') ? 'checked' : ''; ?>>
+                          <input class="custom-control-input emarking-step-input" type="radio" id="step_<?php echo (int) $s->id; ?>_w" name="steps[<?php echo (int) $s->id; ?>]" value="0" <?php echo ($existingVal === '0' || $existingVal === '') ? 'checked' : ''; ?>>
                           <label class="custom-control-label" for="step_<?php echo (int) $s->id; ?>_w">Wrong</label>
                         </div>
                         <small class="text-muted d-block mt-1">Correct = <?php echo htmlspecialchars((string) $s->step_marks); ?>, Wrong = 0</small>
@@ -130,13 +134,13 @@ if ($timer_seconds < 0) $timer_seconds = 0;
                           step="0.01"
                           min="<?php echo htmlspecialchars((string) $s->min_marks); ?>"
                           max="<?php echo htmlspecialchars((string) $s->max_marks); ?>"
-                          class="form-control"
+                          class="form-control emarking-step-input"
                           name="steps[<?php echo (int) $s->id; ?>]"
                           value="<?php echo htmlspecialchars($existingVal !== '' ? $existingVal : (string) $s->min_marks); ?>">
                         <small class="text-muted d-block mt-1">Range: <?php echo html_escape((string) $s->min_marks); ?> - <?php echo html_escape((string) $s->max_marks); ?></small>
                       <?php else: ?>
                         <div class="text-muted">Fixed marks will be applied.</div>
-                        <input type="hidden" name="steps[<?php echo (int) $s->id; ?>]" value="1">
+                        <input type="hidden" class="emarking-step-input" name="steps[<?php echo (int) $s->id; ?>]" value="1">
                       <?php endif; ?>
                     </div>
                   </div>
@@ -152,6 +156,12 @@ if ($timer_seconds < 0) $timer_seconds = 0;
             </div>
             <div class="card-footer">
               <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+                <div class="text-muted">
+                  <strong>Obtained:</strong>
+                  <span id="emarkingObtained" data-total="<?php echo htmlspecialchars((string) ((float) ($item->max_marks ?? 0))); ?>">0.00</span>
+                  /
+                  <span id="emarkingTotal"><?php echo htmlspecialchars((string) ((float) ($item->max_marks ?? 0))); ?></span>
+                </div>
                 <div class="text-muted">
                   <strong>Timer:</strong>
                   <span id="emarkingTimer" data-seconds="<?php echo (int) $timer_seconds; ?>"><?php echo (int) $timer_seconds; ?>s</span>
@@ -233,6 +243,45 @@ if ($timer_seconds < 0) $timer_seconds = 0;
   if (isNaN(seconds) || seconds < 0) seconds = 15;
 
   var buttons = Array.prototype.slice.call(document.querySelectorAll('.emarking-action-btn'));
+  var obtainedEl = document.getElementById('emarkingObtained');
+
+  function clamp(val, min, max) {
+    val = parseFloat(val);
+    if (isNaN(val)) val = 0;
+    if (val < min) return min;
+    if (val > max) return max;
+    return val;
+  }
+
+  function computeObtained() {
+    var total = 0;
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.rubric-card[data-step-id]'));
+    cards.forEach(function(card){
+      if (!card) return;
+      var type = (card.getAttribute('data-type') || '').toUpperCase();
+      var stepMarks = parseFloat(card.getAttribute('data-step-marks') || '0') || 0;
+      var min = parseFloat(card.getAttribute('data-min') || '0') || 0;
+      var max = parseFloat(card.getAttribute('data-max') || '0') || 0;
+
+      if (type === 'FIXED') {
+        total += stepMarks;
+        return;
+      }
+      if (type === 'RANGE') {
+        var inp = card.querySelector('input[name^=\"steps[\"]');
+        if (!inp) return;
+        total += clamp(inp.value, min, max);
+        return;
+      }
+      // ZERO_ONE
+      var checked = card.querySelector('input[type=\"radio\"][name^=\"steps[\"]:checked');
+      if (!checked) return;
+      if ((checked.value || '') === '1') total += stepMarks;
+    });
+
+    if (obtainedEl) obtainedEl.textContent = total.toFixed(2);
+  }
+
   function setButtonsEnabled(enabled){
     buttons.forEach(function(b){
       if (!b) return;
@@ -242,6 +291,18 @@ if ($timer_seconds < 0) $timer_seconds = 0;
 
   // Start disabled, enable immediately if 0 seconds
   setButtonsEnabled(false);
+  computeObtained();
+  document.addEventListener('change', function(e){
+    var t = e && e.target ? e.target : null;
+    if (!t) return;
+    if (t.classList && t.classList.contains('emarking-step-input')) computeObtained();
+  });
+  document.addEventListener('input', function(e){
+    var t = e && e.target ? e.target : null;
+    if (!t) return;
+    if (t.classList && t.classList.contains('emarking-step-input')) computeObtained();
+  });
+
   if (seconds <= 0) {
     timerEl.textContent = '0s';
     setButtonsEnabled(true);

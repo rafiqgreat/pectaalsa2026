@@ -578,24 +578,66 @@ class Emarking extends MY_Controller
 
 	public function reports()
 	{
-		$this->page_data['page']->submenu = 'reports';
-		$this->page_data['page']->title = 'Reports';
+		// Backward compat: default to Question-wise Summary page.
+		redirect('admin/emarking/reports_questions');
+	}
 
-		$filters = [
+	private function reports_filters_from_get()
+	{
+		return [
 			'from' => trim((string) $this->input->get('from', true)),
 			'to' => trim((string) $this->input->get('to', true)),
 			'assessment_type' => trim((string) $this->input->get('assessment_type', true)),
 			'grade' => trim((string) $this->input->get('grade', true)),
 			'subject_code' => trim((string) $this->input->get('subject_code', true)),
 		];
+	}
 
+	private function load_reports_tab($tab)
+	{
+		$this->page_data['page']->submenu = 'reports';
+		$this->page_data['reports_tab'] = (string) $tab;
+
+		$filters = $this->reports_filters_from_get();
 		$this->page_data['filters'] = $filters;
-		$this->page_data['overall_summary'] = $this->emarking_report->get_overall_summary($filters);
-		$this->page_data['question_summary'] = $this->emarking_report->get_reports_summary($filters);
-		$this->page_data['subject_summary'] = $this->emarking_report->get_subject_summary($filters);
-		$this->page_data['emarker_summary'] = $this->emarking_report->get_emarker_summary($filters);
-		$this->page_data['batch_summary'] = $this->emarking_report->get_batch_summary($filters);
-		$this->load->view('admin/emarking/reports', $this->page_data);
+
+		if ($tab === 'subjects') {
+			$this->page_data['page']->title = 'Subject-wise Summary';
+			$this->page_data['subject_summary'] = $this->emarking_report->get_subject_summary($filters);
+		} elseif ($tab === 'emarkers') {
+			$this->page_data['page']->title = 'eMarker-wise Summary';
+			$this->page_data['emarker_summary'] = $this->emarking_report->get_emarker_summary($filters);
+		} elseif ($tab === 'batches') {
+			$this->page_data['page']->title = 'Batch-wise Summary';
+			$this->page_data['batch_summary'] = $this->emarking_report->get_batch_summary($filters);
+		} else {
+			// questions (default)
+			$this->page_data['page']->title = 'Question-wise Summary';
+			$this->page_data['overall_summary'] = $this->emarking_report->get_overall_summary($filters);
+			$this->page_data['question_summary'] = $this->emarking_report->get_reports_summary($filters);
+		}
+
+		$this->load->view('admin/emarking/reports_tab', $this->page_data);
+	}
+
+	public function reports_questions()
+	{
+		$this->load_reports_tab('questions');
+	}
+
+	public function reports_subjects()
+	{
+		$this->load_reports_tab('subjects');
+	}
+
+	public function reports_emarkers()
+	{
+		$this->load_reports_tab('emarkers');
+	}
+
+	public function reports_batches()
+	{
+		$this->load_reports_tab('batches');
 	}
 
 	public function billing()
