@@ -629,7 +629,7 @@ class Signup extends CI_Controller
 		$files = (array) $this->input->post('transcript_file', true);
 
 		if (count($degrees) < 1) {
-			$this->json(['success' => false, 'message' => 'Please add at least one education record.'], 422);
+			$this->json(['success' => false, 'message' => 'Please add at least one education record for SSC, HSSC, and Master / M.A / MSc. / BS (Hons) (16 Years) using the "Add More" button.'], 422);
 			return;
 		}
 

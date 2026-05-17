@@ -818,7 +818,7 @@
 				if (step === 3) {
 					// Ensure at least one education record has been added.
 					if ($form.find('input[name="degree[]"]').length < 1) {
-						toast('error', 'Please add at least one education record using Add.');
+						toast('error', 'Please add at least one education record for SSC, HSSC, and Master / M.A / MSc. / BS (Hons) (16 Years) using the "Add More" button.');
 						return;
 					}
 				}
