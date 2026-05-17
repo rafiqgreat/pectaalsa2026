@@ -103,6 +103,31 @@ $route['user/(:any)'] = 'user/$1';
 $route['user/(:any)/(:any)'] = 'user/$1/$2';
 $route['user/(:any)/(:any)/(:any)'] = 'user/$1/$2/$3';
 
+// Admin e-Marking routes
+$route['admin/emarking'] = 'admin/emarking/questions';
+$route['admin/emarking/questions'] = 'admin/emarking/questions';
+$route['admin/emarking/add-question'] = 'admin/emarking/add_question';
+$route['admin/emarking/edit-question/(:num)'] = 'admin/emarking/edit_question/$1';
+$route['admin/emarking/rubric-steps/(:num)'] = 'admin/emarking/rubric_steps/$1';
+$route['admin/emarking/import-crq-images'] = 'admin/emarking/import_crq_images';
+$route['admin/emarking/import-dictation-images'] = 'admin/emarking/import_dictation_images';
+$route['admin/emarking/create-batch'] = 'admin/emarking/create_batch';
+$route['admin/emarking/batches'] = 'admin/emarking/batches';
+$route['admin/emarking/reports'] = 'admin/emarking/reports';
+$route['admin/emarking/billing'] = 'admin/emarking/billing';
+
+// eMarker marking routes
+$route['emarker/marking/dashboard'] = 'emarker/marking/dashboard';
+$route['emarker/marking/view-batch/(:num)'] = 'emarker/marking/view_batch/$1';
+$route['emarker/marking/start/(:num)'] = 'emarker/marking/start/$1';
+$route['emarker/marking/save-marks'] = 'emarker/marking/save_marks';
+
+// E-Marker e-Marking module
+$route['emarker'] = 'emarker/marking';
+$route['emarker/(:any)'] = 'emarker/$1';
+$route['emarker/(:any)/(:any)'] = 'emarker/$1/$2';
+$route['emarker/(:any)/(:any)/(:any)'] = 'emarker/$1/$2/$3';
+
 
 
 // [AdminLTE]

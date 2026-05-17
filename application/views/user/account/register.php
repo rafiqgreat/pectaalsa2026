@@ -6,7 +6,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register - PSRP</title>
+    <title>Register - PECTAA</title>
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Custom CSS for Main Color and Urdu Font -->
@@ -185,7 +185,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
     <!-- Footer -->
     <footer class="bg-gray-200 text-center py-4 mt-8">
-        <p class="text-gray-600">© <?php echo date('Y'); ?> PEF</p>
+        <p class="text-gray-600">© <?php echo date('Y'); ?> PECTAA</p>
     </footer>
 </body>
 

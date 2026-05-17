@@ -48,6 +48,68 @@
     </li>
   <?php endif; ?>
 
+  <?php if (in_array((int) logged('role'), [1, 17, 18, 19], true)): ?>
+    <li class="nav-item has-treeview <?php echo ($page->menu == 'emarking') ? 'menu-open' : ''; ?>">
+      <a href="#" class="nav-link <?php echo ($page->menu == 'emarking') ? 'active' : ''; ?>">
+        <i class="nav-icon fas fa-pen-square"></i>
+        <p>
+          E-Marking
+          <i class="right fas fa-angle-left"></i>
+        </p>
+      </a>
+      <ul class="nav nav-treeview">
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/questions'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'questions') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Questions</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/import_crq_images'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'import' && strpos((string) ($page->title ?? ''), 'CRQ') !== false) ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Import CRQ</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/import_dictation_images'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'import' && strpos((string) ($page->title ?? ''), 'Dictation') !== false) ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Import Dictation</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/create_batch'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'batches' && strpos((string) ($page->title ?? ''), 'Create') !== false) ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Create Batch</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/batches'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'batches' && (string) ($page->title ?? '') === 'Batches') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Batches</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/reports'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Reports</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/billing'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'billing') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Billing</p>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/skipped'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'skipped') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>Skipped</p>
+          </a>
+        </li>
+      </ul>
+    </li>
+  <?php endif; ?>
+
   <?php if (
     hasPermissions('location_management') ||
     hasPermissions('state_list') ||

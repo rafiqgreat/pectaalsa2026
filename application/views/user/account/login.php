@@ -5,7 +5,7 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="<?= base_url('assets/css/style.css'); ?>">
-  <title>Login - PSRP</title>
+  <title>Login - PECTAA</title>
   <!-- Tailwind CSS via CDN -->
   <!-- Add this in the <head> section -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -25,11 +25,11 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
           <h4 class="text-lg text-dark">Digital Barcoding, Scanning, Emarking, AI Analysis - A Complete Solution</h4>
         </div>
       </div>
-      <div class="space-x-2">
+      <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
         <?php /*?><a href="./Login.html"
                     class="p-2 cursor-pointer bg-green-400 rounded-lg p-4 text-dark font-semibold">Login</a><?php */ ?>
         <a href="<?php echo !empty($user_access_blocked) ? 'javascript:void(0)' : url('user/login/register') ?>"
-          class="p-2 cursor-pointer bg-white rounded-lg p-4 text-dark font-semibold <?php echo !empty($user_access_blocked) ? 'opacity-50 pointer-events-none' : ''; ?>">Register New Account</a>
+          class="block w-full sm:w-auto px-4 py-3 text-center cursor-pointer bg-white rounded-lg text-dark font-semibold whitespace-nowrap <?php echo !empty($user_access_blocked) ? 'opacity-50 pointer-events-none' : ''; ?>">Register New eMarker</a>
         <?php /*?><a href="./Admin_login.html"
                     class="p-2 cursor-pointer bg-white bg-blue-500
                      p-4 rounded-lg text-dark font-semibold">Admin Login</a><?php */ ?>
@@ -69,8 +69,7 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
         <div class="text-center mb-4">
           <h1 class="text-red-600 font-bold urdufont-right">درخواست جمع کرانے سے پہلے اس کی شرائط و ضوابط کو پڑھنا لازمی ہے۔</h1>
           <div class="flex flex-wrap justify-center mt-2">
-            <h1 class="urdu text-blue-500 font-bold mr-4 urdufont-right"><a href="<?= base_url('assets/docs/PSRP-III-UserManual.pdf'); ?>" target="_blank">ہدایات برائے &nbsp;&nbsp; Application Portal </a></h1>
-            | &nbsp;&nbsp;<h1 class="urdu text-blue-500 font-bold urdufont-right"><a href="<?= base_url('assets/docs/Revised TORs PSRP Ph-III.pdf'); ?>" target="_blank"> ہدایات برائے درخواست دھندگان (TORs)</a></h1>
+            <h1 class="urdu text-blue-500 font-bold urdufont-right"><a href="<?= base_url('assets/docs/PECTAA_LSA_2026_eMarking_Instructions.pdf'); ?>" target="_blank"> ہدایات برائے درخواست دھندگان (TORs)</a></h1>
           </div>
         </div>
 
@@ -108,7 +107,7 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
 
   <!-- Footer -->
   <footer class="bg-gray-200 text-center py-4 mt-8">
-    <p class="text-gray-600">© <?php echo date('Y'); ?> PEF</p>
+    <p class="text-gray-600">© <?php echo date('Y'); ?> PECTAA</p>
   </footer>
 </body>
 <script>

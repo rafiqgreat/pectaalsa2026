@@ -7,6 +7,12 @@
     </a>
   </li>
   <li class="nav-item">
+    <a href="<?php echo url('emarker/marking/dashboard'); ?>" class="nav-link <?php echo ($page->menu == 'emarking') ? 'active' : ''; ?>">
+      <i class="nav-icon fas fa-pen-square"></i>
+      <p>E-Marking</p>
+    </a>
+  </li>
+  <li class="nav-item">
     <a href="<?php echo url('user/invitation'); ?>" class="nav-link <?php echo ($page->menu == 'invitation') ? 'active' : ''; ?>">
       <i class="nav-icon fas fa-envelope-open-text"></i>
       <p>Invitation for Paper Checking</p>

@@ -203,7 +203,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
     <!-- Footer -->
     <footer class="bg-gray-200 text-center py-4 mt-8">
-        <p class="text-gray-600">© <?php echo date('Y'); ?> PEF</p>
+        <p class="text-gray-600">© <?php echo date('Y'); ?> PECTAA</p>
     </footer>
 </body>
 
