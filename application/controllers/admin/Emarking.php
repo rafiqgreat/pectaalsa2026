@@ -352,15 +352,15 @@ class Emarking extends MY_Controller
 		if ($this->input->method(true) === 'POST') {
 			postAllowed();
 			$base_folder = trim((string) $this->input->post('base_folder', true));
-			if ($base_folder === '') $base_folder = 'processed_crqs';
+			if ($base_folder === '') $base_folder = 'storagebox/crqs';
 			$batch_no = trim((string) $this->input->post('upload_batch_no', true));
 			if ($batch_no === '') $batch_no = 'CRQ-' . date('Ymd-His');
 
 			$result_crq = $this->emarking->import_images_from_folder($base_folder, 'CRQ', $batch_no);
 		}
 
-		$this->page_data['default_crq_path'] = 'processed_crqs';
-		$this->page_data['default_dictation_path'] = 'processed_dictation';
+		$this->page_data['default_crq_path'] = 'storagebox/crqs';
+		$this->page_data['default_dictation_path'] = 'storagebox/dictations';
 		$this->page_data['result_crq'] = $result_crq;
 		$this->page_data['result_dict'] = $result_dict;
 		$this->load->view('admin/emarking/import_images', $this->page_data);
@@ -376,14 +376,14 @@ class Emarking extends MY_Controller
 		if ($this->input->method(true) === 'POST') {
 			postAllowed();
 			$base_folder = trim((string) $this->input->post('base_folder', true));
-			if ($base_folder === '') $base_folder = 'processed_dictation';
+			if ($base_folder === '') $base_folder = 'storagebox/dictations';
 			$batch_no = trim((string) $this->input->post('upload_batch_no', true));
 			if ($batch_no === '') $batch_no = 'DICT-' . date('Ymd-His');
 			$result_dict = $this->emarking->import_images_from_folder($base_folder, 'DICTATION', $batch_no);
 		}
 
-		$this->page_data['default_crq_path'] = 'processed_crqs';
-		$this->page_data['default_dictation_path'] = 'processed_dictation';
+		$this->page_data['default_crq_path'] = 'storagebox/crqs';
+		$this->page_data['default_dictation_path'] = 'storagebox/dictations';
 		$this->page_data['result_crq'] = $result_crq;
 		$this->page_data['result_dict'] = $result_dict;
 		$this->load->view('admin/emarking/import_images', $this->page_data);

@@ -237,7 +237,7 @@ class Emarking_model extends CI_Model
 	private function build_image_path($assessment_type, $grade, $subject_code, $version, $page_no, $question_no, $barcode)
 	{
 		$assessment_type = strtoupper((string) $assessment_type);
-		$baseDir = $assessment_type === 'DICTATION' ? 'processed_dictation' : 'processed_crqs';
+		$baseDir = $assessment_type === 'DICTATION' ? 'storagebox/dictations' : 'storagebox/crqs';
 
 		$grade = (string) (int) $grade;
 		$subject_code = (string) $subject_code;

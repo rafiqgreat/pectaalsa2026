@@ -20,3 +20,4 @@ application/logs/*
 /uploads/
 /application/session/
 /assets/img/
+/storagebox/

@@ -29,7 +29,7 @@
         <li>Tries to match source records where <code>paper_generated = 1</code> (if source columns exist)</li>
         <li>CRQ uses <code>paper_type_code = 1</code> (booklets tables) when validating source</li>
         <li>Dictation uses <code>paper_type_code = 12</code> (English subject_code 1) and <code>13</code> (Urdu subject_code 2) when validating source</li>
-        <li>Folder structure must be: <code>{base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg</code></li>
+        <li>Folder structure must be: <code>{base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg</code> (examples: <code>storagebox/crqs</code>, <code>storagebox/dictations</code>)</li>
         <li>If source validation fails, image is still imported with <code>source_paper_id = 0</code> (see Errors list)</li>
       </ul>
     </div>
@@ -44,7 +44,7 @@
             <form method="post" action="<?php echo base_url('admin/emarking/import_crq_images'); ?>">
               <div class="form-group">
                 <label>Base Folder</label>
-                <input type="text" name="base_folder" class="form-control" value="<?php echo htmlspecialchars((string) ($default_crq_path ?? 'processed_crqs')); ?>">
+                <input type="text" name="base_folder" class="form-control" value="<?php echo htmlspecialchars((string) ($default_crq_path ?? 'storagebox/crqs')); ?>">
               </div>
               <div class="form-group">
                 <label>Upload Batch No (optional)</label>
@@ -88,7 +88,7 @@
             <form method="post" action="<?php echo base_url('admin/emarking/import_dictation_images'); ?>">
               <div class="form-group">
                 <label>Base Folder</label>
-                <input type="text" name="base_folder" class="form-control" value="<?php echo htmlspecialchars((string) ($default_dictation_path ?? 'processed_dictation')); ?>">
+                <input type="text" name="base_folder" class="form-control" value="<?php echo htmlspecialchars((string) ($default_dictation_path ?? 'storagebox/dictations')); ?>">
               </div>
               <div class="form-group">
                 <label>Upload Batch No (optional)</label>

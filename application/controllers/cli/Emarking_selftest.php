@@ -155,7 +155,7 @@ class Emarking_selftest extends CI_Controller
 		$this->ok('Created Q26 question id=' . $q26_id . ' with 5 steps.');
 
 		// 3) Import CRQ image (single-file via folder importer)
-		$crq_file = 'processed_crqs/4/1/1/101/q1/44811011108101_1.jpg';
+		$crq_file = 'storagebox/crqs/4/1/1/101/q1/44811011108101_1.jpg';
 		$crq_abs = rtrim(FCPATH, '\\/') . '/' . $crq_file;
 		if (!is_file($crq_abs)) {
 			$this->out('WARN: CRQ sample file missing: ' . $crq_abs);
@@ -189,7 +189,7 @@ class Emarking_selftest extends CI_Controller
 				$crq_qid = (int) $this->db->insert_id();
 			}
 			$created_question_ids[] = $crq_qid;
-			$res = $this->emarking->import_images_from_folder('processed_crqs', 'CRQ', 'SELFTEST-CRQ-' . date('YmdHis'));
+			$res = $this->emarking->import_images_from_folder('storagebox/crqs', 'CRQ', 'SELFTEST-CRQ-' . date('YmdHis'));
 			$this->ok('CRQ import attempted. Inserted=' . (int) ($res['inserted'] ?? 0) . ' Skipped=' . (int) ($res['skipped'] ?? 0));
 			if (!empty($res['errors'])) {
 				$this->out('CRQ import errors count: ' . count($res['errors']));
@@ -197,7 +197,7 @@ class Emarking_selftest extends CI_Controller
 		}
 
 		// 4) Import Dictation image (single-file via folder importer)
-		$dict_file = 'processed_dictation/4/1/1/041/q1/44811131108041_1.jpg';
+		$dict_file = 'storagebox/dictations/4/1/1/041/q1/44811131108041_1.jpg';
 		$dict_abs = rtrim(FCPATH, '\\/') . '/' . $dict_file;
 		if (!is_file($dict_abs)) {
 			$this->out('WARN: Dictation sample file missing: ' . $dict_abs);
@@ -230,7 +230,7 @@ class Emarking_selftest extends CI_Controller
 				$dict_qid = (int) $this->db->insert_id();
 			}
 			$created_question_ids[] = $dict_qid;
-			$res = $this->emarking->import_images_from_folder('processed_dictation', 'DICTATION', 'SELFTEST-DICT-' . date('YmdHis'));
+			$res = $this->emarking->import_images_from_folder('storagebox/dictations', 'DICTATION', 'SELFTEST-DICT-' . date('YmdHis'));
 			$this->ok('Dictation import attempted. Inserted=' . (int) ($res['inserted'] ?? 0) . ' Skipped=' . (int) ($res['skipped'] ?? 0));
 			if (!empty($res['errors'])) {
 				$this->out('Dictation import errors count: ' . count($res['errors']));
