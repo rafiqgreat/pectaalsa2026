@@ -209,14 +209,16 @@ class Emarking_model extends CI_Model
 	private function resolve_source_columns($table)
 	{
 		$candidates = [
+			// Primary key (varies by table)
+			'id' => ['id', 'paper_id'],
 			'barcode' => ['paper_barcode', 'barcode', 'paperbarcode', 'bar_code', 'paper_bar_code'],
-			'roll_no' => ['roll_no', 'rollno', 'rollnumber', 'roll_number'],
+			'roll_no' => ['paper_sr_roll', 'roll_no', 'rollno', 'rollnumber', 'roll_number'],
 			'grade' => ['paper_grade', 'grade', 'class', 'class_id'],
 			'version' => ['paper_version', 'version'],
 			'subject_code' => ['paper_subject_code', 'subject_code', 'subject'],
 			'page_no' => ['paper_page_no', 'page_no', 'pageno', 'page'],
-			'school_id' => ['school_id', 'institute_id', 'schoolid'],
-			'lsacode' => ['lsacode', 'lsa_code', 'lscode', 'l_s_a_code'],
+			'school_id' => ['paper_school_id', 'school_id', 'institute_id', 'schoolid'],
+			'lsacode' => ['paper_lsacode', 'lsacode', 'lsa_code', 'lscode', 'l_s_a_code'],
 			'paper_type_code' => ['paper_type_code', 'paper_type', 'paperTypeCode'],
 			'paper_generated' => ['paper_generated', 'is_generated', 'generated'],
 		];
@@ -234,6 +236,44 @@ class Emarking_model extends CI_Model
 		return $out;
 	}
 
+	/**
+	 * Source tables store paper_page_no as 2 digits (00-99), while folder structure may use 3 digits
+	 * with a fixed trailing "1" (e.g. 01 -> 011, 10 -> 101, 13 -> 131).
+	 */
+	private function folder_page_no_to_source_page_no($folder_page_no)
+	{
+		$folder_page_no = trim((string) $folder_page_no);
+		if ($folder_page_no === '') return $folder_page_no;
+
+		// If folder page is 3 digits and ends with "1", drop the trailing digit (101->10, 011->01).
+		if (ctype_digit($folder_page_no) && strlen($folder_page_no) === 3 && substr($folder_page_no, -1) === '1') {
+			return substr($folder_page_no, 0, 2);
+		}
+
+		// Backward-compatible fallback for older 3+ digit schemes (e.g. 101->01 etc).
+		if (ctype_digit($folder_page_no) && (int) $folder_page_no > 99) {
+			return str_pad((string) (((int) $folder_page_no) % 100), 2, '0', STR_PAD_LEFT);
+		}
+
+		return $folder_page_no;
+	}
+
+	private function source_page_no_to_folder_page_no($source_page_no)
+	{
+		$source_page_no = trim((string) $source_page_no);
+		if ($source_page_no === '') return $source_page_no;
+
+		// If already 3 digits, keep as-is.
+		if (ctype_digit($source_page_no) && strlen($source_page_no) === 3) return $source_page_no;
+
+		// If 1-2 digits, pad to 2 digits and append fixed trailing "1".
+		if (ctype_digit($source_page_no) && strlen($source_page_no) <= 2) {
+			return str_pad($source_page_no, 2, '0', STR_PAD_LEFT) . '1';
+		}
+
+		return $source_page_no;
+	}
+
 	private function build_image_path($assessment_type, $grade, $subject_code, $version, $page_no, $question_no, $barcode)
 	{
 		$assessment_type = strtoupper((string) $assessment_type);
@@ -242,7 +282,7 @@ class Emarking_model extends CI_Model
 		$grade = (string) (int) $grade;
 		$subject_code = (string) $subject_code;
 		$version = (string) (int) $version;
-		$page_no = trim((string) $page_no);
+		$page_no = $this->source_page_no_to_folder_page_no($page_no);
 		$question_no = trim((string) $question_no);
 		$barcode = trim((string) $barcode);
 
@@ -450,18 +490,50 @@ class Emarking_model extends CI_Model
 			// Try to validate/attach source row if possible; otherwise import with source_paper_id=0.
 			$source_row = null;
 			if ($can_validate_source) {
-				$this->db->from($source_table);
-				$this->db->where($cols['barcode'], $barcode);
-				$this->db->where($cols['paper_generated'], 1);
-				if (!empty($cols['paper_type_code']) && $paper_type_code !== null) {
-					$this->db->where($cols['paper_type_code'], (int) $paper_type_code);
+				$getSourceRow = function ($pageNoOverride = null, $includeType = true, $includeGenerated = true, $includeMeta = false) use ($source_table, $cols, $barcode, $paper_type_code, $grade, $subject_code, $version, $page_no) {
+					$this->db->from($source_table);
+					$this->db->where($cols['barcode'], $barcode);
+
+					// Keep constraints minimal (barcode is typically unique). Add others only when useful.
+					if ($includeGenerated) $this->db->where($cols['paper_generated'], 1);
+					if ($includeType && !empty($cols['paper_type_code']) && $paper_type_code !== null) {
+						$this->db->where($cols['paper_type_code'], (int) $paper_type_code);
+					}
+
+					// Optional additional constraints (can be unreliable due to formatting / NULLs).
+					if ($includeMeta) {
+						if (!empty($cols['grade'])) $this->db->where($cols['grade'], (int) $grade);
+						if (!empty($cols['subject_code'])) $this->db->where($cols['subject_code'], (int) $subject_code);
+						if (!empty($cols['version'])) $this->db->where($cols['version'], (int) $version);
+						if (!empty($cols['page_no'])) {
+							$pn = (string) ($pageNoOverride ?? $page_no);
+							$pn = $this->folder_page_no_to_source_page_no($pn);
+							$this->db->where($cols['page_no'], $pn);
+						}
+					}
+
+					$this->db->limit(1);
+					return $this->db->get()->row_array();
+				};
+
+				// Attempt 1: minimal match (barcode + generated + type).
+				$source_row = $getSourceRow(null, true, true, false);
+
+				// Attempt 2: use meta constraints with normalized page_no (folder 101 -> source 10, 011 -> 01).
+				if (empty($source_row) && !empty($cols['page_no'])) {
+					$pn = $this->folder_page_no_to_source_page_no($page_no);
+					$source_row = $getSourceRow($pn, true, true, true);
 				}
-				if (!empty($cols['grade'])) $this->db->where($cols['grade'], (int) $grade);
-				if (!empty($cols['subject_code'])) $this->db->where($cols['subject_code'], (int) $subject_code);
-				if (!empty($cols['version'])) $this->db->where($cols['version'], (int) $version);
-				if (!empty($cols['page_no'])) $this->db->where($cols['page_no'], (string) $page_no);
-				$this->db->limit(1);
-				$source_row = $this->db->get()->row_array();
+
+				// Attempt 3: relax paper_type_code constraint (some sources use different codes).
+				if (empty($source_row)) {
+					$source_row = $getSourceRow(null, false, true, false);
+				}
+
+				// Attempt 4: relax generated constraint as well (still links by barcode).
+				if (empty($source_row)) {
+					$source_row = $getSourceRow(null, false, false, false);
+				}
 			} else {
 				$errors[] = ['file' => $abs_path, 'reason' => 'Source validation skipped (missing source columns)', 'source_table' => $source_table];
 			}
@@ -506,7 +578,7 @@ class Emarking_model extends CI_Model
 			$payload = [
 				'assessment_type' => $assessment_type,
 				'source_table' => $source_table,
-				'source_paper_id' => (int) ($source_row['id'] ?? 0),
+				'source_paper_id' => (!empty($source_row) && !empty($cols['id'])) ? (int) ($source_row[$cols['id']] ?? 0) : 0,
 				'paper_barcode' => $barcode,
 				'grade' => (int) $grade,
 				'school_id' => (!empty($source_row) && !empty($cols['school_id'])) ? (int) ($source_row[$cols['school_id']] ?? null) : null,
