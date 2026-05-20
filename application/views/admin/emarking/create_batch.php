@@ -86,7 +86,7 @@
                     $totalCnt = (int) (($total_counts[$qid] ?? 0));
                   ?>
                   <option value="<?php echo (int) $q->id; ?>">
-                    <?php echo htmlspecialchars((string) $q->assessment_type); ?> | G<?php echo (int) $q->grade; ?> | S<?php echo htmlspecialchars((string) $q->subject_code); ?> | V<?php echo (int) $q->version; ?> | P<?php echo htmlspecialchars((string) $q->page_no); ?> | <?php echo htmlspecialchars((string) $q->question_no); ?> â€” <?php echo htmlspecialchars((string) $q->question_title); ?> | Images: <?php echo $uploadedCnt; ?> (Total: <?php echo $totalCnt; ?>)
+                    <?php echo htmlspecialchars((string) $q->assessment_type); ?> | G<?php echo (int) $q->grade; ?> | S<?php echo htmlspecialchars((string) $q->subject_code); ?> | V<?php echo (int) $q->version; ?> | P<?php echo htmlspecialchars((string) $q->page_no); ?> | <?php echo htmlspecialchars((string) $q->question_no); ?> - <?php echo htmlspecialchars((string) $q->question_title); ?> | Images: <?php echo $uploadedCnt; ?> (Total: <?php echo $totalCnt; ?>)
                   </option>
                 <?php endforeach; ?>
               </select>
