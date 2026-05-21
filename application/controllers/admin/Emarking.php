@@ -387,6 +387,7 @@ class Emarking extends MY_Controller
 			'marking_type' => trim((string) $this->input->post('marking_type', true)),
 			'min_marks' => (float) $this->input->post('min_marks', true),
 			'max_marks' => (float) $this->input->post('max_marks', true),
+			'interval' => $this->input->post('interval', true),
 			'status' => (int) $this->input->post('status', true) ? 1 : 0,
 		];
 
@@ -402,6 +403,13 @@ class Emarking extends MY_Controller
 		$payload['max_marks'] = max(0, (float) $payload['max_marks']);
 
 		if ($payload['marking_type'] === 'RANGE') {
+			$payload['interval'] = max(0, (float) $payload['interval']);
+			if ($payload['interval'] <= 0) {
+				$this->session->set_flashdata('message', 'Interval is required for RANGE and must be greater than 0.');
+				$this->session->set_flashdata('message_type', 'danger');
+				redirect('admin/emarking/rubric_steps/' . $question_id);
+				return;
+			}
 			if ($payload['step_marks'] <= 0) {
 				// Not used for RANGE, but keep a sensible value for display/consistency
 				$payload['step_marks'] = $payload['max_marks'];
@@ -416,6 +424,7 @@ class Emarking extends MY_Controller
 			// For ZERO_ONE/FIXED, keep range fields aligned to step_marks for clarity
 			$payload['min_marks'] = 0.0;
 			$payload['max_marks'] = (float) $payload['step_marks'];
+			$payload['interval'] = null;
 		}
 
 		// Enforce max 15 ACTIVE steps per question
@@ -488,6 +497,62 @@ class Emarking extends MY_Controller
 		$this->session->set_flashdata('message', 'Rubric step deleted.');
 		$this->session->set_flashdata('message_type', 'success');
 		redirect('admin/emarking/rubric_steps/' . (int) $step->question_id);
+	}
+
+	public function delete_rubric_steps_bulk()
+	{
+		postAllowed();
+
+		$question_id = (int) $this->input->post('question_id', true);
+		if ($question_id <= 0) show_404();
+
+		$question = $this->emarking->get_question($question_id);
+		if (!$question) show_404();
+
+		$ids = $this->input->post('ids');
+		if (!is_array($ids) || empty($ids)) {
+			$this->session->set_flashdata('message', 'No steps selected.');
+			$this->session->set_flashdata('message_type', 'warning');
+			redirect('admin/emarking/rubric_steps/' . $question_id);
+			return;
+		}
+
+		$ids = array_values(array_unique(array_filter(array_map(function ($v) {
+			return (int) $v;
+		}, $ids), function ($v) {
+			return $v > 0;
+		})));
+
+		if (empty($ids)) {
+			$this->session->set_flashdata('message', 'No valid steps selected.');
+			$this->session->set_flashdata('message_type', 'warning');
+			redirect('admin/emarking/rubric_steps/' . $question_id);
+			return;
+		}
+
+		$deleted = 0;
+		$skipped = 0;
+		foreach ($ids as $id) {
+			$step = $this->emarking->get_rubric_step((int) $id);
+			if (!$step || (int) ($step->question_id ?? 0) !== $question_id) {
+				$skipped++;
+				continue;
+			}
+			$this->emarking->delete_rubric_step((int) $id);
+			$deleted++;
+		}
+
+		if ($deleted > 0) {
+			$msg = 'Deleted ' . $deleted . ' step(s).';
+			if ($skipped > 0) $msg .= ' Skipped ' . $skipped . ' invalid step(s).';
+			$this->session->set_flashdata('message', $msg);
+			$this->session->set_flashdata('message_type', 'success');
+		} else {
+			$this->session->set_flashdata('message', 'No steps were deleted.');
+			$this->session->set_flashdata('message_type', 'warning');
+		}
+
+		redirect('admin/emarking/rubric_steps/' . $question_id);
 	}
 
 	public function import_crq_images()

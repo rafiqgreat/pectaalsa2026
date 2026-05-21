@@ -244,12 +244,43 @@ $panel_heading = $rubric_title !== '' ? $rubric_title : '';
                       <?php echo html_escape((string) $s->step_title); ?>
                     </div>
 
-                    <?php if ((string) $s->marking_type === 'RANGE'): ?>
+                  <?php if ((string) $s->marking_type === 'RANGE'): ?>
                       <?php
-                        $minInt = (int) floor($stepMin);
-                        $maxInt = (int) floor($stepMax);
-                        if ($maxInt < $minInt) { $tmp = $maxInt; $maxInt = $minInt; $minInt = $tmp; }
-                        $currentRangeVal = $existingVal !== '' ? $existingVal : (string) $s->min_marks;
+                        $rawInterval = isset($s->interval) ? (float) $s->interval : 0.0;
+                        $interval = (float) $rawInterval;
+                        if ($interval <= 0) {
+                          $interval = (($stepMax - $stepMin) <= 5.0) ? 0.5 : 1.0;
+                        }
+                        if ($interval <= 0) $interval = 1.0;
+
+                        $minScaled = (int) round($stepMin * 100);
+                        $maxScaled = (int) round($stepMax * 100);
+                        $intScaled = (int) round($interval * 100);
+                        if ($intScaled <= 0) $intScaled = 100;
+                        if ($maxScaled < $minScaled) { $tmp = $maxScaled; $maxScaled = $minScaled; $minScaled = $tmp; }
+
+                        $values = [];
+                        $maxOpts = 250;
+                        $count = 0;
+                        for ($v = $minScaled; $v <= $maxScaled && $count < $maxOpts; $v += $intScaled) {
+                          $values[] = $v;
+                          $count++;
+                        }
+                        // Ensure max is included (if not already, due to rounding/step mismatch)
+                        if (!empty($values) && end($values) !== $maxScaled && count($values) < $maxOpts) {
+                          $values[] = $maxScaled;
+                        }
+
+                        // Display descending like existing UI
+                        $values = array_reverse($values);
+
+                        // On first load (no saved marks), don't preselect any RANGE value.
+                        $currentRangeVal = $existingVal !== '' ? $existingVal : '';
+                        $fmt = function ($n) {
+                          $v = ((int) $n) / 100.0;
+                          if (abs($v - (int) $v) < 0.000001) return (string) ((int) $v);
+                          return rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
+                        };
                       ?>
                       <input type="number"
                         step="0.01"
@@ -260,25 +291,26 @@ $panel_heading = $rubric_title !== '' ? $rubric_title : '';
                         value="<?php echo htmlspecialchars($currentRangeVal); ?>">
 
                       <div class="emarking-box-grid" data-mark-grid data-step-id="<?php echo (int) $s->id; ?>">
-                        <?php for ($v = $maxInt; $v >= $minInt; $v--): ?>
+                        <?php foreach ($values as $vScaled): ?>
                           <?php
                             $label = '';
-                            if ($minInt === 0 && $maxInt === 3) {
-                              if ($v === 3) $label = 'Three correct';
-                              elseif ($v === 2) $label = 'Two correct';
-                              elseif ($v === 1) $label = 'One correct';
+                            $valStr = $fmt($vScaled);
+                            if ($minScaled === 0 && $maxScaled === 300 && $intScaled === 100) {
+                              if ($valStr === '3') $label = 'Three correct';
+                              elseif ($valStr === '2') $label = 'Two correct';
+                              elseif ($valStr === '1') $label = 'One correct';
                               else $label = 'All incorrect';
                             } else {
                               $label = 'Marks';
                             }
                           ?>
-                          <div class="emarking-box" role="button" tabindex="0" data-mark-option data-type="RANGE" data-value="<?php echo (int) $v; ?>">
+                          <div class="emarking-box" role="button" tabindex="0" data-mark-option data-type="RANGE" data-value="<?php echo htmlspecialchars($valStr); ?>">
                             <div class="emarking-box-label"><?php echo html_escape($label); ?></div>
                             <div class="emarking-box-value">
-                              <span class="emarking-box-dot"><?php echo (int) $v; ?></span>
+                              <span class="emarking-box-dot"><?php echo html_escape($valStr); ?></span>
                             </div>
                           </div>
-                        <?php endfor; ?>
+                        <?php endforeach; ?>
                       </div>
 
                     <?php elseif ((string) $s->marking_type === 'ZERO_ONE'): ?>
@@ -474,7 +506,6 @@ $panel_heading = $rubric_title !== '' ? $rubric_title : '';
     if (!el) return;
     if (window.jQuery) {
       window.jQuery(el).trigger('input').trigger('change');
-      return;
     }
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -491,13 +522,19 @@ $panel_heading = $rubric_title !== '' ? $rubric_title : '';
       selected = checked ? String(checked.value || '') : '';
     } else if (type === 'RANGE') {
       var inp = card.querySelector('input.emarking-step-input[name^=\"steps[\"]');
-      selected = inp ? String(inp.value || '').trim() : '';
+      selected = inp ? (parseFloat(String(inp.value || '').trim())) : NaN;
     } else {
       return;
     }
 
     Array.prototype.slice.call(grid.querySelectorAll('[data-mark-option]')).forEach(function(opt){
-      var isSel = String(opt.getAttribute('data-value') || '') === selected;
+      var isSel = false;
+      if (type === 'RANGE') {
+        var ov = parseFloat(String(opt.getAttribute('data-value') || '').trim());
+        isSel = !isNaN(selected) && !isNaN(ov) && Math.abs(ov - selected) < 0.000001;
+      } else {
+        isSel = String(opt.getAttribute('data-value') || '') === selected;
+      }
       opt.classList.toggle('is-selected', isSel);
       opt.setAttribute('aria-pressed', isSel ? 'true' : 'false');
     });

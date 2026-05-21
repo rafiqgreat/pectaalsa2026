@@ -175,6 +175,18 @@ class Emarking_model extends CI_Model
 		}
 		if ((int) ($data['step_order'] ?? 0) <= 0) $data['step_order'] = 1;
 
+		// Normalize interval for RANGE only
+		if ($data['marking_type'] === 'RANGE') {
+			if (!isset($data['interval'])) {
+				$data['interval'] = null;
+			} else {
+				$ival = (float) $data['interval'];
+				$data['interval'] = $ival > 0 ? $ival : null;
+			}
+		} else {
+			$data['interval'] = null;
+		}
+
 		if ($id === null) {
 			$this->db->insert('emarking_question_rubric_steps', $data);
 			$err = $this->db->error();

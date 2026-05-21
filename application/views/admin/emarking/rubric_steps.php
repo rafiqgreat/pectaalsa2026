@@ -104,7 +104,11 @@ $question_max = (float) ($question->max_marks ?? 0);
               <label>Max Marks (RANGE)</label>
               <input type="number" step="0.01" name="max_marks" id="max_marks" class="form-control" value="1.00">
             </div>
-            <div class="form-group col-md-3">
+            <div class="form-group col-md-2" id="interval_wrap" style="display:none;">
+              <label>Interval (RANGE)</label>
+              <input type="number" step="0.01" min="0.01" name="interval" id="interval" class="form-control" value="0.50">
+            </div>
+            <div class="form-group col-md-3" id="detail_wrap">
               <label>Detail (optional)</label>
               <input type="text" name="step_detail" id="step_detail" class="form-control">
             </div>
@@ -119,59 +123,79 @@ $question_max = (float) ($question->max_marks ?? 0);
 
     <div class="card">
       <div class="card-header">
-        <h3 class="card-title mb-0">Existing Steps</h3>
+        <div class="d-flex justify-content-between align-items-center">
+          <h3 class="card-title mb-0">Existing Steps</h3>
+          <button type="submit" form="bulkDeleteForm" class="btn btn-danger btn-sm" id="bulkDeleteBtn" disabled onclick="return confirm('Delete selected steps?');">
+            Delete Selected
+          </button>
+        </div>
       </div>
       <div class="card-body table-responsive p-0">
-        <table class="table table-hover mb-0">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Order</th>
-              <th>Label</th>
-              <th>Title</th>
-              <th>Marks</th>
+        <form method="post" action="<?php echo base_url('admin/emarking/delete_rubric_steps_bulk'); ?>" id="bulkDeleteForm" class="m-0">
+          <input type="hidden" name="question_id" value="<?php echo (int) $question->id; ?>">
+          <table class="table table-hover mb-0">
+            <thead>
+              <tr>
+                <th style="width:34px;">
+                  <input type="checkbox" id="selectAllSteps" title="Select all">
+                </th>
+                <th>ID</th>
+                <th>Order</th>
+                <th>Label</th>
+                <th>Title</th>
+                <th>Marks</th>
               <th>Type</th>
               <th>Range</th>
               <th>Status</th>
               <th style="width:150px;">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            <?php if (empty($rubric_steps)): ?>
-              <tr><td colspan="9" class="text-center text-muted">No steps yet</td></tr>
-            <?php else: ?>
-              <?php foreach ($rubric_steps as $s): ?>
-                <tr>
-                  <td><?php echo (int) $s->id; ?></td>
-                  <td><?php echo (int) $s->step_order; ?></td>
-                  <td><?php echo htmlspecialchars((string) $s->step_label); ?></td>
-                  <td><?php echo htmlspecialchars((string) $s->step_title); ?></td>
-                  <td><?php echo htmlspecialchars((string) $s->step_marks); ?></td>
-                  <td><?php echo htmlspecialchars((string) $s->marking_type); ?></td>
-                  <td><?php echo htmlspecialchars((string) $s->min_marks) . ' - ' . htmlspecialchars((string) $s->max_marks); ?></td>
-                  <td><?php echo ((int) $s->status === 1) ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">Inactive</span>'; ?></td>
-                  <td>
-                    <button type="button" class="btn btn-info btn-xs"
-                      onclick='editStep(<?php echo (int) $s->id; ?>,
-                        <?php echo (int) $s->step_order; ?>,
-                        <?php echo json_encode((string) $s->step_label); ?>,
-                        <?php echo json_encode((string) $s->step_title); ?>,
-                        <?php echo json_encode((string) $s->step_detail); ?>,
-                        <?php echo json_encode((string) $s->step_marks); ?>,
-                        <?php echo json_encode((string) $s->marking_type); ?>,
-                        <?php echo json_encode((string) $s->min_marks); ?>,
-                        <?php echo json_encode((string) $s->max_marks); ?>,
-                        <?php echo (int) $s->status; ?>
-                      )'>Edit</button>
-                    <a class="btn btn-danger btn-xs"
-                      href="<?php echo base_url('admin/emarking/delete_rubric_step/' . (int) $s->id); ?>"
-                      onclick="return confirm('Delete this step?');">Delete</a>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </tbody>
-        </table>
+            <tbody>
+              <?php if (empty($rubric_steps)): ?>
+                <tr><td colspan="10" class="text-center text-muted">No steps yet</td></tr>
+              <?php else: ?>
+                <?php foreach ($rubric_steps as $s): ?>
+                  <tr>
+                    <td>
+                      <input type="checkbox" class="step-check" name="ids[]" value="<?php echo (int) $s->id; ?>">
+                    </td>
+                    <td><?php echo (int) $s->id; ?></td>
+                    <td><?php echo (int) $s->step_order; ?></td>
+                    <td><?php echo htmlspecialchars((string) $s->step_label); ?></td>
+                    <td><?php echo htmlspecialchars((string) $s->step_title); ?></td>
+                    <td><?php echo htmlspecialchars((string) $s->step_marks); ?></td>
+                    <td><?php echo htmlspecialchars((string) $s->marking_type); ?></td>
+                    <td>
+                      <?php echo htmlspecialchars((string) $s->min_marks) . ' - ' . htmlspecialchars((string) $s->max_marks); ?>
+                      <?php if ((string) ($s->marking_type ?? '') === 'RANGE' && isset($s->interval) && (string) $s->interval !== ''): ?>
+                        <?php echo ' / interval ' . htmlspecialchars((string) $s->interval); ?>
+                      <?php endif; ?>
+                    </td>
+                    <td><?php echo ((int) $s->status === 1) ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">Inactive</span>'; ?></td>
+                    <td>
+                      <button type="button" class="btn btn-info btn-xs"
+                        onclick='editStep(<?php echo (int) $s->id; ?>,
+                          <?php echo (int) $s->step_order; ?>,
+                          <?php echo json_encode((string) $s->step_label); ?>,
+                          <?php echo json_encode((string) $s->step_title); ?>,
+                          <?php echo json_encode((string) $s->step_detail); ?>,
+                          <?php echo json_encode((string) $s->step_marks); ?>,
+                          <?php echo json_encode((string) $s->marking_type); ?>,
+                          <?php echo json_encode((string) $s->min_marks); ?>,
+                          <?php echo json_encode((string) $s->max_marks); ?>,
+                          <?php echo json_encode((string) ($s->interval ?? '')); ?>,
+                          <?php echo (int) $s->status; ?>
+                        )'>Edit</button>
+                      <a class="btn btn-danger btn-xs"
+                        href="<?php echo base_url('admin/emarking/delete_rubric_step/' . (int) $s->id); ?>"
+                        onclick="return confirm('Delete this step?');">Delete</a>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </form>
       </div>
     </div>
 
@@ -179,7 +203,7 @@ $question_max = (float) ($question->max_marks ?? 0);
 </section>
 
 <script>
-function editStep(id, order, label, title, detail, marks, type, minMarks, maxMarks, status) {
+function editStep(id, order, label, title, detail, marks, type, minMarks, maxMarks, interval, status) {
   document.getElementById('step_id').value = id;
   document.getElementById('step_order').value = order;
   document.getElementById('step_label').value = label || '';
@@ -189,7 +213,9 @@ function editStep(id, order, label, title, detail, marks, type, minMarks, maxMar
   document.getElementById('marking_type').value = type || 'ZERO_ONE';
   document.getElementById('min_marks').value = minMarks || '0.00';
   document.getElementById('max_marks').value = maxMarks || '1.00';
+  document.getElementById('interval').value = interval || '0.50';
   document.getElementById('step_status').value = (status == 1) ? '1' : '0';
+  toggleRangeFields();
   try {
     window.scrollTo({top: 0, behavior: 'smooth'});
   } catch (e) {
@@ -206,8 +232,59 @@ function resetStepForm() {
   document.getElementById('marking_type').value = 'ZERO_ONE';
   document.getElementById('min_marks').value = '0.00';
   document.getElementById('max_marks').value = '1.00';
+  document.getElementById('interval').value = '0.50';
   document.getElementById('step_status').value = '1';
+  toggleRangeFields();
 }
+
+(function(){
+  function onReady(fn){
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  window.toggleRangeFields = function(){
+    var sel = document.getElementById('marking_type');
+    var wrap = document.getElementById('interval_wrap');
+    if (!sel || !wrap) return;
+    var isRange = String(sel.value || '').toUpperCase() === 'RANGE';
+    wrap.style.display = isRange ? '' : 'none';
+  };
+
+  onReady(function(){
+    var sel = document.getElementById('marking_type');
+    if (sel) sel.addEventListener('change', toggleRangeFields);
+    toggleRangeFields();
+  });
+
+  var selectAll = document.getElementById('selectAllSteps');
+  var btn = document.getElementById('bulkDeleteBtn');
+  if (!selectAll || !btn) return;
+
+  function getChecks(){
+    return Array.prototype.slice.call(document.querySelectorAll('.step-check'));
+  }
+  function updateBtn(){
+    var any = getChecks().some(function(c){ return !!c.checked; });
+    btn.disabled = !any;
+  }
+  selectAll.addEventListener('change', function(){
+    var checks = getChecks();
+    checks.forEach(function(c){ c.checked = !!selectAll.checked; });
+    updateBtn();
+  });
+  document.addEventListener('change', function(e){
+    var t = e && e.target ? e.target : null;
+    if (!t) return;
+    if (t.classList && t.classList.contains('step-check')) {
+      var checks = getChecks();
+      var all = checks.length > 0 && checks.every(function(c){ return !!c.checked; });
+      selectAll.checked = all;
+      updateBtn();
+    }
+  });
+  updateBtn();
+})();
 </script>
 
 <?php include viewPath('admin/includes/footer'); ?>
