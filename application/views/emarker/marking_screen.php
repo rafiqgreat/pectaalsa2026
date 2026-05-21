@@ -12,6 +12,8 @@ $idx = (int) ($batch_current_index ?? 0);
 $timer_seconds = (int) ($timer_seconds ?? 15);
 if ($timer_seconds < 0) $timer_seconds = 0;
 $is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
+$rubric_title = trim((string) ($item->rubric_title ?? ''));
+$panel_heading = $rubric_title !== '' ? $rubric_title : '';
 ?>
 
 <style>
@@ -29,6 +31,11 @@ $is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
   .emarking-panel { border:1px solid #dfe3ea; border-radius:10px; box-shadow:0 10px 24px rgba(16, 24, 40, .10); overflow:hidden; background:#fff; }
   .emarking-panel .card-header { background:#fff; border-bottom:1px solid #eef2f7; padding:12px 14px; }
   .emarking-panel-title { font-size:14px; font-weight:700; color:#111827; margin:0; }
+  /* Urdu font sizing: keep global urdufont-right default, but slightly smaller inside the marking panel */
+  .emarking-panel .urdufont-right { font-size: 18px; }
+  /* Ensure Urdu heading in the right marking panel is truly right-aligned (don't rely on Bootstrap utility class names). */
+  #emarkingPanelTitle.urdufont-right { width:100%; text-align:right; }
+  .rubric-detail { margin-top:10px; padding:10px 12px; border-radius:10px; border:1px solid #e5e7eb; background:#f8fafc; color:#111827; font-size:13px; line-height:1.5; }
   .emarking-panel-body { padding:12px 14px; max-height:52vh; overflow:auto; }
   .emarking-panel-body::-webkit-scrollbar { width:8px; }
   .emarking-panel-body::-webkit-scrollbar-thumb { background:#d7dde6; border-radius:8px; }
@@ -144,6 +151,8 @@ $is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
             $qtLabel = $qt !== '' ? ucwords(strtolower(str_replace(['_', '-'], ' ', $qt))) : 'Rubric';
             if (strtolower($qtLabel) === 'objective steps') $qtLabel = 'Answer Evaluation';
             $maxMarksLabel = htmlspecialchars((string) ((float) ($item->max_marks ?? 0)));
+            // Rubric title overrides the panel heading when provided (configured on question edit screen).
+            $panelHeading = $rubric_title !== '' ? $rubric_title : $qtLabel;
           ?>
           <?php
             // In combined mode, the option value represents "number of correct steps",
@@ -172,10 +181,22 @@ $is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
           <div class="card emarking-panel <?php echo $is_combined_supported ? 'is-combined' : ''; ?>" data-combined-max="<?php echo (int) $combined_max; ?>">
             <div class="card-header">
               <div class="d-flex justify-content-between align-items-center">
-                <h3 class="emarking-panel-title" id="emarkingPanelTitle" data-max="<?php echo $maxMarksLabel; ?>"><?php echo html_escape($qtLabel); ?> (0/<?php echo $maxMarksLabel; ?>)</h3>
+                <h3
+                  class="emarking-panel-title <?php echo $is_urdu_subject ? 'urdufont-right' : ''; ?>"
+                  id="emarkingPanelTitle"
+                  data-max="<?php echo $maxMarksLabel; ?>"
+                >
+                  <?php echo html_escape($panelHeading); ?> (0/<?php echo $maxMarksLabel; ?>)
+                </h3>
               </div>
             </div>
             <div class="card-body emarking-panel-body">
+
+              <?php if (!empty($item->rubric_detail)): ?>
+                <div class="rubric-detail <?php echo $is_urdu_subject ? 'urdufont-right' : ''; ?>">
+                  <?php echo nl2br(html_escape((string) $item->rubric_detail)); ?>
+                </div>
+              <?php endif; ?>
 
               <?php if ($is_combined_supported): ?>
                 <div class="emarking-combined-wrap" data-combined-wrap>
@@ -331,6 +352,9 @@ $is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
                 <?php if (!empty($item->guide_text) || !empty($item->guide_file)): ?>
                   <button type="button" class="emarking-linkbtn" data-toggle="modal" data-target="#guideModal">Guide</button>
                 <?php endif; ?>
+                <?php if (!empty($item->question_paper_file)): ?>
+                  <button type="button" class="emarking-linkbtn" data-toggle="modal" data-target="#questionPaperModal">Question Paper</button>
+                <?php endif; ?>
               </div>
               <small class="text-muted d-block">Current item status: <?php echo html_escape((string) $item->status); ?></small>
             </div>
@@ -395,6 +419,38 @@ $is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
           <?php endif; ?>
           <?php if (!empty($item->guide_file)): ?>
             <div class="mt-3"><a href="<?php echo base_url((string) $item->guide_file); ?>" target="_blank">Open guide file</a></div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+<?php endif; ?>
+
+<?php if (!empty($item->question_paper_file)): ?>
+  <div class="modal fade" id="questionPaperModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Question Paper</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <?php
+            $paper_path = (string) $item->question_paper_file;
+            $paper_url = base_url($paper_path);
+            $paper_ext = strtolower(pathinfo($paper_path, PATHINFO_EXTENSION));
+            $paper_is_image = in_array($paper_ext, ['png', 'jpg', 'jpeg', 'gif', 'webp'], true);
+            $paper_is_pdf = ($paper_ext === 'pdf');
+          ?>
+
+          <?php if ($paper_is_image): ?>
+            <img src="<?php echo htmlspecialchars($paper_url); ?>" alt="Question Paper" class="img-fluid" style="max-height:75vh;">
+          <?php elseif ($paper_is_pdf): ?>
+            <iframe src="<?php echo htmlspecialchars($paper_url); ?>" style="width:100%;height:75vh;border:0;" title="Question Paper"></iframe>
+          <?php else: ?>
+            <a href="<?php echo htmlspecialchars($paper_url); ?>" target="_blank" rel="noopener">Open question paper file</a>
           <?php endif; ?>
         </div>
       </div>
