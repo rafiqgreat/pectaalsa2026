@@ -66,7 +66,7 @@
                     <tbody>
                       <?php foreach ($result_crq['errors'] as $e): ?>
                         <tr>
-                          <td style="max-width:320px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><?php echo htmlspecialchars((string) ($e['file'] ?? '')); ?></td>
+                          <td style="white-space:normal; word-break:break-all;"><?php echo htmlspecialchars((string) ($e['file'] ?? '')); ?></td>
                           <td><?php echo htmlspecialchars((string) ($e['reason'] ?? '')); ?></td>
                         </tr>
                       <?php endforeach; ?>
@@ -110,7 +110,7 @@
                     <tbody>
                       <?php foreach ($result_dict['errors'] as $e): ?>
                         <tr>
-                          <td style="max-width:320px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><?php echo htmlspecialchars((string) ($e['file'] ?? '')); ?></td>
+                          <td style="white-space:normal; word-break:break-all;"><?php echo htmlspecialchars((string) ($e['file'] ?? '')); ?></td>
                           <td><?php echo htmlspecialchars((string) ($e['reason'] ?? '')); ?></td>
                         </tr>
                       <?php endforeach; ?>
