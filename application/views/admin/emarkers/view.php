@@ -285,7 +285,10 @@ defined('BASEPATH') or exit('No direct script access allowed');
 		<?php $s = isset($specialization) && is_object($specialization) ? $specialization : null; ?>
 		<div class="section-title">Area Of Specialization</div>
 		<div class="section-card">
-			<?php echo htmlspecialchars((string) ($s->specialization ?? '')); ?>
+			<?php $specVal = trim((string) ($s->specialization ?? '')); ?>
+			<span class="<?php echo (strtoupper($specVal) === 'URDU') ? 'urdufont-right' : ''; ?>">
+				<?php echo htmlspecialchars($specVal); ?>
+			</span>
 		</div>
 
 		<div class="section-title">E-marking Experience:</div>

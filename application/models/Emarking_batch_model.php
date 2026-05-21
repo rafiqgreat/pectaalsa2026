@@ -26,6 +26,34 @@ class Emarking_batch_model extends CI_Model
 		return $this->db->get()->result();
 	}
 
+	public function get_emarkers_by_specializations($specializations)
+	{
+		// Filter active eMarkers by subject specialization(s) (case-insensitive).
+		$specializations = is_array($specializations) ? $specializations : [];
+		$specializations = array_values(array_unique(array_filter(array_map('trim', $specializations), function ($v) { return (string) $v !== ''; })));
+		if (empty($specializations)) return [];
+
+		$role_col = $this->role_column();
+		$norm = array_map('strtoupper', $specializations);
+		$escaped = array_map([$this->db, 'escape'], $norm);
+
+		$this->db->select('u.id, u.name, u.username, u.email, u.phone');
+		$this->db->from('users u');
+		$this->db->join('teacher_specializations sp', 'sp.user_id = u.id', 'left');
+		$this->db->where('u.' . $role_col, 2);
+		if ($this->db->field_exists('status', 'users')) {
+			$this->db->where('u.status', 1);
+		}
+		if ($this->db->field_exists('blacklisted', 'users')) {
+			$this->db->where('u.blacklisted', 0);
+		}
+
+		$this->db->where('UPPER(sp.specialization) IN (' . implode(',', $escaped) . ')', null, false);
+		$this->db->group_by('u.id');
+		$this->db->order_by('u.name', 'ASC');
+		return $this->db->get()->result();
+	}
+
 	private function get_emarker_user($id)
 	{
 		$role_col = $this->role_column();
@@ -162,8 +190,15 @@ class Emarking_batch_model extends CI_Model
 		$grade = isset($filters['grade']) ? trim((string) $filters['grade']) : '';
 		if ($grade !== '') $this->db->where('b.grade', (int) $grade);
 
-		$subject_code = isset($filters['subject_code']) ? trim((string) $filters['subject_code']) : '';
-		if ($subject_code !== '') $this->db->where('b.subject_code', $subject_code);
+		// Support both single subject_code and an array for role-based filtering (e.g. Subject Specialist).
+		$subject_code = $filters['subject_code'] ?? '';
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('b.subject_code', $subject_code);
+		} else {
+			$subject_code = trim((string) $subject_code);
+			if ($subject_code !== '') $this->db->where('b.subject_code', $subject_code);
+		}
 
 		$assigned_to = isset($filters['assigned_to']) ? trim((string) $filters['assigned_to']) : '';
 		if ($assigned_to !== '') $this->db->where('b.assigned_to', (int) $assigned_to);

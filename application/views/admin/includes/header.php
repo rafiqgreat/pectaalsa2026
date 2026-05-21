@@ -44,6 +44,19 @@ defined('BASEPATH') or exit('No direct script access allowed');
   <link rel="stylesheet" href="<?= base_url('assets/css/style.css'); ?>">
 
   <style>
+    @font-face {
+      font-family: "Jameel Noori Nastaleeq";
+      src: url("<?= base_url() ?>assets/fonts/Jameel Noori Nastaleeq.ttf");
+      font-weight: bold;
+    }
+
+    .urdufont-right {
+      font-family: 'Jameel Noori Nastaleeq', 'Open Sans', sans-serif;
+      direction: rtl;
+      font-size: 22px;
+      text-align: right;
+    }
+
     .district {
       font-weight: bold;
       font-size: 24px;

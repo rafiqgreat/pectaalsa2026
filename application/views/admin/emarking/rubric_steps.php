@@ -152,7 +152,7 @@ $question_max = (float) ($question->max_marks ?? 0);
                   <td><?php echo ((int) $s->status === 1) ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">Inactive</span>'; ?></td>
                   <td>
                     <button type="button" class="btn btn-info btn-xs"
-                      onclick="editStep(<?php echo (int) $s->id; ?>,
+                      onclick='editStep(<?php echo (int) $s->id; ?>,
                         <?php echo (int) $s->step_order; ?>,
                         <?php echo json_encode((string) $s->step_label); ?>,
                         <?php echo json_encode((string) $s->step_title); ?>,
@@ -162,7 +162,7 @@ $question_max = (float) ($question->max_marks ?? 0);
                         <?php echo json_encode((string) $s->min_marks); ?>,
                         <?php echo json_encode((string) $s->max_marks); ?>,
                         <?php echo (int) $s->status; ?>
-                      )">Edit</button>
+                      )'>Edit</button>
                     <a class="btn btn-danger btn-xs"
                       href="<?php echo base_url('admin/emarking/delete_rubric_step/' . (int) $s->id); ?>"
                       onclick="return confirm('Delete this step?');">Delete</a>

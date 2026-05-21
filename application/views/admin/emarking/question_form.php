@@ -131,21 +131,63 @@ $action_url = $is_edit ? base_url('admin/emarking/edit_question/' . (int) $quest
               <label>Sample Answer File (optional)</label>
               <input type="file" name="sample_answer_file" class="form-control">
               <?php if ($is_edit && !empty($question->sample_answer_file)): ?>
-                <small class="text-muted">Current: <?php echo htmlspecialchars((string) $question->sample_answer_file); ?></small>
+                <input type="hidden" name="remove_sample_answer_file" id="remove_sample_answer_file" value="0">
+                <div id="sample_answer_file_current">
+                  <small class="text-muted d-block">
+                    Current:
+                    <a href="<?php echo base_url((string) $question->sample_answer_file); ?>" target="_blank" rel="noopener">
+                      <?php echo htmlspecialchars((string) $question->sample_answer_file); ?>
+                    </a>
+                  </small>
+                </div>
+                <div class="mt-1" id="sample_answer_file_controls">
+                  <button type="button" class="btn btn-danger btn-xs"
+                    onclick="confirmRemoveUpload('sample_answer_file', 'remove_sample_answer_file', 'sample_answer_file_controls')">
+                    Remove
+                  </button>
+                </div>
               <?php endif; ?>
             </div>
             <div class="form-group col-md-4">
               <label>Guide File (optional)</label>
               <input type="file" name="guide_file" class="form-control">
               <?php if ($is_edit && !empty($question->guide_file)): ?>
-                <small class="text-muted">Current: <?php echo htmlspecialchars((string) $question->guide_file); ?></small>
+                <input type="hidden" name="remove_guide_file" id="remove_guide_file" value="0">
+                <div id="guide_file_current">
+                  <small class="text-muted d-block">
+                    Current:
+                    <a href="<?php echo base_url((string) $question->guide_file); ?>" target="_blank" rel="noopener">
+                      <?php echo htmlspecialchars((string) $question->guide_file); ?>
+                    </a>
+                  </small>
+                </div>
+                <div class="mt-1" id="guide_file_controls">
+                  <button type="button" class="btn btn-danger btn-xs"
+                    onclick="confirmRemoveUpload('guide_file', 'remove_guide_file', 'guide_file_controls')">
+                    Remove
+                  </button>
+                </div>
               <?php endif; ?>
             </div>
             <div class="form-group col-md-4">
               <label>Question Paper File (optional)</label>
               <input type="file" name="question_paper_file" class="form-control">
               <?php if ($is_edit && !empty($question->question_paper_file)): ?>
-                <small class="text-muted">Current: <?php echo htmlspecialchars((string) $question->question_paper_file); ?></small>
+                <input type="hidden" name="remove_question_paper_file" id="remove_question_paper_file" value="0">
+                <div id="question_paper_file_current">
+                  <small class="text-muted d-block">
+                    Current:
+                    <a href="<?php echo base_url((string) $question->question_paper_file); ?>" target="_blank" rel="noopener">
+                      <?php echo htmlspecialchars((string) $question->question_paper_file); ?>
+                    </a>
+                  </small>
+                </div>
+                <div class="mt-1" id="question_paper_file_controls">
+                  <button type="button" class="btn btn-danger btn-xs"
+                    onclick="confirmRemoveUpload('question_paper_file', 'remove_question_paper_file', 'question_paper_file_controls')">
+                    Remove
+                  </button>
+                </div>
               <?php endif; ?>
             </div>
           </div>
@@ -198,6 +240,47 @@ $action_url = $is_edit ? base_url('admin/emarking/edit_question/' . (int) $quest
 
   </div>
 </section>
+
+<script>
+var emarkingRemoveFileUrl = <?php echo json_encode(base_url('admin/emarking/remove_question_file')); ?>;
+var emarkingQuestionId = <?php echo (int) ($question->id ?? 0); ?>;
+
+function confirmRemoveUpload(field, hiddenInputId, controlsId) {
+  if (!emarkingQuestionId) return;
+  if (!confirm('Delete current ' + field.replace(/_/g, ' ') + '?')) return;
+
+  var controls = document.getElementById(controlsId);
+  if (controls) {
+    controls.innerHTML = '<span class="text-muted">Removing...</span>';
+  }
+
+  fetch(emarkingRemoveFileUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+    body: new URLSearchParams({ question_id: String(emarkingQuestionId), field: String(field) })
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (data) {
+    if (!data || data.ok !== true) throw new Error((data && data.message) ? data.message : 'Failed');
+
+    var hidden = document.getElementById(hiddenInputId);
+    if (hidden) hidden.value = '1';
+
+    var current = document.getElementById(field + '_current');
+    if (current) current.parentNode.removeChild(current);
+
+    if (controls) {
+      controls.innerHTML = '<span class="badge badge-success">Removed</span>';
+    }
+  })
+  .catch(function (e) {
+    if (controls) {
+      controls.innerHTML = '<span class="badge badge-danger">Remove failed</span>';
+    }
+    alert('Unable to remove file. ' + (e && e.message ? e.message : ''));
+  });
+}
+</script>
 
 <?php include viewPath('admin/includes/footer'); ?>
 

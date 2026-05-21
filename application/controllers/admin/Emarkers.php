@@ -3,6 +3,40 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Emarkers extends MY_Controller
 {
+	private function get_subject_specialist_subjects()
+	{
+		// Subject Specialist assigned subjects are stored in `users.subjects`.
+		// In this codebase it is typically JSON-encoded array (see admin/Users and admin/Dashboard),
+		// but we also support legacy comma-separated strings.
+		if (!$this->db->field_exists('subjects', 'users')) return [];
+
+		$uid = (int) logged('id');
+		if ($uid <= 0) return [];
+
+		$row = $this->db->select('subjects')->get_where('users', ['id' => $uid])->row();
+		$raw = trim((string) ($row->subjects ?? ''));
+		if ($raw === '') return [];
+
+		$subjects = [];
+		$decoded = json_decode($raw, true);
+		if (is_array($decoded)) {
+			$subjects = $decoded;
+		} else {
+			$subjects = preg_split('/\s*,\s*/', $raw);
+		}
+
+		$subjects = array_values(array_unique(array_filter(array_map('trim', (array) $subjects), static function ($v) {
+			return $v !== '';
+		})));
+		return $subjects;
+	}
+
+	private function subject_specialist_can_access_method($method)
+	{
+		// Subject Specialist can only browse and view evaluator profiles.
+		return in_array((string) $method, ['index', 'pending', 'approved', 'rejected', 'view'], true);
+	}
+
 	private function role_column()
 	{
 		if ($this->db->field_exists('role', 'users')) return 'role';
@@ -40,8 +74,15 @@ class Emarkers extends MY_Controller
 	public function __construct()
 	{
 		parent::__construct();
-		// Admin only (role 1)
-		if ((int) logged('role') !== 1) {
+		// Admin (role 1) and Subject Specialist (role 18) can access this controller.
+		$role = (int) logged('role');
+		if (!in_array($role, [1, 18], true)) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		// Subject Specialist must be limited to non-destructive methods.
+		if ($role === 18 && !$this->subject_specialist_can_access_method($this->router->fetch_method())) {
 			redirect('errors/permission_denied');
 			die;
 		}
@@ -57,6 +98,9 @@ class Emarkers extends MY_Controller
 		$type = strtolower((string) $type);
 		$type = in_array($type, ['approved', 'pending', 'rejected'], true) ? $type : 'pending';
 		$this->page_data['page']->submenu = $type;
+
+		// Ensure a clean query builder state for the listing query.
+		$this->db->reset_query();
 
 		$cnic = trim((string) $this->input->get('cnic', true));
 		$name = trim((string) $this->input->get('name', true));
@@ -79,90 +123,143 @@ class Emarkers extends MY_Controller
 			CASE WHEN s.rejected_at IS NOT NULL AND s.updated_at > s.rejected_at THEN 1 ELSE 0 END AS is_resubmission,"
 			: "'' AS review_status, NULL AS rejection_reason, NULL AS rejected_at, s.updated_at AS steps_updated_at, 0 AS is_resubmission,";
 
+		// NOTE: Do NOT execute any other DB queries after we start building the listing query below.
+		// CodeIgniter's Query Builder state is reset after queries, which would wipe SELECT/FROM/JOIN
+		// and result in "No tables used".
+		$ss_subjects = null;
+		if ((int) logged('role') === 18) {
+			$ss_subjects = $this->get_subject_specialist_subjects();
+			// UX/debug hint (rendered in the view, not flashdata): show what subjects are applied for SS filtering.
+			// This does not reveal any evaluator data, only the SS's own assigned subjects.
+			$this->page_data['ss_subjects_filter'] = is_array($ss_subjects) ? $ss_subjects : [];
+		}
+
 		// Base query
-		$this->db->select("u.id, u.name, u.email, u.phone, u.cnic, u.status, u.created_at,
+		// Build listing query as raw SQL to avoid Query Builder state corruption ("No tables used").
+		$where = [];
+		$params = [];
+
+		$where[] = 'u.`' . $role_col . '` = ?';
+		$params[] = 2;
+
+		// Registration must be completed to appear in queues
+		$where[] = 's.registration_completed = ?';
+		$params[] = 1;
+
+		// Filter by request type (review_status)
+		if ($has_review) {
+			$where[] = 's.review_status = ?';
+			$params[] = $type;
+		} else {
+			// Backward compatible fallback: pending=inactive, approved=active, rejected=none
+			if ($type === 'approved') { $where[] = 'u.status = ?'; $params[] = 1; }
+			if ($type === 'pending')  { $where[] = 'u.status = ?'; $params[] = 0; }
+			if ($type === 'rejected') { $where[] = 'u.status = ?'; $params[] = -1; }
+		}
+
+		if ($cnic !== '') {
+			$where[] = 'u.cnic LIKE ?';
+			$params[] = '%' . $cnic . '%';
+		}
+		if ($name !== '') {
+			$where[] = 'u.name LIKE ?';
+			$params[] = '%' . $name . '%';
+		}
+		if ($spec !== '') {
+			$where[] = 'sp.specialization = ?';
+			$params[] = $spec;
+		}
+		if ($qual !== '') {
+			$where[] = 'edu.highest_degree = ?';
+			$params[] = $qual;
+		}
+
+		// IMPORTANT ACCESS RULE:
+		// Subject Specialist (role 18) can only see evaluator records where evaluator's
+		// `teacher_specializations.specialization` matches any subject assigned in SS `users.subjects`.
+		if ((int) logged('role') === 18) {
+			$subjects = is_array($ss_subjects) ? $ss_subjects : [];
+			if (empty($subjects)) {
+				$where[] = '1 = 0';
+			} else {
+				$placeholders = implode(',', array_fill(0, count($subjects), '?'));
+				$where[] = 'UPPER(sp.specialization) IN (' . $placeholders . ')';
+				foreach ($subjects as $subj) {
+					$params[] = strtoupper((string) $subj);
+				}
+			}
+		}
+
+		$orderBy = 'u.id DESC';
+		if ($sort === 'exp') {
+			$orderBy = 'exp.total_years ' . ($dir === 'desc' ? 'DESC' : 'ASC');
+		}
+
+		$sql = "SELECT
+			u.id, u.name, u.email, u.phone, u.cnic, u.status, u.created_at,
 			s.registration_completed, {$review_select}
 			sp.specialization,
 			edu.highest_degree,
 			exp.total_years,
 			exp.teaching_level
-		", false)
-			->from('users u')
-			->join('teacher_registration_steps s', 's.user_id = u.id', 'left')
-			->join('teacher_specializations sp', 'sp.user_id = u.id', 'left')
-			->join("(
-				SELECT e.user_id,
-					(
-						SELECT e2.degree
-						FROM teacher_educations e2
-						WHERE e2.user_id = e.user_id
-						ORDER BY
-							CASE
-								WHEN e2.degree = 'PhD' THEN 6
-								WHEN e2.degree = 'MPhil. / MS (18 years)' THEN 5
-								WHEN e2.degree = 'Master / M.A/ MSc./ BS (Hons) (16 years)' THEN 4
-								WHEN e2.degree = 'B.A / BSc. (14 years)' THEN 3
-								WHEN e2.degree = 'HSSC' THEN 2
-								WHEN e2.degree = 'SSC' THEN 1
-								ELSE 0
-							END DESC,
-							e2.passing_year DESC,
-							e2.id DESC
-						LIMIT 1
-					) AS highest_degree
-				FROM teacher_educations e
-				GROUP BY e.user_id
-			) edu", 'edu.user_id = u.id', 'left', false)
-			->join("(
-				SELECT x.user_id,
-					ROUND(SUM(DATEDIFF(COALESCE(x.end_date, CURDATE()), x.start_date)) / 365.25, 1) AS total_years,
-					(
-						SELECT x2.teaching_level
-						FROM teacher_experiences x2
-						WHERE x2.user_id = x.user_id
-						  AND x2.teaching_level IS NOT NULL
-						  AND x2.teaching_level <> ''
-						ORDER BY COALESCE(x2.end_date, CURDATE()) DESC, x2.id DESC
-						LIMIT 1
-					) AS teaching_level
-				FROM teacher_experiences x
-				GROUP BY x.user_id
-			) exp", 'exp.user_id = u.id', 'left', false)
-			->where('u.' . $role_col, 2);
+		FROM users u
+		LEFT JOIN teacher_registration_steps s ON s.user_id = u.id
+		LEFT JOIN teacher_specializations sp ON sp.user_id = u.id
+		LEFT JOIN (
+			SELECT e.user_id,
+				(
+					SELECT e2.degree
+					FROM teacher_educations e2
+					WHERE e2.user_id = e.user_id
+					ORDER BY
+						CASE
+							WHEN e2.degree = 'PhD' THEN 6
+							WHEN e2.degree = 'MPhil. / MS (18 years)' THEN 5
+							WHEN e2.degree = 'Master / M.A/ MSc./ BS (Hons) (16 years)' THEN 4
+							WHEN e2.degree = 'B.A / BSc. (14 years)' THEN 3
+							WHEN e2.degree = 'HSSC' THEN 2
+							WHEN e2.degree = 'SSC' THEN 1
+							ELSE 0
+						END DESC,
+						e2.passing_year DESC,
+						e2.id DESC
+					LIMIT 1
+				) AS highest_degree
+			FROM teacher_educations e
+			GROUP BY e.user_id
+		) edu ON edu.user_id = u.id
+		LEFT JOIN (
+			SELECT x.user_id,
+				ROUND(SUM(DATEDIFF(COALESCE(x.end_date, CURDATE()), x.start_date)) / 365.25, 1) AS total_years,
+				(
+					SELECT x2.teaching_level
+					FROM teacher_experiences x2
+					WHERE x2.user_id = x.user_id
+					  AND x2.teaching_level IS NOT NULL
+					  AND x2.teaching_level <> ''
+					ORDER BY COALESCE(x2.end_date, CURDATE()) DESC, x2.id DESC
+					LIMIT 1
+				) AS teaching_level
+			FROM teacher_experiences x
+			GROUP BY x.user_id
+		) exp ON exp.user_id = u.id
+		WHERE " . implode(' AND ', $where) . "
+		ORDER BY {$orderBy}";
 
-		// Filter by request type (review_status)
-		if ($has_review) {
-			$this->db->where('s.review_status', $type);
+		$query = $this->db->query($sql, $params);
+		if ($query === false) {
+			$err = $this->db->error();
+			$this->session->set_flashdata('alert-type', 'danger');
+			$this->session->set_flashdata(
+				'alert',
+				'Evaluator list query failed: ' . htmlspecialchars((string) ($err['message'] ?? 'Unknown error'))
+			);
+			$rows = [];
 		} else {
-			// Backward compatible fallback: pending=inactive, approved=active, rejected=none
-			if ($type === 'approved') $this->db->where('u.status', 1);
-			if ($type === 'pending') $this->db->where('u.status', 0);
-			if ($type === 'rejected') $this->db->where('u.status', -1);
+			$rows = $query->result();
 		}
 
-		// Registration must be completed to appear in queues
-		$this->db->where('s.registration_completed', 1);
-
-		if ($cnic !== '') {
-			$this->db->like('u.cnic', $cnic);
-		}
-		if ($name !== '') {
-			$this->db->like('u.name', $name);
-		}
-		if ($spec !== '') {
-			$this->db->where('sp.specialization', $spec);
-		}
-		if ($qual !== '') {
-			$this->db->where('edu.highest_degree', $qual);
-		}
-
-		if ($sort === 'exp') {
-			$this->db->order_by('exp.total_years', $dir === 'desc' ? 'DESC' : 'ASC', false);
-		} else {
-			$this->db->order_by('u.id', 'DESC');
-		}
-
-		$rows = $this->db->get()->result();
+		// Keep SS UI minimal: only show applied subject filter (see view).
 
 		// Build dropdown options (include defaults even if no records exist yet)
 		$spec_opts = $this->signup->get_specialization_options();
@@ -219,6 +316,18 @@ class Emarkers extends MY_Controller
 
 		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
+
+		// Subject Specialist is only allowed to view evaluator profiles within assigned subjects.
+		if ((int) logged('role') === 18) {
+			$subjects = $this->get_subject_specialist_subjects();
+			$spec_row = $this->db->select('specialization')->get_where('teacher_specializations', ['user_id' => $id])->row();
+			$eval_spec = trim((string) ($spec_row->specialization ?? ''));
+			$allowed = array_map('strtoupper', $subjects);
+			if ($eval_spec === '' || empty($allowed) || !in_array(strtoupper($eval_spec), $allowed, true)) {
+				redirect('errors/permission_denied');
+				die;
+			}
+		}
 
 		$this->page_data['page']->title = 'E-Marker Profile';
 		$this->page_data['page']->menu = 'emarkers';

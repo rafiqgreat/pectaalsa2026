@@ -66,6 +66,16 @@ defined('BASEPATH') or exit('No direct script access allowed');
 							</div>
 						<?php endif; ?>
 
+						<?php if ((int) logged('role') === 18): ?>
+							<?php
+								$ss_subjects_filter = isset($ss_subjects_filter) && is_array($ss_subjects_filter) ? $ss_subjects_filter : [];
+							?>
+							<div class="alert alert-info">
+								<strong>Subject Specialist Filter:</strong>
+								<?php echo !empty($ss_subjects_filter) ? htmlspecialchars(implode(', ', $ss_subjects_filter)) : '<em>No subjects assigned</em>'; ?>
+							</div>
+						<?php endif; ?>
+
 						<div class="row mb-3">
 							<div class="col-md-3 col-sm-6 mb-2">
 								<input type="text" id="filter-cnic" class="form-control form-control-sm" placeholder="CNIC" value="<?php echo htmlspecialchars((string) $cnic); ?>">
@@ -89,11 +99,9 @@ defined('BASEPATH') or exit('No direct script access allowed');
 									<?php endforeach; ?>
 								</select>
 							</div>
-							<div class="col-md-2 col-sm-6 mb-2">
-								<button type="button" id="filter-search" class="btn btn-sm btn-primary btn-block">Search</button>
-							</div>
-							<div class="col-md-2 col-sm-6 mb-2">
-								<button type="button" id="filter-reset" class="btn btn-sm btn-outline-secondary btn-block">Reset</button>
+							<div class="col-12 mb-2 d-flex justify-content-end">
+								<button type="button" id="filter-search" class="btn btn-sm btn-primary mr-2 px-4" style="min-width: 120px;">Search</button>
+								<button type="button" id="filter-reset" class="btn btn-sm btn-outline-secondary px-4" style="min-width: 120px;">Reset</button>
 							</div>
 						</div>
 
@@ -127,21 +135,26 @@ defined('BASEPATH') or exit('No direct script access allowed');
 											<td><?php echo (int) ($r->id ?? 0); ?></td>
 											<td><?php echo htmlspecialchars((string) ($r->name ?? '')); ?></td>
 											<td><?php echo htmlspecialchars((string) ($r->cnic ?? '')); ?></td>
-											<td><?php echo htmlspecialchars((string) ($r->specialization ?? '')); ?></td>
+											<?php $specVal = trim((string) ($r->specialization ?? '')); ?>
+											<td class="<?php echo (strtoupper($specVal) === 'URDU') ? 'urdufont-right' : ''; ?>">
+												<?php echo htmlspecialchars($specVal); ?>
+											</td>
 											<td><?php echo number_format((float) ($r->total_years ?? 0), 1); ?> years</td>
 											<td><?php echo htmlspecialchars((string) ($r->highest_degree ?? '')); ?></td>
 											<td><?php echo htmlspecialchars((string) ($r->teaching_level ?? '---')); ?></td>
 											<td>
 												<?php
 													$active = ((int) ($r->status ?? 0) === 1);
-													$disabled = ($type !== 'approved') ? 'disabled' : '';
+													// Only Admin can change evaluator active status (SS can view only).
+													$disabled = ($type !== 'approved' || (int) logged('role') === 18) ? 'disabled' : '';
 												?>
 												<input
 													type="checkbox"
 													name="my-checkbox"
 													<?php echo $active ? 'checked' : ''; ?>
 													<?php echo $disabled; ?>
-													onchange="updateEmarkerStatus('<?php echo (int) ($r->id ?? 0); ?>', $(this).is(':checked'))"
+													class="js-emarker-status-switch"
+													data-user-id="<?php echo (int) ($r->id ?? 0); ?>"
 													data-bootstrap-switch
 													data-off-color="secondary"
 													data-on-color="success"
@@ -213,15 +226,24 @@ defined('BASEPATH') or exit('No direct script access allowed');
 		});
 	});
 
-	window.updateEmarkerStatus = (id, status) => {
-		$.get('<?php echo url('admin/emarkers/change_status'); ?>/' + id, {
-			status: status
-		}, (data) => {
-			if (data !== 'done') {
+	// Status switch: bind to bootstrapSwitch event to avoid spurious triggers on initial render.
+	$(function () {
+		$('.js-emarker-status-switch').on('switchChange.bootstrapSwitch', function (event, state) {
+			var $sw = $(this);
+			var id = parseInt($sw.data('user-id'), 10) || 0;
+			if (!id) return;
+
+			$.get('<?php echo url('admin/emarkers/change_status'); ?>/' + id, {
+				status: state
+			}, function (data) {
+				if (data !== 'done') {
+					alert('Unable to change status.');
+					$sw.bootstrapSwitch('state', !state, true);
+				}
+			}).fail(function () {
 				alert('Unable to change status.');
-			}
-		}).fail(function() {
-			alert('Unable to change status.');
+				$sw.bootstrapSwitch('state', !state, true);
+			});
 		});
-	}
+	});
 </script>

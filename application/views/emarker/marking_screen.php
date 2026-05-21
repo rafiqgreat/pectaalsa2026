@@ -11,6 +11,7 @@ $total = (int) ($batch_total_items ?? 0);
 $idx = (int) ($batch_current_index ?? 0);
 $timer_seconds = (int) ($timer_seconds ?? 15);
 if ($timer_seconds < 0) $timer_seconds = 0;
+$is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
 ?>
 
 <style>
@@ -118,7 +119,7 @@ if ($timer_seconds < 0) $timer_seconds = 0;
           </div>
           <div class="card-body">
             <div class="mb-2">
-              <div class="emarking-qtitle" style="white-space:pre-wrap;"><?php echo html_escape((string) $item->question_title); ?></div>
+              <div class="emarking-qtitle <?php echo $is_urdu_subject ? 'urdufont-right' : ''; ?>" style="white-space:pre-wrap;"><?php echo html_escape((string) $item->question_title); ?></div>
             </div>
 
             <div class="mb-2">
@@ -145,7 +146,19 @@ if ($timer_seconds < 0) $timer_seconds = 0;
             $maxMarksLabel = htmlspecialchars((string) ((float) ($item->max_marks ?? 0)));
           ?>
           <?php
-            $combined_max = (int) ((float) ($item->max_marks ?? 0));
+            // In combined mode, the option value represents "number of correct steps",
+            // not total marks. This supports fractional step marks (e.g. 0.5 each).
+            $combined_max = !empty($steps) ? count($steps) : 0;
+            $combined_prefix = [0 => 0.0];
+            if (!empty($steps)) {
+              $running = 0.0;
+              $i = 0;
+              foreach ($steps as $cs) {
+                $i++;
+                $running += (float) ($cs->step_marks ?? 0);
+                $combined_prefix[$i] = $running;
+              }
+            }
             $is_combined_supported = true;
             if (!empty($steps)) {
               foreach ($steps as $cs) {
@@ -179,11 +192,15 @@ if ($timer_seconds < 0) $timer_seconds = 0;
                           if ($v === 0) $label = 'All incorrect';
                           else $label = $v . ' correct';
                         }
+                        $marksVal = (float) ($combined_prefix[$v] ?? 0.0);
+                        $marksText = (abs($marksVal - (int) $marksVal) < 0.000001)
+                          ? (string) ((int) $marksVal)
+                          : rtrim(rtrim(number_format($marksVal, 2, '.', ''), '0'), '.');
                       ?>
                       <div class="emarking-box" role="button" tabindex="0" data-mark-option data-type="COMBINED" data-value="<?php echo (int) $v; ?>">
                         <div class="emarking-box-label"><?php echo html_escape($label); ?></div>
                         <div class="emarking-box-value">
-                          <span class="emarking-box-dot"><?php echo (int) $v; ?></span>
+                          <span class="emarking-box-dot"><?php echo html_escape($v === 0 ? '0' : $marksText); ?></span>
                         </div>
                       </div>
                     <?php endfor; ?>
@@ -337,10 +354,24 @@ if ($timer_seconds < 0) $timer_seconds = 0;
         </div>
         <div class="modal-body">
           <?php if (!empty($item->sample_answer)): ?>
-            <div style="white-space:pre-wrap;"><?php echo html_escape((string) $item->sample_answer); ?></div>
+            <div class="<?php echo $is_urdu_subject ? 'urdufont-right' : ''; ?>" style="white-space:pre-wrap;">
+              <?php echo html_escape((string) $item->sample_answer); ?>
+            </div>
           <?php endif; ?>
           <?php if (!empty($item->sample_answer_file)): ?>
-            <div class="mt-3"><a href="<?php echo base_url((string) $item->sample_answer_file); ?>" target="_blank">Open sample answer file</a></div>
+            <?php
+              $sample_path = (string) $item->sample_answer_file;
+              $sample_url = base_url($sample_path);
+              $sample_ext = strtolower(pathinfo($sample_path, PATHINFO_EXTENSION));
+              $is_image = in_array($sample_ext, ['png', 'jpg', 'jpeg', 'gif', 'webp'], true);
+            ?>
+            <?php if ($is_image): ?>
+              <div class="mt-3">
+                <img src="<?php echo htmlspecialchars($sample_url); ?>" alt="Sample Answer" class="img-fluid" style="max-height:70vh;">
+              </div>
+            <?php else: ?>
+              <div class="mt-3"><a href="<?php echo htmlspecialchars($sample_url); ?>" target="_blank" rel="noopener">Open sample answer file</a></div>
+            <?php endif; ?>
           <?php endif; ?>
         </div>
       </div>
@@ -522,6 +553,7 @@ if ($timer_seconds < 0) $timer_seconds = 0;
 
   function computeObtained() {
     var total = 0;
+    var correctCount = 0;
     anyChosen = false;
     var cards = Array.prototype.slice.call(document.querySelectorAll('.rubric-card[data-step-id]'));
     cards.forEach(function(card){
@@ -546,7 +578,10 @@ if ($timer_seconds < 0) $timer_seconds = 0;
       var checked = card.querySelector('input[type=\"radio\"][name^=\"steps[\"]:checked');
       if (!checked) return;
       anyChosen = true;
-      if ((checked.value || '') === '1') total += stepMarks;
+      if ((checked.value || '') === '1') {
+        total += stepMarks;
+        correctCount += 1;
+      }
     });
 
     if (obtainedEl) {
@@ -585,8 +620,7 @@ if ($timer_seconds < 0) $timer_seconds = 0;
           o.setAttribute('aria-pressed', 'false');
         });
       } else {
-        var v = total;
-        if (Math.abs(v - Math.round(v)) < 1e-6) v = Math.round(v);
+        var v = correctCount;
         if (v < 0) v = 0;
         Array.prototype.slice.call(combinedGridEl.querySelectorAll('[data-mark-option]')).forEach(function(o){
           var isSel = String(o.getAttribute('data-value') || '') === String(v);

@@ -94,7 +94,10 @@
                     <td><?php echo (int) $q->version; ?></td>
                     <td><?php echo html_escape((string) $q->page_no); ?></td>
                     <td><?php echo html_escape((string) $q->question_no); ?></td>
-                    <td><?php echo html_escape((string) $q->question_title); ?></td>
+                    <?php $isUrdu = ((string) ($q->subject_code ?? '') === '2'); ?>
+                    <td class="<?php echo $isUrdu ? 'urdufont-right' : ''; ?>">
+                      <?php echo html_escape((string) $q->question_title); ?>
+                    </td>
                     <td><?php echo html_escape((string) $q->max_marks); ?></td>
                     <td>
                       <?php if ((int) $q->status === 1): ?>

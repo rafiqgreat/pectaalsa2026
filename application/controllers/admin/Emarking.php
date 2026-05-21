@@ -4,6 +4,12 @@ defined('BASEPATH') or exit('No direct script access allowed');
 class Emarking extends MY_Controller
 {
 	private $allowed_roles = [1, 17, 18, 19];
+	private $subject_code_map = [
+		1 => 'ENGLISH',
+		2 => 'URDU',
+		3 => 'MATH',
+		4 => 'SCIENCE',
+	];
 
 	private function rubric_active_max_total($question_id)
 	{
@@ -47,6 +53,61 @@ class Emarking extends MY_Controller
 		}
 	}
 
+	private function get_subject_specialist_subjects()
+	{
+		// Subject Specialist assigned subjects are stored in `users.subjects` as JSON array.
+		if ($this->current_role() !== 18) return [];
+		if (!$this->db->field_exists('subjects', 'users')) return [];
+
+		$uid = (int) $this->current_user_id();
+		if ($uid <= 0) return [];
+
+		$row = $this->db->select('subjects')->get_where('users', ['id' => $uid])->row();
+		$raw = trim((string) ($row->subjects ?? ''));
+		if ($raw === '') return [];
+
+		$decoded = json_decode($raw, true);
+		$subjects = is_array($decoded) ? $decoded : preg_split('/\s*,\s*/', $raw);
+		$subjects = array_values(array_unique(array_filter(array_map('trim', (array) $subjects), function ($v) { return $v !== ''; })));
+		return $subjects;
+	}
+
+	private function ss_allowed_subject_codes()
+	{
+		$subjects = array_map('strtoupper', $this->get_subject_specialist_subjects());
+		$allowed = [];
+		foreach ($this->subject_code_map as $code => $name) {
+			if (in_array($name, $subjects, true)) $allowed[] = (string) $code;
+		}
+		return $allowed;
+	}
+
+	private function ss_allowed_subject_names()
+	{
+		return array_values(array_unique(array_map('strtoupper', $this->get_subject_specialist_subjects())));
+	}
+
+	private function safe_unlink_relative($relativePath)
+	{
+		$relativePath = str_replace('\\', '/', (string) $relativePath);
+		$relativePath = trim($relativePath);
+		if ($relativePath === '') return false;
+		if (strpos($relativePath, '..') !== false) return false;
+
+		$base = rtrim((string) FCPATH, '\\/');
+		$abs = $base . '/' . ltrim($relativePath, '/');
+		$realBase = realpath($base);
+		$realAbs = realpath($abs);
+		if ($realBase === false || $realAbs === false) return false;
+
+		$realBase = rtrim(str_replace('\\', '/', $realBase), '/') . '/';
+		$realAbs = str_replace('\\', '/', $realAbs);
+		if (strpos($realAbs, $realBase) !== 0) return false;
+
+		if (!is_file($realAbs)) return false;
+		return @unlink($realAbs);
+	}
+
 	public function __construct()
 	{
 		parent::__construct();
@@ -74,7 +135,18 @@ class Emarking extends MY_Controller
 		];
 
 		$this->page_data['filters'] = $filters;
-		$this->page_data['questions'] = $this->emarking->get_questions($filters);
+		$query_filters = $filters;
+		if ($this->current_role() === 18) {
+			$allowed_codes = $this->ss_allowed_subject_codes();
+			$typed = trim((string) ($filters['subject_code'] ?? ''));
+			if ($typed !== '' && !in_array($typed, $allowed_codes, true)) {
+				$query_filters['subject_code'] = ['-1'];
+			} else {
+				$query_filters['subject_code'] = ($typed !== '') ? $typed : $allowed_codes;
+			}
+		}
+
+		$this->page_data['questions'] = $this->emarking->get_questions($query_filters);
 		$this->load->view('admin/emarking/questions', $this->page_data);
 	}
 
@@ -163,6 +235,38 @@ class Emarking extends MY_Controller
 
 			if ($this->form_validation->run() !== false) {
 				$payload = $this->emarking->build_question_payload_from_post($this->current_user_id());
+				$files_to_delete = [];
+
+				// Allow removal/replacement of already uploaded files on edit
+				$remove_sample = (int) $this->input->post('remove_sample_answer_file', true) === 1;
+				$remove_guide = (int) $this->input->post('remove_guide_file', true) === 1;
+				$remove_paper = (int) $this->input->post('remove_question_paper_file', true) === 1;
+
+				if ($remove_sample && !empty($question->sample_answer_file)) {
+					$payload['sample_answer_file'] = null;
+					$files_to_delete[] = (string) $question->sample_answer_file;
+				}
+				if ($remove_guide && !empty($question->guide_file)) {
+					$payload['guide_file'] = null;
+					$files_to_delete[] = (string) $question->guide_file;
+				}
+				if ($remove_paper && !empty($question->question_paper_file)) {
+					$payload['question_paper_file'] = null;
+					$files_to_delete[] = (string) $question->question_paper_file;
+				}
+
+				// If new file uploaded, delete old one after successful save (avoid orphaned files)
+				if (!empty($payload['sample_answer_file']) && !empty($question->sample_answer_file)) {
+					$files_to_delete[] = (string) $question->sample_answer_file;
+				}
+				if (!empty($payload['guide_file']) && !empty($question->guide_file)) {
+					$files_to_delete[] = (string) $question->guide_file;
+				}
+				if (!empty($payload['question_paper_file']) && !empty($question->question_paper_file)) {
+					$files_to_delete[] = (string) $question->question_paper_file;
+				}
+				$files_to_delete = array_values(array_unique(array_filter($files_to_delete, function ($p) { return trim((string) $p) !== ''; })));
+
 				$rubric_warning = null;
 				if ((int) ($payload['status'] ?? 0) === 1) {
 					$rubric_total = (float) $this->rubric_active_max_total((int) $id);
@@ -183,6 +287,9 @@ class Emarking extends MY_Controller
 				}
 				$ok = $this->emarking->save_question($payload, (int) $id);
 				if ($ok) {
+					foreach ($files_to_delete as $rel) {
+						$this->safe_unlink_relative($rel);
+					}
 					$msg = 'Question updated.';
 					$type = 'success';
 					if (!empty($rubric_warning)) {
@@ -218,6 +325,47 @@ class Emarking extends MY_Controller
 		$this->page_data['question'] = $question;
 		$this->page_data['rubric_steps'] = $this->emarking->get_rubric_steps((int) $question_id);
 		$this->load->view('admin/emarking/rubric_steps', $this->page_data);
+	}
+
+	public function remove_question_file()
+	{
+		postAllowed();
+		$question_id = (int) $this->input->post('question_id', true);
+		$field = trim((string) $this->input->post('field', true));
+		$allowed = ['sample_answer_file', 'guide_file', 'question_paper_file'];
+
+		if ($question_id <= 0 || !in_array($field, $allowed, true)) {
+			$this->output
+				->set_status_header(400)
+				->set_content_type('application/json', 'utf-8')
+				->set_output(json_encode(['ok' => false, 'message' => 'Invalid request.']));
+			return;
+		}
+
+		$question = $this->emarking->get_question($question_id);
+		if (!$question) show_404();
+
+		$current = (string) ($question->{$field} ?? '');
+		if (trim($current) === '') {
+			$this->output
+				->set_content_type('application/json', 'utf-8')
+				->set_output(json_encode(['ok' => true, 'field' => $field]));
+			return;
+		}
+
+		$ok = $this->emarking->clear_question_file($question_id, $field);
+		if ($ok) {
+			$this->safe_unlink_relative($current);
+			$this->output
+				->set_content_type('application/json', 'utf-8')
+				->set_output(json_encode(['ok' => true, 'field' => $field]));
+			return;
+		}
+
+		$this->output
+			->set_status_header(500)
+			->set_content_type('application/json', 'utf-8')
+			->set_output(json_encode(['ok' => false, 'message' => 'Unable to remove file.']));
 	}
 
 	public function save_rubric_step()
@@ -432,6 +580,37 @@ class Emarking extends MY_Controller
 				return;
 			}
 
+			// Subject Specialist can only create batches for questions within assigned subjects,
+			// and can only assign to eMarkers within those same subjects.
+			if ($this->current_role() === 18) {
+				$allowed_codes = $this->ss_allowed_subject_codes();
+				$allowed_specs = $this->ss_allowed_subject_names();
+				if (empty($allowed_codes) || empty($allowed_specs)) {
+					$this->session->set_flashdata('message', 'No subjects are assigned to your account.');
+					$this->session->set_flashdata('message_type', 'danger');
+					redirect('admin/emarking/create_batch', 'refresh');
+					return;
+				}
+
+				if (!in_array((string) $q->subject_code, $allowed_codes, true)) {
+					$this->session->set_flashdata('message', 'You are not allowed to create batches for this subject.');
+					$this->session->set_flashdata('message_type', 'danger');
+					redirect('admin/emarking/create_batch', 'refresh');
+					return;
+				}
+
+				// Ensure selected eMarker specialization matches the SS subject set AND the question subject.
+				$specRow = $this->db->select('specialization')->get_where('teacher_specializations', ['user_id' => $emarker_id])->row();
+				$emarkerSpec = strtoupper(trim((string) ($specRow->specialization ?? '')));
+				$questionSpec = (string) ($this->subject_code_map[(int) $q->subject_code] ?? '');
+				if ($emarkerSpec === '' || !in_array($emarkerSpec, $allowed_specs, true) || ($questionSpec !== '' && $emarkerSpec !== $questionSpec)) {
+					$this->session->set_flashdata('message', 'Selected eMarker is not allowed for this subject.');
+					$this->session->set_flashdata('message_type', 'danger');
+					redirect('admin/emarking/create_batch', 'refresh');
+					return;
+				}
+			}
+
 			// Enforce rubric total must match question max marks before allowing marking
 			$rubric_total = (float) $this->rubric_active_max_total((int) $question_id);
 			$question_max = (float) ($q->max_marks ?? 0);
@@ -491,9 +670,25 @@ class Emarking extends MY_Controller
 
 		$this->page_data['filters'] = $get_filters;
 		$q_filters = array_merge($get_filters, ['status' => '1']);
+		if ($this->current_role() === 18) {
+			// SS should only see questions for their assigned subjects.
+			$allowed_codes = $this->ss_allowed_subject_codes();
+			// If user typed a specific subject_code filter, validate it is within allowed set.
+			$typed = trim((string) ($get_filters['subject_code'] ?? ''));
+			if ($typed !== '' && !in_array($typed, $allowed_codes, true)) {
+				// Force empty results by setting a non-matching code.
+				$allowed_codes = ['-1'];
+			}
+			$q_filters['subject_code'] = $allowed_codes;
+		}
 		$questions = $this->emarking->get_questions($q_filters);
 		$this->page_data['questions'] = $questions;
-		$this->page_data['emarkers'] = $this->emarking_batch->get_emarkers();
+		if ($this->current_role() === 18) {
+			// SS should only see eMarkers whose specialization matches SS assigned subjects.
+			$this->page_data['emarkers'] = $this->emarking_batch->get_emarkers_by_specializations($this->ss_allowed_subject_names());
+		} else {
+			$this->page_data['emarkers'] = $this->emarking_batch->get_emarkers();
+		}
 
 		// Count images per question (for the dropdown display)
 		$uploaded_counts = [];
@@ -538,12 +733,30 @@ class Emarking extends MY_Controller
 		];
 
 		$this->page_data['filters'] = $filters;
-		$this->page_data['batches'] = $this->emarking_batch->get_batches($filters);
+		$query_filters = $filters;
+		if ($this->current_role() === 18) {
+			$allowed_codes = $this->ss_allowed_subject_codes();
+			$typed = trim((string) ($filters['subject_code'] ?? ''));
+			if ($typed !== '' && !in_array($typed, $allowed_codes, true)) {
+				$query_filters['subject_code'] = ['-1'];
+			} else {
+				$query_filters['subject_code'] = ($typed !== '') ? $typed : $allowed_codes;
+			}
+		}
+
+		$this->page_data['batches'] = $this->emarking_batch->get_batches($query_filters);
 		$this->load->view('admin/emarking/batches', $this->page_data);
 	}
 
 	public function emarker_timers()
 	{
+		// Only administrators can access eMarker timers.
+		// This URL must not be accessible to Subject Specialist or other roles.
+		if (!in_array($this->current_role(), [1, 17], true)) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
 		$this->page_data['page']->submenu = 'batches';
 		$this->page_data['page']->title = 'eMarker Timers';
 

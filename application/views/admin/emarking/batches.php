@@ -27,9 +27,11 @@
         <div class="d-flex align-items-center justify-content-between">
           <h3 class="card-title mb-0">Batches</h3>
           <div>
-            <a class="btn btn-outline-secondary btn-sm" href="<?php echo base_url('admin/emarking/emarker_timers'); ?>">
-              <i class="fas fa-stopwatch"></i> eMarker Timers
-            </a>
+            <?php if (in_array((int) logged('role'), [1, 17], true)): ?>
+              <a class="btn btn-outline-secondary btn-sm" href="<?php echo base_url('admin/emarking/emarker_timers'); ?>">
+                <i class="fas fa-stopwatch"></i> eMarker Timers
+              </a>
+            <?php endif; ?>
             <a class="btn btn-primary btn-sm" href="<?php echo base_url('admin/emarking/create_batch'); ?>">
               <i class="fas fa-plus"></i> Create Batch
             </a>

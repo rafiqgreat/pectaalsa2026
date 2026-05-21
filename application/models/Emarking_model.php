@@ -93,7 +93,13 @@ class Emarking_model extends CI_Model
 		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
 
 		$subject_code = isset($filters['subject_code']) ? trim((string) $filters['subject_code']) : '';
-		if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		// Support both single subject_code and an array for role-based filtering (e.g. Subject Specialist).
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('q.subject_code', $subject_code);
+		} else {
+			if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		}
 
 		$version = isset($filters['version']) ? trim((string) $filters['version']) : '';
 		if ($version !== '') $this->db->where('q.version', (int) $version);
@@ -183,6 +189,17 @@ class Emarking_model extends CI_Model
 	public function delete_rubric_step($id)
 	{
 		$this->db->delete('emarking_question_rubric_steps', ['id' => (int) $id]);
+	}
+
+	public function clear_question_file($question_id, $field)
+	{
+		$allowed = ['sample_answer_file', 'guide_file', 'question_paper_file'];
+		$field = trim((string) $field);
+		if (!in_array($field, $allowed, true)) return false;
+
+		$this->db->where('id', (int) $question_id)->update('emarking_questions', [$field => null]);
+		$err = $this->db->error();
+		return empty($err['code']);
 	}
 
 	// Required mapper
