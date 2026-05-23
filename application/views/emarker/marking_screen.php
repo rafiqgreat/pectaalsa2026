@@ -240,7 +240,7 @@ $panel_heading = $rubric_title !== '' ? $rubric_title : '';
                   $stepMax = (float) ($s->max_marks ?? 0);
                   ?>
                   <div class="rubric-card" data-step-id="<?php echo (int) $s->id; ?>" data-type="<?php echo html_escape($stepType); ?>" data-step-marks="<?php echo htmlspecialchars((string) $stepMarks); ?>" data-min="<?php echo htmlspecialchars((string) $stepMin); ?>" data-max="<?php echo htmlspecialchars((string) $stepMax); ?>">
-                    <div class="rubric-title">
+                    <div class="rubric-title <?php echo $is_urdu_subject ? 'urdufont-right' : ''; ?>">
                       <?php echo html_escape((string) $s->step_title); ?>
                     </div>
 
@@ -411,7 +411,13 @@ $panel_heading = $rubric_title !== '' ? $rubric_title : '';
         <div class="modal-body">
           <?php if (!empty($item->sample_answer)): ?>
             <div class="<?php echo $is_urdu_subject ? 'urdufont-right' : ''; ?>" style="white-space:pre-wrap;">
-              <?php echo html_escape((string) $item->sample_answer); ?>
+              <?php
+                $sample_answer_raw = (string) $item->sample_answer;
+                $sample_answer_allowed_tags = '<u><b><i><br><p><div><span><strong><em><ul><ol><li><sub><sup>';
+                $sample_answer_safe = strip_tags($sample_answer_raw, $sample_answer_allowed_tags);
+                $sample_answer_safe = preg_replace('/<([a-z0-9]+)\\b[^>]*>/i', '<$1>', $sample_answer_safe);
+                echo $sample_answer_safe;
+              ?>
             </div>
           <?php endif; ?>
           <?php if (!empty($item->sample_answer_file)): ?>
