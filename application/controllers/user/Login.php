@@ -250,7 +250,20 @@ class Login extends CI_Controller {
 			redirect('user/login', 'refresh');
 			return;
 		}
+
+		$registration_is_open = $this->settings_model->registration_is_open();
+		$close_at_raw = $this->settings_model->get_registration_close_at();
+		$close_at_display = null;
+		if (!empty($close_at_raw)) {
+			$dt = DateTime::createFromFormat('Y-m-d H:i:s', $close_at_raw);
+			if ($dt) {
+				$close_at_display = $dt->format('d-m-Y h:i A');
+			}
+		}
 		$this->data['registration_roles'] = $this->getRegistrationRoles();
+		$this->data['registration_is_open'] = $registration_is_open;
+		$this->data['registration_close_at_raw'] = $close_at_raw;
+		$this->data['registration_close_at_display'] = $close_at_display;
 		$this->load->view('user/account/register', $this->data, FALSE);
 	}
 	
@@ -261,6 +274,26 @@ class Login extends CI_Controller {
 
 	public function register_user()
 	{
+		if (!$this->settings_model->registration_is_open()) {
+			$close_at_raw = $this->settings_model->get_registration_close_at();
+			$close_at_display = null;
+			if (!empty($close_at_raw)) {
+				$dt = DateTime::createFromFormat('Y-m-d H:i:s', $close_at_raw);
+				if ($dt) {
+					$close_at_display = $dt->format('d-m-Y h:i A');
+				}
+			}
+
+			$message = 'Registration is closed.';
+			if (!empty($close_at_display)) {
+				$message .= ' The last date for registration was: ' . $close_at_display;
+			}
+			$this->session->set_flashdata('message_type', 'danger');
+			$this->session->set_flashdata('message', $message);
+			redirect(base_url('user/login/register'), 'refresh');
+			return;
+		}
+
 		$this->load->library('form_validation');
 		$this->load->database();
 		

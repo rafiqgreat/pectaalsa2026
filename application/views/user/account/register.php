@@ -38,15 +38,32 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
             <?php
             $old = $this->session->flashdata('old');
             $registration_roles = isset($registration_roles) && is_array($registration_roles) ? $registration_roles : [];
+            $registration_is_open = isset($registration_is_open) ? (bool) $registration_is_open : true;
+            $registration_close_at_display = isset($registration_close_at_display) ? (string) $registration_close_at_display : '';
             ?>
             <?php if (!empty($this->session->flashdata('message'))): ?>
                 <div class="alert alert-<?php echo $this->session->flashdata('message_type'); ?>">
                     <p><?php echo $this->session->flashdata('message'); ?></p>
                 </div>
             <?php endif; ?>
+            <?php if (!$registration_is_open): ?>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="alert alert-danger mb-0">
+                        <h4 class="mb-2">Registration is closed.</h4>
+                        <?php if (!empty($registration_close_at_display)): ?>
+                            <div>The last date for registration was: <?php echo html_escape($registration_close_at_display); ?></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php else: ?>
             <!-- Left Side: Image/Information -->
             <?php echo form_open('/user/login/register_user', ['method' => 'POST', 'autocomplete' => 'off', 'class' => 'space-y-4']); ?>
             <div class="bg-white p-6 rounded-lg shadow-md">
+                <?php if (!empty($registration_close_at_display)): ?>
+                    <div class="alert alert-info">
+                        Registration closes on: <?php echo html_escape($registration_close_at_display); ?>
+                    </div>
+                <?php endif; ?>
                 <div class="row col-12">
                     <div class="col-6 text-lg font-semibold text-gray-800 mb-4">Registration Instructions (<a href="<?= base_url('assets/docs/PSRP-III-UserManual.pdf'); ?>" target="_blank" class="text-blue-500 hover:underline">Instruction for Application Portal</a>)</div>
                     <div class="col-6 text-gray-700 text-center text-red-600 urdufont-right">درخواست جمع کرانے سے پہلے اس کی شرائط و ضوابط کو پڑھنا لازمی ہے۔ <a href="<?= base_url('assets/docs/Revised TORs PSRP Ph-III.pdf'); ?>" target="_blank" class="text-blue-500 hover:underline urdufont-right">ہدایات برائے درخواست دھندگان</a></div>
@@ -180,6 +197,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                 </form>
             </div>
             <?php echo form_close(); ?>
+            <?php endif; ?>
         </div>
     </main>
 

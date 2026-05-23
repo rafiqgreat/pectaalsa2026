@@ -10,6 +10,9 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
       <?php if (hasPermissions('general_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='general')?'active':'' ?>" href="<?php echo url('admin/settings/general') ?>"><?php echo lang('general_setings') ?></a>
       <?php endif ?>
+      <?php if (hasPermissions('general_settings')): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='registration')?'active':'' ?>" href="<?php echo url('admin/settings/registration') ?>">Registration</a>
+      <?php endif ?>
       <?php if (hasPermissions('company_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='company')?'active':'' ?>" href="<?php echo url('admin/settings/company') ?>"><?php echo lang('company_setings') ?></a>
       <?php endif ?>

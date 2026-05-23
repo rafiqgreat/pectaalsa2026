@@ -34,6 +34,37 @@ class Signup extends CI_Controller
 		$this->load->model('Signup_model', 'signup');
 	}
 
+	private function registration_closed_for_new()
+	{
+		$user_id = (int) $this->session->userdata('signup_user_id');
+		if ($user_id > 0) {
+			return false;
+		}
+		return !$this->settings_model->registration_is_open();
+	}
+
+	private function show_registration_closed()
+	{
+		$close_at_raw = $this->settings_model->get_registration_close_at();
+		$close_at_display = null;
+		if (!empty($close_at_raw)) {
+			$dt = DateTime::createFromFormat('Y-m-d H:i:s', $close_at_raw);
+			if ($dt) {
+				$close_at_display = $dt->format('d-m-Y h:i A');
+			}
+		}
+
+		$data = [
+			'assets' => assets_url(),
+			'wizard_base' => $this->wizard_base(),
+			'close_at_display' => $close_at_display,
+			'login_url' => site_url('user/login'),
+			'resume_url' => site_url($this->register_base . '/resume'),
+		];
+
+		$this->load->view('signup/closed', $data, false);
+	}
+
 	private function role_column()
 	{
 		if ($this->db->field_exists('role', 'users')) {
@@ -47,6 +78,11 @@ class Signup extends CI_Controller
 
 	public function index()
 	{
+		if ($this->registration_closed_for_new()) {
+			$this->show_registration_closed();
+			return;
+		}
+
 		$base = $this->wizard_base();
 		$user_id = (int) $this->session->userdata('signup_user_id');
 		if ($user_id > 0) {
@@ -69,12 +105,23 @@ class Signup extends CI_Controller
 			return;
 		}
 
+		$close_at_raw = $this->settings_model->get_registration_close_at();
+		$close_at_display = null;
+		if (!empty($close_at_raw)) {
+			$dt = DateTime::createFromFormat('Y-m-d H:i:s', $close_at_raw);
+			if ($dt) {
+				$close_at_display = $dt->format('d-m-Y h:i A');
+			}
+		}
+
 		$data = [
 			'assets' => assets_url(),
 			'wizard_base' => $base,
 			'resume_error' => (string) $this->session->flashdata('resume_error'),
 			'resume_cnic' => (string) $this->session->flashdata('resume_cnic'),
 			'resume_dob' => (string) $this->session->flashdata('resume_dob'),
+			'registration_is_open' => $this->settings_model->registration_is_open(),
+			'close_at_display' => $close_at_display,
 		];
 		$this->load->view('signup/resume', $data, false);
 	}
@@ -104,21 +151,21 @@ class Signup extends CI_Controller
 			$this->session->set_flashdata('resume_error', 'Invalid CNIC. Please enter 13 digits (with or without dashes).');
 			$this->session->set_flashdata('resume_cnic', $cnic_in);
 			$this->session->set_flashdata('resume_dob', $dob);
-			redirect($base);
+			redirect($base . '/resume');
 			return;
 		}
 		if (!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $dob) || !$this->is_valid_ymd($dob)) {
 			$this->session->set_flashdata('resume_error', 'Invalid Date of Birth.');
 			$this->session->set_flashdata('resume_cnic', $cnic_in);
 			$this->session->set_flashdata('resume_dob', $dob);
-			redirect($base);
+			redirect($base . '/resume');
 			return;
 		}
 		if (!$this->is_at_least_years_old($dob, 18)) {
 			$this->session->set_flashdata('resume_error', 'You must be at least 18 years old to register.');
 			$this->session->set_flashdata('resume_cnic', $cnic_in);
 			$this->session->set_flashdata('resume_dob', $dob);
-			redirect($base);
+			redirect($base . '/resume');
 			return;
 		}
 
@@ -137,7 +184,7 @@ class Signup extends CI_Controller
 			$this->session->set_flashdata('resume_error', 'No in-progress registration found for the provided CNIC and Date of Birth.');
 			$this->session->set_flashdata('resume_cnic', $cnic_in);
 			$this->session->set_flashdata('resume_dob', $dob);
-			redirect($base);
+			redirect($base . '/resume');
 			return;
 		}
 
@@ -219,6 +266,11 @@ class Signup extends CI_Controller
 
 	public function step($step = 1)
 	{
+		if ($this->registration_closed_for_new()) {
+			$this->show_registration_closed();
+			return;
+		}
+
 		$base = $this->wizard_base();
 		$step = (int) $step;
 		if ($step < 1 || $step > 8) {

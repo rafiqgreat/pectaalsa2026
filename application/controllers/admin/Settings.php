@@ -61,6 +61,79 @@ class Settings extends MY_Controller {
 		$this->load->view('admin/settings/company', $this->page_data);
 	}
 
+	public function registration()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'registration';
+
+		$this->page_data['registration_enabled'] = (string) $this->settings_model->get_setting('registration_enabled', '1');
+		$this->page_data['registration_close_at'] = (string) $this->settings_model->get_setting('registration_close_at', '');
+
+		$this->load->view('admin/settings/registration', $this->page_data);
+	}
+
+	public function registrationUpdate()
+	{
+		ifPermissions('general_settings');
+		postAllowed();
+
+		$this->load->library('form_validation');
+		$this->form_validation->set_rules('registration_enabled', 'Enable Registration', 'trim|required|in_list[0,1]');
+		$this->form_validation->set_rules('registration_close_at', 'Registration Close Date/Time', 'trim|callback__valid_optional_datetime');
+
+		if ($this->form_validation->run() === FALSE) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', validation_errors());
+			redirect('admin/settings/registration');
+			return;
+		}
+
+		$enabled = (string) post('registration_enabled');
+		$close_at = trim((string) post('registration_close_at'));
+		if ($close_at !== '' && strpos($close_at, 'T') !== false) {
+			$close_at = str_replace('T', ' ', $close_at);
+		}
+		if ($close_at !== '' && preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/', $close_at)) {
+			$close_at .= ':00';
+		}
+
+		$this->settings_model->set_setting('registration_enabled', $enabled === '1' ? '1' : '0');
+		$this->settings_model->set_setting('registration_close_at', $close_at);
+
+		$this->session->set_flashdata('alert-type', 'success');
+		$this->session->set_flashdata('alert', 'Registration settings updated successfully.');
+		$this->activity_model->add("Registration settings updated by User: #".logged('id'));
+
+		redirect('admin/settings/registration');
+	}
+
+	public function _valid_optional_datetime($value)
+	{
+		$value = trim((string) $value);
+		if ($value === '') {
+			return true;
+		}
+
+		$normalized = $value;
+		if (strpos($normalized, 'T') !== false) {
+			$normalized = str_replace('T', ' ', $normalized);
+		}
+		if (preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/', $normalized)) {
+			$normalized .= ':00';
+		}
+
+		$dt = DateTime::createFromFormat('Y-m-d H:i:s', $normalized);
+		$errors = DateTime::getLastErrors();
+		$is_valid = $dt && is_array($errors) && empty($errors['warning_count']) && empty($errors['error_count']) && $dt->format('Y-m-d H:i:s') === $normalized;
+
+		if (!$is_valid) {
+			$this->form_validation->set_message('_valid_optional_datetime', 'The {field} must be a valid date/time.');
+			return false;
+		}
+
+		return true;
+	}
+
 	public function companyUpdate()
 	{
 

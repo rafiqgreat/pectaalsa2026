@@ -23,6 +23,16 @@
 	<?php $max_dob = date('Y-m-d', strtotime('-18 years')); ?>
 
 	<div class="cardx mb-3">
+		<?php if (isset($registration_is_open) && !$registration_is_open): ?>
+			<div class="alert alert-danger" style="border-radius:6px;">
+				<strong>Registration is closed.</strong>
+				<?php if (!empty($close_at_display)): ?>
+					<span>The last date for registration was: <?php echo html_escape((string) $close_at_display); ?></span>
+				<?php endif; ?>
+				<div class="text-white" style="font-size:12px;margin-top:6px;opacity:0.95;">You can only resume an in-progress registration.</div>
+			</div>
+		<?php endif; ?>
+
 		<div class="alert alert-success" style="border-radius:6px;">
 			<strong>Integrity Affidavit Required:</strong>
 			Please download the affidavit, sign it, and upload the signed copy in <strong>Step 7 (Security Setup)</strong> to complete registration.
@@ -30,11 +40,13 @@
 		</div>
 
 		<div class="row">
-			<div class="col-md-6">
-				<h4 style="font-weight:700;">Start New Registration</h4>
-				<p class="text-muted mb-2">Begin a new registration process.</p>
-				<a class="btn btn-primary" href="<?php echo site_url(rtrim($wizard_base, '/') . '/step/1'); ?>">Start</a>
-			</div>
+			<?php if (!isset($registration_is_open) || $registration_is_open): ?>
+				<div class="col-md-6">
+					<h4 style="font-weight:700;">Start New Registration</h4>
+					<p class="text-muted mb-2">Begin a new registration process.</p>
+					<a class="btn btn-primary" href="<?php echo site_url(rtrim($wizard_base, '/') . '/step/1'); ?>">Start</a>
+				</div>
+			<?php endif; ?>
 
 			<div class="col-md-6">
 				<h4 style="font-weight:700;">Resume Registration</h4>
