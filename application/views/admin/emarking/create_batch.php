@@ -106,11 +106,18 @@
             </div>
             <div class="form-group col-md-3">
               <label>Assign To (eMarker)</label>
-              <select name="emarker_id" class="form-control" required>
+              <select name="emarker_id" class="form-control select2" required>
                 <option value="">Select eMarker</option>
                 <?php foreach (($emarkers ?? []) as $u): ?>
+                  <?php
+                    $name = trim((string) ($u->name ?? ''));
+                    $name = $name !== '' ? $name : trim((string) ($u->username ?? ''));
+                    $cnic = trim((string) ($u->cnic ?? ''));
+                    $cnic = $cnic !== '' ? $cnic : trim((string) ($u->username ?? ''));
+                    $label = trim($name . ' - ' . $cnic, " \t\n\r\0\x0B-");
+                  ?>
                   <option value="<?php echo (int) $u->id; ?>">
-                    <?php echo htmlspecialchars((string) ($u->name ?: $u->username)); ?> (<?php echo (int) $u->id; ?>)
+                    <?php echo htmlspecialchars($label); ?>
                   </option>
                 <?php endforeach; ?>
               </select>
@@ -134,3 +141,15 @@
 </section>
 
 <?php include viewPath('admin/includes/footer'); ?>
+
+<script>
+  $(function () {
+    if ($.fn.select2) {
+      $('.select2').select2({
+        width: '100%',
+        placeholder: 'Select eMarker',
+        allowClear: true
+      });
+    }
+  });
+</script>

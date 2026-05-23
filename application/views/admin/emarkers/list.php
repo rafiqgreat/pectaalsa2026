@@ -168,6 +168,9 @@ defined('BASEPATH') or exit('No direct script access allowed');
 												<td><?php echo htmlspecialchars((string) (!empty($r->derived_status) ? $r->derived_status : ($type === 'approved' ? 'Approved' : 'Pending'))); ?></td>
 											<?php endif; ?>
 											<td>
+												<a href="<?php echo url('admin/emarkers/edit/' . (int) $r->id); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary" title="Edit" data-toggle="tooltip">
+													<i class="fa fa-edit"></i>
+												</a>
 												<a href="<?php echo url('admin/emarkers/view/' . (int) $r->id); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-info" title="View" data-toggle="tooltip">
 													<i class="fa fa-eye"></i>
 												</a>

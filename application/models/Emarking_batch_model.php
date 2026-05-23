@@ -13,7 +13,11 @@ class Emarking_batch_model extends CI_Model
 	public function get_emarkers()
 	{
 		$role_col = $this->role_column();
-		$this->db->select('id, name, username, email, phone');
+		$select = ['id', 'name', 'username', 'email', 'phone'];
+		if ($this->db->field_exists('cnic', 'users')) {
+			$select[] = 'cnic';
+		}
+		$this->db->select(implode(',', $select));
 		$this->db->from('users');
 		$this->db->where($role_col, 2);
 		if ($this->db->field_exists('status', 'users')) {
@@ -37,7 +41,11 @@ class Emarking_batch_model extends CI_Model
 		$norm = array_map('strtoupper', $specializations);
 		$escaped = array_map([$this->db, 'escape'], $norm);
 
-		$this->db->select('u.id, u.name, u.username, u.email, u.phone');
+		$select = ['u.id', 'u.name', 'u.username', 'u.email', 'u.phone'];
+		if ($this->db->field_exists('cnic', 'users')) {
+			$select[] = 'u.cnic';
+		}
+		$this->db->select(implode(',', $select));
 		$this->db->from('users u');
 		$this->db->join('teacher_specializations sp', 'sp.user_id = u.id', 'left');
 		$this->db->where('u.' . $role_col, 2);
