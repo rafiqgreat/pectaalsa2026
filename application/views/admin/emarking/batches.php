@@ -110,6 +110,7 @@
                 <th>Question</th>
                 <th>Assigned To</th>
                 <th>Size</th>
+                <th>Allotment</th>
                 <th>Status</th>
                 <th>Deadline</th>
                 <th>Created</th>
@@ -117,7 +118,7 @@
             </thead>
             <tbody>
               <?php if (empty($batches)): ?>
-                <tr><td colspan="12" class="text-center text-muted">No records</td></tr>
+                <tr><td colspan="13" class="text-center text-muted">No records</td></tr>
               <?php else: ?>
                 <?php foreach ($batches as $b): ?>
                   <tr>
@@ -142,6 +143,7 @@
                       <div class="text-muted"><?php echo htmlspecialchars((string) $b->emarker_username); ?> (<?php echo (int) $b->assigned_to; ?>)</div>
                     </td>
                     <td><?php echo (int) $b->batch_size; ?></td>
+                    <td><?php echo (int) ($b->allotment ?? 0); ?></td>
                     <td><span class="badge badge-info"><?php echo htmlspecialchars((string) $b->status); ?></span></td>
                     <td><?php echo htmlspecialchars((string) $b->deadline); ?></td>
                     <td><?php echo htmlspecialchars((string) $b->created_at); ?></td>

@@ -35,14 +35,14 @@
         </div>
       </div>
       <div class="card-body">
-        <div class="row">
-          <div class="col-md-4">
-            <p class="mb-1"><strong>Status:</strong> <?php echo html_escape((string) $batch->status); ?></p>
-            <p class="mb-1"><strong>Deadline:</strong> <?php echo html_escape((string) $batch->deadline); ?></p>
+        <div class="d-flex flex-wrap align-items-center justify-content-between">
+          <div class="mr-3">
+            <strong>Status:</strong> <?php echo html_escape((string) $batch->status); ?>
+            <span class="mx-2 text-muted">|</span>
+            <strong>Deadline:</strong> <?php echo html_escape((string) $batch->deadline); ?>
           </div>
-          <div class="col-md-8">
-            <p class="mb-1"><strong>Question:</strong> <?php echo html_escape((string) $batch->question_title); ?></p>
-            <p class="mb-0"><strong>Max Marks:</strong> <?php echo html_escape((string) $batch->max_marks); ?></p>
+          <div>
+            <strong>Max Marks:</strong> <?php echo html_escape((string) $batch->max_marks); ?>
           </div>
         </div>
       </div>
