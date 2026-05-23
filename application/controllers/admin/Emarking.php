@@ -665,6 +665,285 @@ class Emarking extends MY_Controller
 		$this->load->view('admin/emarking/import_images', $this->page_data);
 	}
 
+	private function import_progress_dir()
+	{
+		$dir = rtrim((string) FCPATH, '\\/') . '/storagebox/import_progress';
+		$dir = str_replace(['\\', '//'], ['/', '/'], $dir);
+		if (!is_dir($dir)) {
+			@mkdir($dir, 0777, true);
+		}
+		return $dir;
+	}
+
+	private function sanitize_batch_key($s)
+	{
+		$s = trim((string) $s);
+		$s = preg_replace('/[^a-zA-Z0-9._-]+/', '_', $s);
+		$s = trim($s, '._-');
+		return $s !== '' ? $s : ('batch_' . date('YmdHis'));
+	}
+
+	private function progress_paths($assessment_type, $upload_batch_no)
+	{
+		$assessment_type = strtoupper((string) $assessment_type);
+		$key = $this->sanitize_batch_key($assessment_type . '_' . $upload_batch_no);
+		$dir = $this->import_progress_dir();
+		return [
+			'key' => $key,
+			'progress' => $dir . '/' . $key . '.json',
+			'manifest' => $dir . '/' . $key . '.manifest.txt',
+		];
+	}
+
+	private function json($payload, $http_code = 200)
+	{
+		$this->output
+			->set_status_header((int) $http_code)
+			->set_content_type('application/json', 'utf-8')
+			->set_output(json_encode($payload));
+	}
+
+	public function import_async_start()
+	{
+		postAllowed();
+
+		$assessment_type = strtoupper(trim((string) $this->input->post('assessment_type', true)));
+		if (!in_array($assessment_type, ['CRQ', 'DICTATION'], true)) {
+			$this->json(['ok' => false, 'error' => 'Invalid assessment_type'], 422);
+			return;
+		}
+
+		$base_folder = trim((string) $this->input->post('base_folder', true));
+		if ($base_folder === '') {
+			$base_folder = $assessment_type === 'CRQ' ? 'storagebox/crqs' : 'storagebox/dictations';
+		}
+
+		$upload_batch_no = trim((string) $this->input->post('upload_batch_no', true));
+		if ($upload_batch_no === '') {
+			$upload_batch_no = ($assessment_type === 'CRQ' ? 'CRQ-' : 'DICT-') . date('Ymd-His');
+		}
+
+		$chunk_size = (int) $this->input->post('chunk_size', true);
+		if ($chunk_size <= 0) $chunk_size = 400;
+		if ($chunk_size > 5000) $chunk_size = 5000;
+
+		$paths = $this->progress_paths($assessment_type, $upload_batch_no);
+
+		// Resolve absolute base folder
+		$abs_base = str_replace('\\', '/', rtrim($base_folder, '/'));
+		if (strpos($abs_base, ':') === false && strpos($abs_base, '/') !== 0) {
+			$abs_base = rtrim(FCPATH, '\\/') . '/' . ltrim($base_folder, '/');
+		}
+		$abs_base = str_replace(['\\', '//'], ['/', '/'], $abs_base);
+
+		if (!is_dir($abs_base)) {
+			$this->json(['ok' => false, 'error' => 'Base folder not found', 'base_folder' => $abs_base], 422);
+			return;
+		}
+
+		// Build manifest (absolute paths), deterministic order.
+		$manifest_fp = @fopen($paths['manifest'], 'wb');
+		if (!$manifest_fp) {
+			$this->json(['ok' => false, 'error' => 'Unable to create manifest file'], 500);
+			return;
+		}
+
+		$total = 0;
+		$it = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator($abs_base, FilesystemIterator::SKIP_DOTS)
+		);
+		foreach ($it as $fileInfo) {
+			/** @var SplFileInfo $fileInfo */
+			if (!$fileInfo->isFile()) continue;
+			$ext = strtolower((string) $fileInfo->getExtension());
+			if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) continue;
+
+			$abs_path = str_replace('\\', '/', $fileInfo->getPathname());
+			fwrite($manifest_fp, $abs_path . "\n");
+			$total++;
+		}
+		fclose($manifest_fp);
+
+		$progress = [
+			'ok' => true,
+			'status' => 'running',
+			'assessment_type' => $assessment_type,
+			'base_folder' => $base_folder,
+			'abs_base' => $abs_base,
+			'upload_batch_no' => $upload_batch_no,
+			'chunk_size' => $chunk_size,
+			'cursor' => 0,
+			'cursor_offset' => 0,
+			'total' => $total,
+			'inserted' => 0,
+			'skipped' => 0,
+			'errors_count' => 0,
+			'last_errors' => [],
+			'started_at' => date('Y-m-d H:i:s'),
+			'updated_at' => date('Y-m-d H:i:s'),
+		];
+		@file_put_contents($paths['progress'], json_encode($progress));
+
+		$this->json(['ok' => true, 'key' => $paths['key'], 'upload_batch_no' => $upload_batch_no]);
+	}
+
+	public function import_async_status()
+	{
+		$key = $this->sanitize_batch_key($this->input->get('key', true));
+		if ($key === '') {
+			$this->json(['ok' => false, 'error' => 'Missing key'], 422);
+			return;
+		}
+
+		$dir = $this->import_progress_dir();
+		$progressPath = $dir . '/' . $key . '.json';
+		if (!is_file($progressPath)) {
+			$this->json(['ok' => false, 'error' => 'Not found'], 404);
+			return;
+		}
+
+		$raw = @file_get_contents($progressPath);
+		$data = $raw ? json_decode($raw, true) : null;
+		if (!is_array($data)) {
+			$this->json(['ok' => false, 'error' => 'Invalid progress file'], 500);
+			return;
+		}
+
+		$this->json(['ok' => true, 'progress' => $data]);
+	}
+
+	public function import_async_tick()
+	{
+		postAllowed();
+		$key = $this->sanitize_batch_key($this->input->post('key', true));
+		if ($key === '') {
+			$this->json(['ok' => false, 'error' => 'Missing key'], 422);
+			return;
+		}
+
+		$dir = $this->import_progress_dir();
+		$progressPath = $dir . '/' . $key . '.json';
+		$manifestPath = $dir . '/' . $key . '.manifest.txt';
+		if (!is_file($progressPath) || !is_file($manifestPath)) {
+			$this->json(['ok' => false, 'error' => 'Not found'], 404);
+			return;
+		}
+
+		$raw = @file_get_contents($progressPath);
+		$progress = $raw ? json_decode($raw, true) : null;
+		if (!is_array($progress) || empty($progress['ok'])) {
+			$this->json(['ok' => false, 'error' => 'Invalid progress file'], 500);
+			return;
+		}
+		if (($progress['status'] ?? '') === 'done') {
+			$this->json(['ok' => true, 'progress' => $progress]);
+			return;
+		}
+
+		$cursor = (int) ($progress['cursor'] ?? 0);
+		$cursor_offset = isset($progress['cursor_offset']) ? (int) $progress['cursor_offset'] : null;
+		$total = (int) ($progress['total'] ?? 0);
+		$chunk = (int) ($progress['chunk_size'] ?? 400);
+		$chunk = max(1, min(5000, $chunk));
+
+		$abs_base = (string) ($progress['abs_base'] ?? '');
+		$base_folder = (string) ($progress['base_folder'] ?? '');
+		$assessment_type = (string) ($progress['assessment_type'] ?? '');
+		$upload_batch_no = (string) ($progress['upload_batch_no'] ?? '');
+
+		$paths = [];
+		$read = 0;
+		$advance_offset = 0;
+
+		// Faster manifest reading: keep byte offset to avoid O(n) line seek on every tick.
+		// If cursor_offset is missing (older progress file), compute it once from cursor.
+		if ($cursor_offset === null && $cursor > 0) {
+			$fp2 = @fopen($manifestPath, 'rb');
+			if ($fp2) {
+				$lineNo = 0;
+				while (!feof($fp2) && $lineNo < $cursor) {
+					$line = fgets($fp2);
+					if ($line === false) break;
+					$lineNo++;
+				}
+				$cursor_offset = (int) @ftell($fp2);
+				fclose($fp2);
+			} else {
+				$cursor_offset = null;
+			}
+		}
+
+		if ($cursor_offset !== null) {
+			$fp = @fopen($manifestPath, 'rb');
+			if ($fp) {
+				@fseek($fp, max(0, $cursor_offset));
+				while (!feof($fp) && $read < $chunk) {
+					$line = fgets($fp);
+					if ($line === false) break;
+					$line = trim((string) $line);
+					if ($line === '') continue;
+					$paths[] = $line;
+					$read++;
+				}
+				$advance_offset = (int) @ftell($fp);
+				fclose($fp);
+			}
+		} else {
+			// Backward compatibility for old progress files.
+			$f = new SplFileObject($manifestPath, 'r');
+			$f->seek($cursor);
+			while (!$f->eof() && $read < $chunk) {
+				$line = trim((string) $f->current());
+				$f->next();
+				if ($line === '') continue;
+				$paths[] = $line;
+				$read++;
+			}
+		}
+
+		if (empty($paths)) {
+			$progress['status'] = 'done';
+			$progress['cursor'] = $total;
+			$progress['updated_at'] = date('Y-m-d H:i:s');
+			@file_put_contents($progressPath, json_encode($progress));
+			$this->json(['ok' => true, 'progress' => $progress]);
+			return;
+		}
+
+		$out = $this->emarking->import_images_from_abs_paths($abs_base, $base_folder, $assessment_type, $upload_batch_no, $paths);
+
+		$progress['cursor'] = $cursor + $read;
+		if ($cursor_offset !== null) {
+			$progress['cursor_offset'] = $advance_offset;
+		}
+		$progress['inserted'] = (int) ($progress['inserted'] ?? 0) + (int) ($out['inserted'] ?? 0);
+		$progress['skipped'] = (int) ($progress['skipped'] ?? 0) + (int) ($out['skipped'] ?? 0);
+		$errs = is_array($out['errors'] ?? null) ? $out['errors'] : [];
+		$progress['errors_count'] = (int) ($progress['errors_count'] ?? 0) + count($errs);
+		if (!empty($errs)) {
+			$last = is_array($progress['last_errors'] ?? null) ? $progress['last_errors'] : [];
+			foreach ($errs as $e) {
+				$last[] = [
+					'file' => (string) ($e['file'] ?? ''),
+					'reason' => (string) ($e['reason'] ?? ''),
+				];
+			}
+			// keep only last 50
+			if (count($last) > 50) {
+				$last = array_slice($last, -50);
+			}
+			$progress['last_errors'] = $last;
+		}
+
+		if ($progress['cursor'] >= $total) {
+			$progress['status'] = 'done';
+		}
+		$progress['updated_at'] = date('Y-m-d H:i:s');
+
+		@file_put_contents($progressPath, json_encode($progress));
+		$this->json(['ok' => true, 'progress' => $progress]);
+	}
+
 	public function import_dictation_images()
 	{
 		$this->page_data['page']->submenu = 'import';

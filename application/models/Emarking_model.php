@@ -597,6 +597,21 @@ class Emarking_model extends CI_Model
 				continue;
 			}
 
+			// Resume: if the same upload_batch_no is reused, skip images already imported in that batch.
+			if (trim((string) $upload_batch_no) !== '') {
+				$exists = (int) $this->db->from('emarking_question_images')
+					->where('upload_batch_no', (string) $upload_batch_no)
+					->where('assessment_type', (string) $assessment_type)
+					->where('question_id', (int) $q->id)
+					->where('paper_barcode', (string) $barcode)
+					->limit(1)
+					->count_all_results();
+				if ($exists > 0) {
+					$skipped++;
+					continue;
+				}
+			}
+
 			// Build DB image_path relative to web root
 			$image_path = $base_folder;
 			if (strpos($image_path, ':') !== false || strpos($image_path, '/') === 0) {
@@ -649,5 +664,159 @@ class Emarking_model extends CI_Model
 			'skipped' => $skipped,
 			'errors' => $errors,
 		];
+	}
+
+	public function import_images_from_abs_paths($abs_base, $base_folder, $assessment_type, $upload_batch_no, $abs_paths = [])
+	{
+		$assessment_type = strtoupper(trim((string) $assessment_type));
+		$abs_base = str_replace(['\\', '//'], ['/', '/'], rtrim((string) $abs_base, '/'));
+		$base_folder = str_replace('\\', '/', rtrim(trim((string) $base_folder), '/'));
+
+		$inserted = 0;
+		$skipped = 0;
+		$errors = [];
+		$now = date('Y-m-d H:i:s');
+
+		foreach (($abs_paths ?? []) as $abs_path_in) {
+			$abs_path = str_replace('\\', '/', (string) $abs_path_in);
+			if ($abs_path === '' || !is_file($abs_path)) {
+				$skipped++;
+				continue;
+			}
+
+			$rel_to_base = ltrim(substr($abs_path, strlen($abs_base)), '/');
+			$rel_parts = explode('/', $rel_to_base);
+
+			if (count($rel_parts) < 6) {
+				$skipped++;
+				$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+				continue;
+			}
+
+			$grade = (int) $rel_parts[0];
+			$subject_code = (int) $rel_parts[1];
+			$version = (int) $rel_parts[2];
+			$page_no = (string) $rel_parts[3];
+			$question_no = (string) $rel_parts[4];
+			$filename = (string) $rel_parts[count($rel_parts) - 1];
+
+			if ($grade <= 0 || $subject_code <= 0 || $version <= 0 || trim($page_no) === '' || trim($question_no) === '') {
+				$skipped++;
+				$errors[] = ['file' => $abs_path, 'reason' => 'Invalid folder values'];
+				continue;
+			}
+
+			$barcode = $filename;
+			$underscorePos = strpos($barcode, '_');
+			if ($underscorePos !== false) $barcode = substr($barcode, 0, $underscorePos);
+			$barcode = trim((string) $barcode);
+			if ($barcode === '') {
+				$skipped++;
+				$errors[] = ['file' => $abs_path, 'reason' => 'Barcode missing in filename'];
+				continue;
+			}
+
+			$source_table = $this->get_source_table($assessment_type, $subject_code);
+			if (!$source_table) {
+				$skipped++;
+				$errors[] = ['file' => $abs_path, 'reason' => 'No source table mapping', 'subject_code' => $subject_code];
+				continue;
+			}
+
+			$cols = $this->resolve_source_columns($source_table);
+			$can_validate_source = !empty($cols['barcode']) && !empty($cols['paper_generated']);
+
+			$paper_type_code = null;
+			if ($assessment_type === 'CRQ') {
+				$paper_type_code = 1;
+			} else {
+				$paper_type_code = ($subject_code === 2) ? 13 : 12;
+			}
+
+			$source_row = null;
+			if ($can_validate_source) {
+				$this->db->from($source_table);
+				$this->db->where($cols['barcode'], $barcode);
+				$this->db->where($cols['paper_generated'], 1);
+				if (!empty($cols['paper_type_code']) && $paper_type_code !== null) {
+					$this->db->where($cols['paper_type_code'], (int) $paper_type_code);
+				}
+				$this->db->limit(1);
+				$source_row = $this->db->get()->row_array();
+			}
+
+			$q = $this->db->get_where('emarking_questions', [
+				'assessment_type' => $assessment_type,
+				'grade' => (int) $grade,
+				'subject_code' => (string) $subject_code,
+				'version' => (int) $version,
+				'page_no' => (string) $page_no,
+				'question_no' => (string) $question_no,
+				'status' => 1,
+			])->row();
+
+			if (!$q) {
+				$skipped++;
+				$errors[] = ['file' => $abs_path, 'reason' => 'No matching emarking_questions row', 'grade' => $grade, 'subject_code' => $subject_code, 'version' => $version, 'page_no' => $page_no, 'question_no' => $question_no];
+				continue;
+			}
+
+			if (trim((string) $upload_batch_no) !== '') {
+				$exists = (int) $this->db->from('emarking_question_images')
+					->where('upload_batch_no', (string) $upload_batch_no)
+					->where('assessment_type', (string) $assessment_type)
+					->where('question_id', (int) $q->id)
+					->where('paper_barcode', (string) $barcode)
+					->limit(1)
+					->count_all_results();
+				if ($exists > 0) {
+					$skipped++;
+					continue;
+				}
+			}
+
+			$image_path = $base_folder;
+			if (strpos($image_path, ':') !== false || strpos($image_path, '/') === 0) {
+				$fcp = str_replace('\\', '/', rtrim(FCPATH, '\\/'));
+				if (strpos($abs_path, $fcp) === 0) {
+					$image_path = ltrim(substr($abs_path, strlen($fcp)), '/');
+				} else {
+					$image_path = ltrim(str_replace($abs_base, $base_folder, $abs_path), '/');
+				}
+			} else {
+				$image_path = ltrim(str_replace($abs_base, $base_folder, $abs_path), '/');
+			}
+			$image_path = str_replace(['\\', '//'], ['/', '/'], $image_path);
+
+			$payload = [
+				'assessment_type' => $assessment_type,
+				'source_table' => $source_table,
+				'source_paper_id' => (!empty($source_row) && !empty($cols['id'])) ? (int) ($source_row[$cols['id']] ?? 0) : 0,
+				'paper_barcode' => $barcode,
+				'grade' => (int) $grade,
+				'school_id' => (!empty($source_row) && !empty($cols['school_id'])) ? (int) ($source_row[$cols['school_id']] ?? null) : null,
+				'lsacode' => (!empty($source_row) && !empty($cols['lsacode'])) ? (string) ($source_row[$cols['lsacode']] ?? null) : null,
+				'subject_code' => (string) $subject_code,
+				'version' => (int) $version,
+				'roll_no' => (!empty($source_row) && !empty($cols['roll_no'])) ? (string) ($source_row[$cols['roll_no']] ?? '') : '',
+				'page_no' => (string) $page_no,
+				'question_id' => (int) $q->id,
+				'question_no' => (string) $question_no,
+				'image_path' => $image_path,
+				'upload_batch_no' => (string) $upload_batch_no,
+				'status' => 'UPLOADED',
+				'created_at' => $now,
+			];
+
+			$this->db->insert('emarking_question_images', $payload);
+			$err = $this->db->error();
+			if (!empty($err['code'])) {
+				$skipped++;
+				continue;
+			}
+			$inserted++;
+		}
+
+		return ['inserted' => $inserted, 'skipped' => $skipped, 'errors' => $errors];
 	}
 }

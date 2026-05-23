@@ -50,8 +50,40 @@
                 <label>Upload Batch No (optional)</label>
                 <input type="text" name="upload_batch_no" class="form-control" placeholder="auto if empty">
               </div>
+              <div class="form-group">
+                <label>Live Chunk Size</label>
+                <input type="number" class="form-control js-chunk-size" value="200" min="1" max="5000">
+                <small class="text-muted">Smaller = faster live updates. Larger = faster overall (but each tick takes longer).</small>
+              </div>
               <button type="submit" class="btn btn-primary">Import CRQ</button>
+              <button type="button" class="btn btn-success ml-1 js-live-import" data-assessment="CRQ">Live Import CRQ</button>
             </form>
+
+            <div class="mt-3 d-none" id="live-import-CRQ">
+              <div class="d-flex align-items-center mb-2">
+                <div class="mr-2"><strong>Status:</strong> <span class="js-status">Idle</span><span class="js-status-dots status-dots d-none" aria-hidden="true"></span></div>
+                <div class="ml-auto">
+                  <button type="button" class="btn btn-sm btn-outline-danger js-cancel">Cancel</button>
+                </div>
+              </div>
+              <div class="progress mb-2" style="height: 18px;">
+                <div class="progress-bar js-bar" role="progressbar" style="width: 0%;">0%</div>
+              </div>
+              <div class="small text-muted mb-2">
+                <span><strong>Inserted:</strong> <span class="js-inserted">0</span></span>
+                <span class="ml-3"><strong>Skipped:</strong> <span class="js-skipped">0</span></span>
+                <span class="ml-3"><strong>Errors:</strong> <span class="js-errors-count">0</span></span>
+                <span class="ml-3"><strong>Processed:</strong> <span class="js-cursor">0</span>/<span class="js-total">0</span></span>
+              </div>
+              <div class="table-responsive" style="max-height: 220px; overflow:auto;">
+                <table class="table table-sm table-bordered mb-0">
+                  <thead><tr><th>File</th><th>Reason</th></tr></thead>
+                  <tbody class="js-errors-body">
+                    <tr class="js-errors-empty"><td colspan="2" class="text-muted">No errors yet.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
             <?php if (!empty($result_crq)): ?>
               <hr>
@@ -94,8 +126,40 @@
                 <label>Upload Batch No (optional)</label>
                 <input type="text" name="upload_batch_no" class="form-control" placeholder="auto if empty">
               </div>
+              <div class="form-group">
+                <label>Live Chunk Size</label>
+                <input type="number" class="form-control js-chunk-size" value="200" min="1" max="5000">
+                <small class="text-muted">Smaller = faster live updates. Larger = faster overall (but each tick takes longer).</small>
+              </div>
               <button type="submit" class="btn btn-primary">Import Dictation</button>
+              <button type="button" class="btn btn-success ml-1 js-live-import" data-assessment="DICTATION">Live Import Dictation</button>
             </form>
+
+            <div class="mt-3 d-none" id="live-import-DICTATION">
+              <div class="d-flex align-items-center mb-2">
+                <div class="mr-2"><strong>Status:</strong> <span class="js-status">Idle</span><span class="js-status-dots status-dots d-none" aria-hidden="true"></span></div>
+                <div class="ml-auto">
+                  <button type="button" class="btn btn-sm btn-outline-danger js-cancel">Cancel</button>
+                </div>
+              </div>
+              <div class="progress mb-2" style="height: 18px;">
+                <div class="progress-bar js-bar" role="progressbar" style="width: 0%;">0%</div>
+              </div>
+              <div class="small text-muted mb-2">
+                <span><strong>Inserted:</strong> <span class="js-inserted">0</span></span>
+                <span class="ml-3"><strong>Skipped:</strong> <span class="js-skipped">0</span></span>
+                <span class="ml-3"><strong>Errors:</strong> <span class="js-errors-count">0</span></span>
+                <span class="ml-3"><strong>Processed:</strong> <span class="js-cursor">0</span>/<span class="js-total">0</span></span>
+              </div>
+              <div class="table-responsive" style="max-height: 220px; overflow:auto;">
+                <table class="table table-sm table-bordered mb-0">
+                  <thead><tr><th>File</th><th>Reason</th></tr></thead>
+                  <tbody class="js-errors-body">
+                    <tr class="js-errors-empty"><td colspan="2" class="text-muted">No errors yet.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
             <?php if (!empty($result_dict)): ?>
               <hr>
@@ -126,5 +190,200 @@
 
   </div>
 </section>
+
+<style>
+  .status-dots::after {
+    content: '';
+    display: inline-block;
+    width: 1.2em;
+    text-align: left;
+    animation: statusDots 1.1s infinite steps(4, end);
+  }
+  @keyframes statusDots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+    100% { content: ''; }
+  }
+</style>
+
+<script>
+  (function () {
+    function csrfPair() {
+      var name = document.querySelector('meta[name="csrf_token_name"]');
+      var hash = document.querySelector('meta[name="csrf_token_hash"]');
+      if (!name || !hash) return {};
+      var out = {};
+      out[name.getAttribute('content')] = hash.getAttribute('content');
+      return out;
+    }
+
+    function num(n) {
+      n = parseInt(n, 10);
+      return isNaN(n) ? 0 : n;
+    }
+
+    function pct(cursor, total) {
+      if (!total) return 0;
+      return Math.max(0, Math.min(100, Math.round((cursor / total) * 100)));
+    }
+
+    function setBar($root, cursor, total) {
+      var p = pct(cursor, total);
+      var $bar = $root.find('.js-bar');
+      $bar.css('width', p + '%').text(p + '%');
+    }
+
+    function setStatus($root, text) {
+      $root.find('.js-status').text(text);
+      var running = (text || '').toString().toLowerCase().indexOf('running') !== -1;
+      $root.find('.js-status-dots').toggleClass('d-none', !running);
+    }
+
+    function setCounts($root, progress) {
+      $root.find('.js-inserted').text(num(progress.inserted));
+      $root.find('.js-skipped').text(num(progress.skipped));
+      $root.find('.js-errors-count').text(num(progress.errors_count));
+      $root.find('.js-cursor').text(num(progress.cursor));
+      $root.find('.js-total').text(num(progress.total));
+      setBar($root, num(progress.cursor), num(progress.total));
+    }
+
+    function renderErrors($root, progress) {
+      var $tbody = $root.find('.js-errors-body');
+      $tbody.find('tr.js-error-row').remove();
+      var last = Array.isArray(progress.last_errors) ? progress.last_errors : [];
+      if (!last.length) {
+        $tbody.find('.js-errors-empty').removeClass('d-none');
+        return;
+      }
+      $tbody.find('.js-errors-empty').addClass('d-none');
+      for (var i = Math.max(0, last.length - 50); i < last.length; i++) {
+        var e = last[i] || {};
+        var file = (e.file || '').toString();
+        var reason = (e.reason || '').toString();
+        var $tr = $('<tr class="js-error-row"></tr>');
+        $tr.append($('<td style="white-space:normal; word-break:break-all;"></td>').text(file));
+        $tr.append($('<td></td>').text(reason));
+        $tbody.append($tr);
+      }
+    }
+
+    function findForm(assessmentType) {
+      var action = assessmentType === 'CRQ' ? 'admin/emarking/import_crq_images' : 'admin/emarking/import_dictation_images';
+      var selector = 'form[action*="' + action + '"]';
+      return $(selector).first();
+    }
+
+    function rootFor(assessmentType) {
+      return $('#live-import-' + assessmentType);
+    }
+
+    function liveImportStart(assessmentType) {
+      var $form = findForm(assessmentType);
+      if (!$form.length) return;
+
+      var $root = rootFor(assessmentType);
+      $root.removeClass('d-none');
+      $root.data('cancelled', false);
+
+      var baseFolder = ($form.find('input[name="base_folder"]').val() || '').toString();
+      var uploadBatchNo = ($form.find('input[name="upload_batch_no"]').val() || '').toString();
+      var chunkSize = num($form.find('.js-chunk-size').val());
+      if (chunkSize <= 0) chunkSize = 200;
+      if (chunkSize > 5000) chunkSize = 5000;
+
+      setStatus($root, 'Starting...');
+      setCounts($root, { inserted: 0, skipped: 0, errors_count: 0, cursor: 0, total: 0 });
+      renderErrors($root, { last_errors: [] });
+
+      var startUrl = '<?php echo base_url('admin/emarking/import_async_start'); ?>';
+      var tickUrl = '<?php echo base_url('admin/emarking/import_async_tick'); ?>';
+
+      var startPayload = $.extend({}, csrfPair(), {
+        assessment_type: assessmentType,
+        base_folder: baseFolder,
+        upload_batch_no: uploadBatchNo,
+        chunk_size: chunkSize
+      });
+
+      $form.find('button, input, select, textarea').prop('disabled', true);
+
+      $.ajax({
+        url: startUrl,
+        type: 'POST',
+        dataType: 'json',
+        data: startPayload
+      }).done(function (resp) {
+        if (!resp || !resp.ok || !resp.key) {
+          setStatus($root, (resp && resp.error) ? resp.error : 'Unable to start import');
+          $form.find('button, input, select, textarea').prop('disabled', false);
+          return;
+        }
+
+        if (resp.upload_batch_no) {
+          $form.find('input[name="upload_batch_no"]').val(resp.upload_batch_no);
+        }
+
+        var key = resp.key;
+        setStatus($root, 'Running...');
+
+        function tick() {
+          if ($root.data('cancelled')) {
+            setStatus($root, 'Cancelled (client-side).');
+            $form.find('button, input, select, textarea').prop('disabled', false);
+            return;
+          }
+
+          var tickPayload = $.extend({}, csrfPair(), { key: key });
+          $.ajax({
+            url: tickUrl,
+            type: 'POST',
+            dataType: 'json',
+            data: tickPayload
+          }).done(function (r) {
+            var p = r && r.progress ? r.progress : null;
+            if (!r || !r.ok || !p) {
+              setStatus($root, (r && r.error) ? r.error : 'Import tick failed');
+              $form.find('button, input, select, textarea').prop('disabled', false);
+              return;
+            }
+
+            setCounts($root, p);
+            renderErrors($root, p);
+
+            if ((p.status || '') === 'done' || num(p.cursor) >= num(p.total)) {
+              setStatus($root, 'Done.');
+              $form.find('button, input, select, textarea').prop('disabled', false);
+              return;
+            }
+
+            setTimeout(tick, 50);
+          }).fail(function () {
+            setStatus($root, 'Import tick request failed');
+            $form.find('button, input, select, textarea').prop('disabled', false);
+          });
+        }
+
+        tick();
+      }).fail(function () {
+        setStatus($root, 'Start request failed');
+        $form.find('button, input, select, textarea').prop('disabled', false);
+      });
+    }
+
+    $(document).on('click', '.js-live-import', function () {
+      var assessmentType = ($(this).data('assessment') || '').toString();
+      if (!assessmentType) return;
+      liveImportStart(assessmentType);
+    });
+
+    $(document).on('click', '#live-import-CRQ .js-cancel, #live-import-DICTATION .js-cancel', function () {
+      var $root = $(this).closest('div[id^="live-import-"]');
+      $root.data('cancelled', true);
+    });
+  })();
+</script>
 
 <?php include viewPath('admin/includes/footer'); ?>
