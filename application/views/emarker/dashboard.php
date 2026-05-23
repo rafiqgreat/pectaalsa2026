@@ -22,6 +22,12 @@
 
     <?php include viewPath('user/includes/notifications'); ?>
 
+    <div class="d-flex justify-content-end mb-2">
+      <a href="<?= base_url('emarker/marking/get_batch_for_checking') ?>" class="btn btn-success">
+        Get Batch for Checking
+      </a>
+    </div>
+
     <style>
       .batch-meta { color:#6c757d; font-size:12px; }
       .batch-kv { display:flex; gap:6px; flex-wrap:wrap; }
@@ -34,6 +40,14 @@
           <div class="alert alert-info mb-0">No assigned batches.</div>
         </div>
       <?php else: ?>
+        <?php
+          $subject_code_map = [
+            '1' => 'ENGLISH',
+            '2' => 'URDU',
+            '3' => 'MATH',
+            '4' => 'SCIENCE',
+          ];
+        ?>
         <?php foreach ($batches as $b): ?>
           <?php
           $total = (int) ($b->total_questions ?? 0);
@@ -57,13 +71,19 @@
               $time_left = ($days > 0 ? $days . 'd ' : '') . $hours . 'h ' . $mins . 'm';
             }
           }
+
+          $subject_code = trim((string) ($b->subject_code ?? ''));
+          $subject_label = $subject_code;
+          if ($subject_code !== '' && isset($subject_code_map[$subject_code])) {
+            $subject_label = $subject_code_map[$subject_code];
+          }
           ?>
           <div class="col-12">
             <div class="card">
               <div class="card-header">
                 <div class="d-flex align-items-center justify-content-between">
                   <h3 class="card-title mb-0">
-                    Subject: <?php echo html_escape((string) $b->subject_code); ?>
+                    Subject: <?php echo html_escape((string) $subject_label); ?>
                     <span class="text-muted">| <?php echo html_escape((string) $b->assessment_type); ?> | Grade <?php echo (int) $b->grade; ?></span>
                   </h3>
                   <span class="badge badge-info"><?php echo html_escape((string) $b->status); ?></span>

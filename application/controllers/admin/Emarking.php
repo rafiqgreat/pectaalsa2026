@@ -59,7 +59,8 @@ class Emarking extends MY_Controller
 		if ($this->current_role() !== 18) return [];
 		if (!$this->db->field_exists('subjects', 'users')) return [];
 
-		$uid = (int) $this->current_user_id();
+		// In this codebase, logged('id') is the most reliable across session/cookie login.
+		$uid = (int) logged('id');
 		if ($uid <= 0) return [];
 
 		$row = $this->db->select('subjects')->get_where('users', ['id' => $uid])->row();
@@ -67,24 +68,72 @@ class Emarking extends MY_Controller
 		if ($raw === '') return [];
 
 		$decoded = json_decode($raw, true);
+		// If JSON decode failed, fall back to comma-separated parsing.
+		if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+			$decoded = preg_split('/\s*,\s*/', trim($raw, "[]\"' \t\n\r\0\x0B"));
+		}
+		// Some rows may store JSON-as-string (double-encoded). Try decoding again.
+		if (is_string($decoded)) {
+			$decoded2 = json_decode($decoded, true);
+			if (is_array($decoded2)) {
+				$decoded = $decoded2;
+			}
+		}
+
 		$subjects = is_array($decoded) ? $decoded : preg_split('/\s*,\s*/', $raw);
+		// Normalize entries like {"0":"ENGLISH","1":"URDU"} (assoc arrays) to values.
+		if (is_array($subjects) && array_values($subjects) !== $subjects) {
+			$subjects = array_values($subjects);
+		}
 		$subjects = array_values(array_unique(array_filter(array_map('trim', (array) $subjects), function ($v) { return $v !== ''; })));
 		return $subjects;
 	}
 
 	private function ss_allowed_subject_codes()
 	{
-		$subjects = array_map('strtoupper', $this->get_subject_specialist_subjects());
+		$raw = $this->get_subject_specialist_subjects();
+		$subjects = array_values(array_unique(array_filter(array_map('trim', (array) $raw), function ($v) { return (string) $v !== ''; })));
+
 		$allowed = [];
-		foreach ($this->subject_code_map as $code => $name) {
-			if (in_array($name, $subjects, true)) $allowed[] = (string) $code;
+		foreach ($subjects as $s) {
+			// Accept numeric subject codes in JSON as well as names.
+			if (preg_match('/^\\d+$/', (string) $s)) {
+				$code = (int) $s;
+				if (isset($this->subject_code_map[$code])) {
+					$allowed[] = (string) $code;
+				}
+				continue;
+			}
+
+			$name = strtoupper((string) $s);
+			foreach ($this->subject_code_map as $code => $mappedName) {
+				if ($name === strtoupper((string) $mappedName)) {
+					$allowed[] = (string) $code;
+				}
+			}
 		}
-		return $allowed;
+
+		return array_values(array_unique($allowed));
 	}
 
 	private function ss_allowed_subject_names()
 	{
-		return array_values(array_unique(array_map('strtoupper', $this->get_subject_specialist_subjects())));
+		$raw = $this->get_subject_specialist_subjects();
+		$subjects = array_values(array_unique(array_filter(array_map('trim', (array) $raw), function ($v) { return (string) $v !== ''; })));
+
+		$out = [];
+		foreach ($subjects as $s) {
+			if (preg_match('/^\\d+$/', (string) $s)) {
+				$code = (int) $s;
+				if (isset($this->subject_code_map[$code])) {
+					$out[] = strtoupper((string) $this->subject_code_map[$code]);
+				}
+				continue;
+			}
+			$out[] = strtoupper((string) $s);
+		}
+
+		return array_values(array_unique($out));
 	}
 
 	private function safe_unlink_relative($relativePath)
@@ -133,16 +182,35 @@ class Emarking extends MY_Controller
 			'page_no' => trim((string) $this->input->get('page_no', true)),
 			'status' => trim((string) $this->input->get('status', true)),
 		];
+		// Grade fixed to 4 for this module UI.
+		$filters['grade'] = '4';
+		$this->page_data['subject_options'] = $this->subject_code_map;
+		if ($this->current_role() === 18) {
+			$allowed = $this->ss_allowed_subject_codes();
+			$opts = [];
+			foreach ($this->subject_code_map as $code => $name) {
+				if (in_array((string) $code, $allowed, true)) $opts[$code] = $name;
+			}
+			$this->page_data['subject_options'] = $opts;
+		}
 
 		$this->page_data['filters'] = $filters;
 		$query_filters = $filters;
 		if ($this->current_role() === 18) {
 			$allowed_codes = $this->ss_allowed_subject_codes();
 			$typed = trim((string) ($filters['subject_code'] ?? ''));
-			if ($typed !== '' && !in_array($typed, $allowed_codes, true)) {
-				$query_filters['subject_code'] = ['-1'];
+			if (!empty($allowed_codes)) {
+				if ($typed !== '' && !in_array($typed, $allowed_codes, true)) {
+					$query_filters['subject_code'] = ['-1'];
+				} else {
+					$query_filters['subject_code'] = ($typed !== '') ? $typed : $allowed_codes;
+				}
 			} else {
-				$query_filters['subject_code'] = ($typed !== '') ? $typed : $allowed_codes;
+				// Fallback: if subjects are not configured properly for SS, do not apply a forced -1 filter.
+				// This prevents false "No records" while still allowing explicit subject filtering.
+				if ($typed !== '') {
+					$query_filters['subject_code'] = $typed;
+				}
 			}
 		}
 
@@ -154,6 +222,15 @@ class Emarking extends MY_Controller
 	{
 		$this->page_data['page']->submenu = 'questions';
 		$this->page_data['page']->title = 'Add Question';
+		$this->page_data['subject_options'] = $this->subject_code_map;
+		if ($this->current_role() === 18) {
+			$allowed = $this->ss_allowed_subject_codes();
+			$opts = [];
+			foreach ($this->subject_code_map as $code => $name) {
+				if (in_array((string) $code, $allowed, true)) $opts[$code] = $name;
+			}
+			$this->page_data['subject_options'] = $opts;
+		}
 
 		if ($this->input->method(true) === 'POST') {
 			$this->load->library('form_validation');
@@ -217,6 +294,15 @@ class Emarking extends MY_Controller
 	{
 		$this->page_data['page']->submenu = 'questions';
 		$this->page_data['page']->title = 'Edit Question';
+		$this->page_data['subject_options'] = $this->subject_code_map;
+		if ($this->current_role() === 18) {
+			$allowed = $this->ss_allowed_subject_codes();
+			$opts = [];
+			foreach ($this->subject_code_map as $code => $name) {
+				if (in_array((string) $code, $allowed, true)) $opts[$code] = $name;
+			}
+			$this->page_data['subject_options'] = $opts;
+		}
 
 		$question = $this->emarking->get_question((int) $id);
 		if (!$question) show_404();
@@ -618,6 +704,17 @@ class Emarking extends MY_Controller
 			'subject_code' => trim((string) $this->input->get('subject_code', true)),
 			'version' => trim((string) $this->input->get('version', true)),
 		];
+		// Grade is fixed to 4 on this screen.
+		$get_filters['grade'] = '4';
+		$this->page_data['subject_options'] = $this->subject_code_map;
+		if ($this->current_role() === 18) {
+			$allowed = $this->ss_allowed_subject_codes();
+			$opts = [];
+			foreach ($this->subject_code_map as $code => $name) {
+				if (in_array((string) $code, $allowed, true)) $opts[$code] = $name;
+			}
+			$this->page_data['subject_options'] = $opts;
+		}
 
 		if ($this->input->method(true) === 'POST') {
 			postAllowed();
@@ -734,26 +831,48 @@ class Emarking extends MY_Controller
 		}
 
 		$this->page_data['filters'] = $get_filters;
-		$q_filters = array_merge($get_filters, ['status' => '1']);
-		if ($this->current_role() === 18) {
-			// SS should only see questions for their assigned subjects.
-			$allowed_codes = $this->ss_allowed_subject_codes();
-			// If user typed a specific subject_code filter, validate it is within allowed set.
-			$typed = trim((string) ($get_filters['subject_code'] ?? ''));
-			if ($typed !== '' && !in_array($typed, $allowed_codes, true)) {
-				// Force empty results by setting a non-matching code.
-				$allowed_codes = ['-1'];
+
+		// Do not show any questions/eMarkers until user applies required filters.
+		$typed_subject_code = trim((string) ($get_filters['subject_code'] ?? ''));
+		$typed_version = trim((string) ($get_filters['version'] ?? ''));
+		$has_required_filters = ($typed_subject_code !== '' && $typed_version !== '');
+
+		$questions = [];
+		$emarkers = [];
+		if ($has_required_filters) {
+			$q_filters = array_merge($get_filters, ['status' => '1']);
+			if ($this->current_role() === 18) {
+				// SS should only see questions for their assigned subjects.
+				$allowed_codes = $this->ss_allowed_subject_codes();
+				// Validate typed subject_code filter is within allowed set.
+				if ($typed_subject_code !== '' && in_array($typed_subject_code, $allowed_codes, true)) {
+					// If SS typed a specific subject, restrict to that single subject.
+					$q_filters['subject_code'] = $typed_subject_code;
+				} else {
+					// Otherwise, restrict to SS allowed subjects (or force empty).
+					$q_filters['subject_code'] = !empty($allowed_codes) ? $allowed_codes : ['-1'];
+				}
 			}
-			$q_filters['subject_code'] = $allowed_codes;
+			$questions = $this->emarking->get_questions($q_filters);
+
+			// Filter eMarkers list by selected subject specialization.
+			$subject_name = $this->subject_code_map[(int) $typed_subject_code] ?? null;
+			if (!empty($subject_name)) {
+				$specs = [strtoupper((string) $subject_name)];
+				if ($this->current_role() === 18) {
+					$allowed_specs = $this->ss_allowed_subject_names();
+					$specs = array_values(array_intersect($specs, $allowed_specs));
+				}
+				$emarkers = !empty($specs) ? $this->emarking_batch->get_emarkers_by_specializations($specs) : [];
+			} else {
+				$emarkers = ($this->current_role() === 18)
+					? $this->emarking_batch->get_emarkers_by_specializations($this->ss_allowed_subject_names())
+					: $this->emarking_batch->get_emarkers();
+			}
 		}
-		$questions = $this->emarking->get_questions($q_filters);
+
 		$this->page_data['questions'] = $questions;
-		if ($this->current_role() === 18) {
-			// SS should only see eMarkers whose specialization matches SS assigned subjects.
-			$this->page_data['emarkers'] = $this->emarking_batch->get_emarkers_by_specializations($this->ss_allowed_subject_names());
-		} else {
-			$this->page_data['emarkers'] = $this->emarking_batch->get_emarkers();
-		}
+		$this->page_data['emarkers'] = $emarkers;
 
 		// Count images per question (for the dropdown display)
 		$uploaded_counts = [];
@@ -796,6 +915,17 @@ class Emarking extends MY_Controller
 			'assigned_to' => trim((string) $this->input->get('assigned_to', true)),
 			'question_id' => trim((string) $this->input->get('question_id', true)),
 		];
+		// Grade fixed to 4 for this module UI.
+		$filters['grade'] = '4';
+		$this->page_data['subject_options'] = $this->subject_code_map;
+		if ($this->current_role() === 18) {
+			$allowed = $this->ss_allowed_subject_codes();
+			$opts = [];
+			foreach ($this->subject_code_map as $code => $name) {
+				if (in_array((string) $code, $allowed, true)) $opts[$code] = $name;
+			}
+			$this->page_data['subject_options'] = $opts;
+		}
 
 		$this->page_data['filters'] = $filters;
 		$query_filters = $filters;

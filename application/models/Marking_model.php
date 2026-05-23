@@ -3,6 +3,20 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Marking_model extends CI_Model
 {
+	private $subject_code_map = [
+		'ENGLISH' => '1',
+		'URDU' => '2',
+		'MATH' => '3',
+		'SCIENCE' => '4',
+	];
+
+	private $subject_name_map = [
+		'1' => 'ENGLISH',
+		'2' => 'URDU',
+		'3' => 'MATH',
+		'4' => 'SCIENCE',
+	];
+
 	public function get_batch_total_items($batch_id, $emarker_id)
 	{
 		$this->db->from('emarking_batch_items i');
@@ -345,5 +359,136 @@ class Marking_model extends CI_Model
 
 		$this->db->trans_commit();
 		return ['ok' => true, 'mark_id' => $mark_id];
+	}
+
+	public function has_incomplete_assigned_batches($emarker_id)
+	{
+		$emarker_id = (int) $emarker_id;
+		if ($emarker_id <= 0) return false;
+
+		$cnt = (int) $this->db->from('emarking_batch_items i')
+			->join('emarking_batches b', 'b.id = i.batch_id', 'inner')
+			->where('b.assigned_to', $emarker_id)
+			->where('i.status', 'PENDING')
+			->count_all_results();
+
+		return $cnt > 0;
+	}
+
+	public function get_emarker_allowed_subjects($emarker_id)
+	{
+		$emarker_id = (int) $emarker_id;
+		if ($emarker_id <= 0) return [];
+
+		if (!$this->db->table_exists('teacher_specializations')) {
+			return [];
+		}
+
+		$row = $this->db->select('specialization')->get_where('teacher_specializations', ['user_id' => $emarker_id])->row();
+		$raw = trim((string) ($row->specialization ?? ''));
+		if ($raw === '') return [];
+
+		$decoded = json_decode($raw, true);
+		$list = is_array($decoded) ? $decoded : preg_split('/\s*,\s*/', $raw);
+		$list = array_values(array_unique(array_filter(array_map('trim', (array) $list), function ($v) { return $v !== ''; })));
+
+		$out = [];
+		foreach ($list as $s) {
+			$s = strtoupper(trim((string) $s));
+			if ($s === '') continue;
+			// If specialization already stores numeric subject_code, keep it.
+			if (preg_match('/^\\d+$/', $s)) {
+				$out[] = (string) $s;
+				if (isset($this->subject_name_map[(string) $s])) {
+					$out[] = (string) $this->subject_name_map[(string) $s];
+				}
+				continue;
+			}
+			if (isset($this->subject_code_map[$s])) {
+				$out[] = (string) $s;
+				$out[] = (string) $this->subject_code_map[$s];
+			}
+		}
+
+		return array_values(array_unique($out));
+	}
+
+	private function generate_batch_code($assessment_type)
+	{
+		$assessment_type = strtoupper((string) $assessment_type);
+		$prefix = $assessment_type === 'DICTATION' ? 'DICT' : 'CRQ';
+		$ts = date('YmdHis');
+		$like = $prefix . '-' . $ts . '-%';
+		$cnt = (int) $this->db->from('emarking_batches')->like('batch_code', $like, 'after')->count_all_results();
+		$seq = $cnt + 1;
+		return $prefix . '-' . $ts . '-' . $seq;
+	}
+
+	private function get_default_batch_settings_from_admin()
+	{
+		return [
+			'batch_size' => 100,
+			'deadline_dt' => date('Y-m-d H:i:s', time() + (3 * 24 * 60 * 60)),
+		];
+	}
+
+	public function create_auto_batch_for_emarker($emarker_id)
+	{
+		$emarker_id = (int) $emarker_id;
+		if ($emarker_id <= 0) return ['ok' => false, 'code' => 'invalid'];
+
+		$allowed_subjects = $this->get_emarker_allowed_subjects($emarker_id);
+		if (empty($allowed_subjects)) {
+			return ['ok' => false, 'code' => 'no_subjects'];
+		}
+
+		$settings = $this->get_default_batch_settings_from_admin();
+		$batch_size = (int) ($settings['batch_size'] ?? 100);
+		$deadline_dt = (string) ($settings['deadline_dt'] ?? date('Y-m-d H:i:s', time() + (3 * 24 * 60 * 60)));
+
+		// Pick an available question within allowed subjects that has UPLOADED images and is not in any active batch.
+		$question = $this->db->select('q.id, q.assessment_type', false)
+			->from('emarking_questions q')
+			->where('q.status', 1)
+			->where_in('q.subject_code', $allowed_subjects)
+			->where('EXISTS (SELECT 1 FROM emarking_question_images qi WHERE qi.question_id = q.id AND qi.status = \'UPLOADED\')', null, false)
+			->where('NOT EXISTS (SELECT 1 FROM emarking_batches b WHERE b.question_id = q.id AND b.status IN (\'PENDING\',\'IN_PROGRESS\'))', null, false)
+			->order_by('q.id', 'ASC')
+			->limit(1)
+			->get()
+			->row();
+
+		if (!$question) {
+			return ['ok' => false, 'code' => 'no_available'];
+		}
+
+		$CI = &get_instance();
+		$CI->load->model('Emarking_batch_model', 'emarking_batch');
+
+		// Create the batch using the same model method admin uses (so it appears in admin list).
+		$out = $CI->emarking_batch->create_batch([
+			'assessment_type' => '', // auto from question
+			'question_id' => (int) $question->id,
+			'emarker_id' => $emarker_id,
+			'assigned_by' => null,
+			'batch_size' => $batch_size,
+			'deadline' => $deadline_dt,
+		]);
+
+		if (!empty($out['ok'])) {
+			return [
+				'ok' => true,
+				'batch_id' => (int) ($out['batch_id'] ?? 0),
+				'batch_code' => (string) ($out['batch_code'] ?? ''),
+				'items_created' => (int) ($out['items_created'] ?? 0),
+			];
+		}
+
+		$err = (string) ($out['error'] ?? 'Unable to create batch.');
+		if (stripos($err, 'No UPLOADED images') !== false) {
+			return ['ok' => false, 'code' => 'no_available'];
+		}
+
+		return ['ok' => false, 'error' => $err];
 	}
 }

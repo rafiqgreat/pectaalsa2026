@@ -39,6 +39,14 @@
         </div>
       </div>
       <div class="card-body">
+        <?php
+          $subject_code_map = [
+            '1' => 'ENGLISH',
+            '2' => 'URDU',
+            '3' => 'MATH',
+            '4' => 'SCIENCE',
+          ];
+        ?>
         <form method="get" class="mb-3">
           <div class="form-row">
             <div class="col-md-2 mb-2">
@@ -57,10 +65,24 @@
               </select>
             </div>
             <div class="col-md-1 mb-2">
-              <input type="text" name="grade" value="<?php echo htmlspecialchars((string) ($filters['grade'] ?? '')); ?>" class="form-control" placeholder="Grade">
+              <input type="hidden" name="grade" value="4">
+              <select class="form-control" disabled>
+                <option value="4" selected>Grade 4</option>
+              </select>
             </div>
             <div class="col-md-2 mb-2">
-              <input type="text" name="subject_code" value="<?php echo htmlspecialchars((string) ($filters['subject_code'] ?? '')); ?>" class="form-control" placeholder="Subject">
+              <?php $subject_code_val = (string) ($filters['subject_code'] ?? ''); ?>
+              <select name="subject_code" class="form-control">
+                <option value="">Subject (All)</option>
+                <?php
+                  $subject_options = isset($subject_options) && is_array($subject_options) ? $subject_options : [];
+                  foreach ($subject_options as $code => $name):
+                ?>
+                  <option value="<?php echo (int) $code; ?>" <?php echo ($subject_code_val === (string) $code) ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars((string) $name); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
             </div>
             <div class="col-md-2 mb-2">
               <input type="text" name="assigned_to" value="<?php echo htmlspecialchars((string) ($filters['assigned_to'] ?? '')); ?>" class="form-control" placeholder="eMarker ID">
@@ -72,7 +94,7 @@
               <button type="submit" class="btn btn-secondary btn-block">Go</button>
             </div>
           </div>
-          <a href="<?php echo base_url('admin/emarking/batches'); ?>" class="btn btn-link btn-sm">Reset</a>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.location.href='<?php echo base_url('admin/emarking/batches'); ?>'">Reset</button>
         </form>
 
         <div class="table-responsive">
@@ -103,7 +125,11 @@
                     <td><?php echo htmlspecialchars((string) $b->batch_code); ?></td>
                     <td><?php echo htmlspecialchars((string) $b->assessment_type); ?></td>
                     <td><?php echo (int) $b->grade; ?></td>
-                    <td><?php echo htmlspecialchars((string) $b->subject_code); ?></td>
+                    <?php
+                      $scode = trim((string) ($b->subject_code ?? ''));
+                      $slabel = isset($subject_code_map[$scode]) ? $subject_code_map[$scode] : $scode;
+                    ?>
+                    <td><?php echo htmlspecialchars((string) $slabel); ?></td>
                     <td><?php echo htmlspecialchars((string) $b->version); ?></td>
                     <td>
                       <div><strong><?php echo htmlspecialchars((string) $b->question_no); ?></strong></div>

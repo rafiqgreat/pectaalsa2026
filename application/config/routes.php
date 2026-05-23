@@ -121,6 +121,7 @@ $route['emarker/marking/dashboard'] = 'emarker/marking/dashboard';
 $route['emarker/marking/view-batch/(:num)'] = 'emarker/marking/view_batch/$1';
 $route['emarker/marking/start/(:num)'] = 'emarker/marking/start/$1';
 $route['emarker/marking/save-marks'] = 'emarker/marking/save_marks';
+$route['emarker/marking/get_batch_for_checking'] = 'emarker/marking/get_batch_for_checking';
 
 // E-Marker e-Marking module
 $route['emarker'] = 'emarker/marking';

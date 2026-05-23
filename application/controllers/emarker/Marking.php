@@ -147,4 +147,44 @@ class Marking extends MY_Controller
 	{
 		$this->save_marks();
 	}
+
+	public function get_batch_for_checking()
+	{
+		$user_id = $this->current_user_id();
+		if ($user_id <= 0 || $this->current_role() !== 2) {
+			$this->session->set_flashdata('alert', 'Access denied.');
+			$this->session->set_flashdata('alert-type', 'error');
+			redirect('user/login', 'refresh');
+			return;
+		}
+
+		if ($this->marking->has_incomplete_assigned_batches($user_id)) {
+			$this->session->set_flashdata('alert', 'Complete marking first to get new batch.');
+			$this->session->set_flashdata('alert-type', 'error');
+			redirect('emarker/marking/dashboard', 'refresh');
+			return;
+		}
+
+		$out = $this->marking->create_auto_batch_for_emarker($user_id);
+		if (!empty($out['ok'])) {
+			$this->session->set_flashdata('alert', 'New batch created and assigned successfully.');
+			$this->session->set_flashdata('alert-type', 'success');
+			redirect('emarker/marking/dashboard', 'refresh');
+			return;
+		}
+
+		$code = (string) ($out['code'] ?? '');
+		if ($code === 'no_subjects') {
+			$this->session->set_flashdata('alert', 'No allowed subjects are configured for your account.');
+			$this->session->set_flashdata('alert-type', 'error');
+		} elseif ($code === 'no_available') {
+			$this->session->set_flashdata('alert', 'No questions are currently available for your subject.');
+			$this->session->set_flashdata('alert-type', 'info');
+		} else {
+			$this->session->set_flashdata('alert', (string) ($out['error'] ?? 'No batch is currently available for marking.'));
+			$this->session->set_flashdata('alert-type', 'error');
+		}
+
+		redirect('emarker/marking/dashboard', 'refresh');
+	}
 }

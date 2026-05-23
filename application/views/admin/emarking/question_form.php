@@ -51,15 +51,35 @@ $action_url = $is_edit ? base_url('admin/emarking/edit_question/' . (int) $quest
             </div>
             <div class="form-group col-md-2">
               <label>Grade</label>
-              <input type="number" name="grade" class="form-control" required value="<?php echo htmlspecialchars((string) ($question->grade ?? '')); ?>">
+              <?php $grade_val = (string) ($question->grade ?? '4'); ?>
+              <input type="hidden" name="grade" value="4">
+              <select class="form-control" disabled>
+                <option value="4" selected>Grade 4</option>
+              </select>
             </div>
             <div class="form-group col-md-2">
-              <label>Subject Code</label>
-              <input type="text" name="subject_code" class="form-control" required value="<?php echo htmlspecialchars((string) ($question->subject_code ?? '')); ?>">
+              <label>Subject <span class="text-danger">*</span></label>
+              <?php $subject_code_val = (string) ($question->subject_code ?? ''); ?>
+              <select name="subject_code" class="form-control" required>
+                <option value="" disabled <?php echo ($subject_code_val === '') ? 'selected' : ''; ?>>Select Subject</option>
+                <?php
+                  $subject_options = isset($subject_options) && is_array($subject_options) ? $subject_options : [];
+                  foreach ($subject_options as $code => $name):
+                ?>
+                  <option value="<?php echo (int) $code; ?>" <?php echo ($subject_code_val === (string) $code) ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars((string) $name); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
             </div>
             <div class="form-group col-md-2">
-              <label>Version</label>
-              <input type="number" name="version" class="form-control" required value="<?php echo htmlspecialchars((string) ($question->version ?? 1)); ?>">
+              <label>Version <span class="text-danger">*</span></label>
+              <?php $version_val = (string) ($question->version ?? ''); ?>
+              <select name="version" class="form-control" required>
+                <option value="" disabled <?php echo ($version_val === '' || $version_val === '0') ? 'selected' : ''; ?>>Select Version</option>
+                <option value="1" <?php echo ($version_val === '1') ? 'selected' : ''; ?>>V1</option>
+                <option value="2" <?php echo ($version_val === '2') ? 'selected' : ''; ?>>V2</option>
+              </select>
             </div>
             <div class="form-group col-md-2">
               <label>Page No</label>

@@ -92,12 +92,13 @@ class Emarking_model extends CI_Model
 		$grade = isset($filters['grade']) ? trim((string) $filters['grade']) : '';
 		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
 
-		$subject_code = isset($filters['subject_code']) ? trim((string) $filters['subject_code']) : '';
+		$subject_code = $filters['subject_code'] ?? '';
 		// Support both single subject_code and an array for role-based filtering (e.g. Subject Specialist).
 		if (is_array($subject_code)) {
 			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
 			if (!empty($subject_code)) $this->db->where_in('q.subject_code', $subject_code);
 		} else {
+			$subject_code = trim((string) $subject_code);
 			if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
 		}
 
@@ -126,6 +127,13 @@ class Emarking_model extends CI_Model
 		$this->db->order_by('q.question_no', 'ASC');
 
 		return $this->db->get()->result();
+	}
+
+	public function get_questions_compiled($filters = [])
+	{
+		// Build the same query as get_questions() but return SQL for debugging.
+		$this->get_questions($filters);
+		return (string) $this->db->last_query();
 	}
 
 	public function get_question($id)
