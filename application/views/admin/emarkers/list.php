@@ -29,6 +29,15 @@ defined('BASEPATH') or exit('No direct script access allowed');
 		. ($spec !== '' ? ('&spec=' . urlencode($spec)) : '')
 		. ($qual !== '' ? ('&qual=' . urlencode($qual)) : '');
 	$expArrow = ($sort === 'exp') ? ($dir === 'asc' ? '&uarr;' : '&darr;') : '&uarr;';
+
+	$exportCsvUrl = url('admin/emarkers/' . $type)
+		. '?export=csv'
+		. ($sort !== '' ? ('&sort=' . urlencode($sort)) : '')
+		. ($dir !== '' ? ('&dir=' . urlencode($dir)) : '')
+		. ($cnic !== '' ? ('&cnic=' . urlencode($cnic)) : '')
+		. ($name !== '' ? ('&name=' . urlencode($name)) : '')
+		. ($spec !== '' ? ('&spec=' . urlencode($spec)) : '')
+		. ($qual !== '' ? ('&qual=' . urlencode($qual)) : '');
 ?>
 
 <!-- Content Header (Page header) -->
@@ -57,6 +66,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
 				<div class="card">
 					<div class="card-header d-flex p-0">
 						<h3 class="card-title p-3"><?php echo htmlspecialchars((string) $pageTitle); ?></h3>
+						<?php if ((int) logged('role') === 1 && in_array($type, ['pending', 'approved', 'rejected'], true)): ?>
+							<div class="ml-auto p-3">
+								<a href="<?php echo $exportCsvUrl; ?>" class="btn btn-sm btn-outline-success">
+									<i class="fa fa-download"></i> Export CSV
+								</a>
+							</div>
+						<?php endif; ?>
 					</div>
 
 					<div class="card-body">
@@ -112,6 +128,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 									<th>Name</th>
 									<th style="width:170px;">CNIC</th>
 									<th>Specialization</th>
+									<th style="width:120px;">Sector</th>
 									<th style="width:140px;">
 										<a href="<?php echo $expUrl; ?>" style="color:inherit;text-decoration:none;">
 											Experience <?php echo $expArrow; ?>
@@ -139,6 +156,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 											<td class="<?php echo (strtoupper($specVal) === 'URDU') ? 'urdufont-right' : ''; ?>">
 												<?php echo htmlspecialchars($specVal); ?>
 											</td>
+											<td><?php echo htmlspecialchars((string) ($r->sector ?? '---')); ?></td>
 											<td><?php echo number_format((float) ($r->total_years ?? 0), 1); ?> years</td>
 											<td><?php echo htmlspecialchars((string) ($r->highest_degree ?? '')); ?></td>
 											<td><?php echo htmlspecialchars((string) ($r->teaching_level ?? '---')); ?></td>
@@ -178,7 +196,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 										</tr>
 									<?php endforeach; ?>
 								<?php else: ?>
-									<tr><td colspan="10" class="text-center text-muted py-4">No records found.</td></tr>
+									<tr><td colspan="11" class="text-center text-muted py-4">No records found.</td></tr>
 								<?php endif; ?>
 							</tbody>
 						</table>

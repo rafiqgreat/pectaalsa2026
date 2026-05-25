@@ -172,7 +172,27 @@ if (!in_array($tab, ['questions', 'subjects', 'emarkers', 'batches'], true)) $ta
                   <?php if (empty($subject_summary)): ?>
                     <tr><td colspan="10" class="text-center text-muted">No records</td></tr>
                   <?php else: ?>
+                    <?php
+                    $subject_totals = [
+                      'total_images' => 0,
+                      'uploaded' => 0,
+                      'assigned' => 0,
+                      'marked' => 0,
+                      'skipped' => 0,
+                      'not_attempted' => 0,
+                      'recheck' => 0,
+                    ];
+                    ?>
                     <?php foreach ($subject_summary as $r): ?>
+                      <?php
+                      $subject_totals['total_images'] += (int) ($r->total_images ?? 0);
+                      $subject_totals['uploaded'] += (int) ($r->uploaded ?? 0);
+                      $subject_totals['assigned'] += (int) ($r->assigned ?? 0);
+                      $subject_totals['marked'] += (int) ($r->marked ?? 0);
+                      $subject_totals['skipped'] += (int) ($r->skipped ?? 0);
+                      $subject_totals['not_attempted'] += (int) ($r->not_attempted ?? 0);
+                      $subject_totals['recheck'] += (int) ($r->recheck ?? 0);
+                      ?>
                       <tr>
                         <td><?php echo htmlspecialchars((string) $r->assessment_type); ?></td>
                         <td><?php echo (int) $r->grade; ?></td>
@@ -186,6 +206,16 @@ if (!in_array($tab, ['questions', 'subjects', 'emarkers', 'batches'], true)) $ta
                         <td><?php echo (int) $r->recheck; ?></td>
                       </tr>
                     <?php endforeach; ?>
+                    <tr class="font-weight-bold table-secondary">
+                      <td colspan="3" class="text-right">Total</td>
+                      <td><?php echo (int) $subject_totals['total_images']; ?></td>
+                      <td><?php echo (int) $subject_totals['uploaded']; ?></td>
+                      <td><?php echo (int) $subject_totals['assigned']; ?></td>
+                      <td><?php echo (int) $subject_totals['marked']; ?></td>
+                      <td><?php echo (int) $subject_totals['skipped']; ?></td>
+                      <td><?php echo (int) $subject_totals['not_attempted']; ?></td>
+                      <td><?php echo (int) $subject_totals['recheck']; ?></td>
+                    </tr>
                   <?php endif; ?>
                 </tbody>
               </table>
@@ -285,4 +315,3 @@ if (!in_array($tab, ['questions', 'subjects', 'emarkers', 'batches'], true)) $ta
 </section>
 
 <?php include viewPath('admin/includes/footer'); ?>
-

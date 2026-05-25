@@ -3,6 +3,81 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Emarkers extends MY_Controller
 {
+	private function export_emarkers_csv($rows, $type, $filters)
+	{
+		// Only Admin can export
+		if ((int) logged('role') !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$type = strtolower((string) $type);
+		$type = in_array($type, ['approved', 'pending', 'rejected'], true) ? $type : 'pending';
+
+		$ts = date('Ymd_His');
+		$filename = "emarkers_{$type}_{$ts}.csv";
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create export output stream.', 500);
+			return;
+		}
+
+		// Optional: write selected filters at top (comment-style)
+		$cnic = trim((string) ($filters['cnic'] ?? ''));
+		$name = trim((string) ($filters['name'] ?? ''));
+		$spec = trim((string) ($filters['spec'] ?? ''));
+		$qual = trim((string) ($filters['qual'] ?? ''));
+		if ($cnic !== '' || $name !== '' || $spec !== '' || $qual !== '') {
+			fputcsv($out, ['# Filters', 'cnic=' . $cnic, 'name=' . $name, 'spec=' . $spec, 'qual=' . $qual]);
+		}
+
+		fputcsv($out, [
+			'ID',
+			'Name',
+			'CNIC',
+			'Email',
+			'Phone',
+			'Specialization',
+			'Sector',
+			'Experience (Years)',
+			'Qualification',
+			'Teaching Level',
+			'Active Status',
+			'Queue Status',
+			'Created At',
+		]);
+
+		foreach ((array) $rows as $r) {
+			$active = ((int) ($r->status ?? 0) === 1) ? 'Active' : 'Inactive';
+			$queueStatus = (string) (!empty($r->derived_status) ? $r->derived_status : ($type === 'approved' ? 'Approved' : ($type === 'rejected' ? 'Rejected' : 'Pending')));
+
+			fputcsv($out, [
+				(int) ($r->id ?? 0),
+				(string) ($r->name ?? ''),
+				(string) ($r->cnic ?? ''),
+				(string) ($r->email ?? ''),
+				(string) ($r->phone ?? ''),
+				(string) ($r->specialization ?? ''),
+				(string) ($r->sector ?? ''),
+				number_format((float) ($r->total_years ?? 0), 1, '.', ''),
+				(string) ($r->highest_degree ?? ''),
+				(string) ($r->teaching_level ?? ''),
+				$active,
+				$queueStatus,
+				(string) ($r->created_at ?? ''),
+			]);
+		}
+
+		fclose($out);
+		die;
+	}
+
 	private function get_subject_specialist_subjects()
 	{
 		// Subject Specialist assigned subjects are stored in `users.subjects`.
@@ -201,6 +276,7 @@ class Emarkers extends MY_Controller
 			sp.specialization,
 			edu.highest_degree,
 			exp.total_years,
+			exp.sector,
 			exp.teaching_level
 		FROM users u
 		LEFT JOIN teacher_registration_steps s ON s.user_id = u.id
@@ -231,6 +307,15 @@ class Emarkers extends MY_Controller
 		LEFT JOIN (
 			SELECT x.user_id,
 				ROUND(SUM(DATEDIFF(COALESCE(x.end_date, CURDATE()), x.start_date)) / 365.25, 1) AS total_years,
+				(
+					SELECT x2.sector
+					FROM teacher_experiences x2
+					WHERE x2.user_id = x.user_id
+					  AND x2.sector IS NOT NULL
+					  AND x2.sector <> ''
+					ORDER BY COALESCE(x2.end_date, CURDATE()) DESC, x2.id DESC
+					LIMIT 1
+				) AS sector,
 				(
 					SELECT x2.teaching_level
 					FROM teacher_experiences x2
@@ -272,10 +357,28 @@ class Emarkers extends MY_Controller
 				$r->derived_status = !empty($r->is_resubmission) ? 'Resubmission' : 'Fresh';
 			} elseif ($type === 'approved') {
 				$r->derived_status = 'Approved';
+			} elseif ($type === 'rejected') {
+				$r->derived_status = 'Rejected';
 			}
 			if (empty($r->total_years)) $r->total_years = 0.0;
+			if (empty($r->sector)) $r->sector = '---';
 			if (empty($r->teaching_level)) $r->teaching_level = '---';
 			if ((string) $r->teaching_level === 'SSC/HSSC') $r->teaching_level = 'Secondary';
+		}
+
+		// Export CSV (Admin only): keeps the same filters currently applied.
+		$export = strtolower(trim((string) $this->input->get('export', true)));
+		if ($export === 'csv') {
+			$this->export_emarkers_csv($rows, $type, [
+				'type' => $type,
+				'cnic' => $cnic,
+				'name' => $name,
+				'spec' => $spec,
+				'qual' => $qual,
+				'sort' => $sort,
+				'dir' => $dir,
+			]);
+			return;
 		}
 
 		$this->page_data['emarkers'] = $rows;
