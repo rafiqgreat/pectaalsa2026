@@ -13,6 +13,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 	$review_status = !empty($steps) && !empty($steps->review_status) ? (string) $steps->review_status : ($is_active ? 'approved' : 'pending');
 	$doc_verified = $is_active ? 'Verified' : 'Not-Verified';
 	$eligible = $is_completed ? 'Eligible' : 'Not-Eligible';
+	$sis_status = ((int) ($u->sis_verified ?? 0) === 1) ? 'SIS Verified' : 'Not Verified';
 ?>
 
 <section class="content-header">
@@ -119,6 +120,18 @@ defined('BASEPATH') or exit('No direct script access allowed');
 				</div>
 				<div class="col-md-4 profile-label">
 					<p><strong>CNIC:</strong> <?php echo htmlspecialchars((string) ($u->cnic ?? '')); ?></p>
+					<p>
+						<strong>SIS:</strong>
+						<?php if ((int) ($u->sis_verified ?? 0) === 1): ?>
+							<span class="text-success font-weight-bold">
+								<i class="fas fa-check-circle"></i> SIS Verified
+							</span>
+						<?php else: ?>
+							<span class="text-danger font-weight-bold">
+								<i class="fas fa-times-circle"></i> Not Verified
+							</span>
+						<?php endif; ?>
+					</p>
 					<p><strong>Gender:</strong> <?php echo htmlspecialchars((string) ($u->gender ?? '')); ?></p>
 
 					<?php if (!$is_active): ?>

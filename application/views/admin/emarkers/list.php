@@ -21,6 +21,8 @@ defined('BASEPATH') or exit('No direct script access allowed');
 		'rejected' => 'Rejected Profiles',
 	];
 	$pageTitle = $titleMap[$type] ?? 'Pending Request';
+	$hideColumns = in_array($type, ['pending', 'approved'], true);
+	$noDataColspan = $hideColumns ? 10 : 12;
 
 	$expDir = ($sort === 'exp' && $dir === 'asc') ? 'desc' : 'asc';
 	$expUrl = url('admin/emarkers/' . $type) . '?sort=exp&dir=' . $expDir
@@ -135,11 +137,14 @@ defined('BASEPATH') or exit('No direct script access allowed');
 										</a>
 									</th>
 									<th>Qualification</th>
-									<th style="width:160px;">Teaching Level</th>
+									<th style="width:120px;">SIS</th>
+									<?php if (!$hideColumns): ?>
+										<th style="width:160px;">Teaching Level</th>
+									<?php endif; ?>
 									<th style="width:150px;">Active Status</th>
 									<?php if ($type === 'rejected'): ?>
 										<th>Rejection Reason</th>
-									<?php else: ?>
+									<?php elseif (!$hideColumns): ?>
 										<th style="width:120px;">Status</th>
 									<?php endif; ?>
 									<th style="width:90px;">Action</th>
@@ -159,7 +164,20 @@ defined('BASEPATH') or exit('No direct script access allowed');
 											<td><?php echo htmlspecialchars((string) ($r->sector ?? '---')); ?></td>
 											<td><?php echo number_format((float) ($r->total_years ?? 0), 1); ?> years</td>
 											<td><?php echo htmlspecialchars((string) ($r->highest_degree ?? '')); ?></td>
-											<td><?php echo htmlspecialchars((string) ($r->teaching_level ?? '---')); ?></td>
+											<td>
+												<?php if ((int) ($r->sis_verified ?? 0) === 1): ?>
+													<span class="text-success font-weight-bold">
+														<i class="fas fa-check-circle"></i> SIS Verified
+													</span>
+												<?php else: ?>
+													<span class="text-danger font-weight-bold">
+														<i class="fas fa-times-circle"></i> Not Verified
+													</span>
+												<?php endif; ?>
+											</td>
+											<?php if (!$hideColumns): ?>
+												<td><?php echo htmlspecialchars((string) ($r->teaching_level ?? '---')); ?></td>
+											<?php endif; ?>
 											<td>
 												<?php
 													$active = ((int) ($r->status ?? 0) === 1);
@@ -182,7 +200,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 											</td>
 											<?php if ($type === 'rejected'): ?>
 												<td><?php echo htmlspecialchars((string) ($r->rejection_reason ?? '')); ?></td>
-											<?php else: ?>
+											<?php elseif (!$hideColumns): ?>
 												<td><?php echo htmlspecialchars((string) (!empty($r->derived_status) ? $r->derived_status : ($type === 'approved' ? 'Approved' : 'Pending'))); ?></td>
 											<?php endif; ?>
 											<td>
@@ -196,7 +214,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 										</tr>
 									<?php endforeach; ?>
 								<?php else: ?>
-									<tr><td colspan="11" class="text-center text-muted py-4">No records found.</td></tr>
+									<tr><td colspan="<?php echo (int) $noDataColspan; ?>" class="text-center text-muted py-4">No records found.</td></tr>
 								<?php endif; ?>
 							</tbody>
 						</table>

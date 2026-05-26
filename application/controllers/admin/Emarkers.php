@@ -270,8 +270,10 @@ class Emarkers extends MY_Controller
 			$orderBy = 'exp.total_years ' . ($dir === 'desc' ? 'DESC' : 'ASC');
 		}
 
+		$sis_select = $this->db->field_exists('sis_verified', 'users') ? 'u.sis_verified' : '0 AS sis_verified';
+
 		$sql = "SELECT
-			u.id, u.name, u.email, u.phone, u.cnic, u.status, u.created_at,
+			u.id, u.name, u.email, u.phone, u.cnic, {$sis_select}, u.status, u.created_at,
 			s.registration_completed, {$review_select}
 			sp.specialization,
 			edu.highest_degree,
