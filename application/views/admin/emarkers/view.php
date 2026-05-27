@@ -31,13 +31,14 @@ defined('BASEPATH') or exit('No direct script access allowed');
 			</div>
 			<div class="col-sm-6">
 				<div class="float-sm-right" style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
-					<?php if ($review_status === 'pending'): ?>
+					<?php $role = (int) logged('role'); ?>
+					<?php if (in_array($role, [1, 18], true) && $review_status === 'pending'): ?>
 						<button type="button" class="btn btn-outline-primary js-seek-btn">Seek Information</button>
 						<button type="button" class="btn btn-danger js-reject-btn">Reject Request</button>
 						<?php echo form_open('admin/emarkers/approve/' . (int) $u->id, ['method' => 'POST', 'style' => 'display:inline']); ?>
 							<button type="submit" class="btn btn-success js-approve" <?php echo !$is_completed ? 'disabled' : ''; ?>>Approve Request</button>
 						<?php echo form_close(); ?>
-					<?php else: ?>
+					<?php elseif ($role === 1): ?>
 						<a href="<?php echo url('admin/emarkers/edit/' . (int) $u->id . '/1'); ?>" target="_blank" rel="noopener" class="btn btn-outline-primary">Edit Profile</a>
 						<a href="<?php echo url('admin/emarkers/change_password/' . (int) $u->id); ?>" class="btn btn-primary">Change Password</a>
 					<?php endif; ?>
@@ -89,6 +90,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 							class="js-status-switch"
 							data-user-id="<?php echo (int) ($u->id ?? 0); ?>"
 							<?php echo $is_active ? 'checked' : ''; ?>
+							<?php echo ((int) logged('role') === 18) ? 'disabled' : ''; ?>
 							data-bootstrap-switch
 							data-off-color="secondary"
 							data-on-color="success"

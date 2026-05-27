@@ -65,6 +65,43 @@
 			</div>
 		</div>
 
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">E-Markers (Govt Sector) - Subject Summary</h3>
+			</div>
+			<div class="card-body table-responsive p-0">
+				<table class="table table-bordered table-hover mb-0">
+					<thead>
+						<tr>
+							<th style="width:60px;">Sr</th>
+							<th>Subject</th>
+							<th style="width:140px;">No of eMarkers</th>
+							<th style="width:160px;">Accepted eMarkers</th>
+							<th style="width:160px;">Rejected eMarkers</th>
+							<th style="width:160px;">Pending eMarkers</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php $stats = isset($emarker_subject_stats) && is_array($emarker_subject_stats) ? $emarker_subject_stats : []; ?>
+						<?php if (!empty($stats)): ?>
+							<?php $sr = 1; foreach ($stats as $r): ?>
+								<tr>
+									<td><?php echo (int) $sr++; ?></td>
+									<td><?php echo html_escape((string) ($r['subject'] ?? '')); ?></td>
+									<td><?php echo (int) ($r['total'] ?? 0); ?></td>
+									<td><?php echo (int) ($r['accepted'] ?? 0); ?></td>
+									<td><?php echo (int) ($r['rejected'] ?? 0); ?></td>
+									<td><?php echo (int) ($r['pending'] ?? 0); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						<?php else: ?>
+							<tr><td colspan="6" class="text-center text-muted py-3">No records found.</td></tr>
+						<?php endif; ?>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
 	</div>
 </section>
 

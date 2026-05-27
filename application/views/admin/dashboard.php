@@ -56,10 +56,60 @@
 
     <div class="card">
       <div class="card-header">
-        <h3 class="card-title">Fresh Start Summary</h3>
+        <h3 class="card-title">E-Markers (Govt Sector) - Subject Summary</h3>
       </div>
-      <div class="card-body">
-        <p class="mb-0">Legacy application, challan, scrutiny, tracking, diary, merit, and report modules have been detached from this dashboard. Use this space for the new functionality you plan to build.</p>
+      <div class="card-body table-responsive p-0">
+        <table class="table table-bordered table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width:60px;">Sr</th>
+              <th>Subject</th>
+              <th style="width:140px;">No of eMarkers</th>
+              <th style="width:160px;">Accepted eMarkers</th>
+              <th style="width:160px;">Rejected eMarkers</th>
+              <th style="width:160px;">Pending eMarkers</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php $stats = isset($emarker_subject_stats) && is_array($emarker_subject_stats) ? $emarker_subject_stats : []; ?>
+            <?php if (!empty($stats)): ?>
+              <?php
+                $sr = 1;
+                $sum_total = 0;
+                $sum_accepted = 0;
+                $sum_rejected = 0;
+                $sum_pending = 0;
+              ?>
+              <?php foreach ($stats as $r): ?>
+                <tr>
+                  <td><?php echo (int) $sr++; ?></td>
+                  <td><?php echo htmlspecialchars((string) ($r['subject'] ?? '')); ?></td>
+                  <td><?php echo (int) ($r['total'] ?? 0); ?></td>
+                  <td><?php echo (int) ($r['accepted'] ?? 0); ?></td>
+                  <td><?php echo (int) ($r['rejected'] ?? 0); ?></td>
+                  <td><?php echo (int) ($r['pending'] ?? 0); ?></td>
+                </tr>
+                <?php
+                  $sum_total += (int) ($r['total'] ?? 0);
+                  $sum_accepted += (int) ($r['accepted'] ?? 0);
+                  $sum_rejected += (int) ($r['rejected'] ?? 0);
+                  $sum_pending += (int) ($r['pending'] ?? 0);
+                ?>
+              <?php endforeach; ?>
+              <tr class="font-weight-bold">
+                <td colspan="2" class="text-right">Total</td>
+                <td><?php echo (int) $sum_total; ?></td>
+                <td><?php echo (int) $sum_accepted; ?></td>
+                <td><?php echo (int) $sum_rejected; ?></td>
+                <td><?php echo (int) $sum_pending; ?></td>
+              </tr>
+            <?php else: ?>
+              <tr>
+                <td colspan="6" class="text-center text-muted py-3">No records found.</td>
+              </tr>
+            <?php endif; ?>
+          </tbody>
+        </table>
       </div>
     </div>
 

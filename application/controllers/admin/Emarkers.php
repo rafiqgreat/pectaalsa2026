@@ -109,7 +109,7 @@ class Emarkers extends MY_Controller
 	private function subject_specialist_can_access_method($method)
 	{
 		// Subject Specialist can only browse and view evaluator profiles.
-		return in_array((string) $method, ['index', 'pending', 'approved', 'rejected', 'view'], true);
+		return in_array((string) $method, ['index', 'pending', 'approved', 'rejected', 'view', 'approve', 'reject', 'seek_information'], true);
 	}
 
 	private function role_column()
@@ -117,6 +117,23 @@ class Emarkers extends MY_Controller
 		if ($this->db->field_exists('role', 'users')) return 'role';
 		if ($this->db->field_exists('role_id', 'users')) return 'role_id';
 		return 'role';
+	}
+
+	private function ss_can_manage_emarker($id)
+	{
+		$id = (int) $id;
+		if ($id <= 0) return false;
+		if ((int) logged('role') !== 18) return false;
+
+		$subjects = $this->get_subject_specialist_subjects();
+		$allowed = array_map('strtoupper', (array) $subjects);
+		if (empty($allowed)) return false;
+
+		$spec_row = $this->db->select('specialization')->get_where('teacher_specializations', ['user_id' => $id])->row();
+		$eval_spec = trim((string) ($spec_row->specialization ?? ''));
+		if ($eval_spec === '') return false;
+
+		return in_array(strtoupper($eval_spec), $allowed, true);
 	}
 
 	private function get_emarker_user($id)
@@ -248,6 +265,9 @@ class Emarkers extends MY_Controller
 			$where[] = 'edu.highest_degree = ?';
 			$params[] = $qual;
 		}
+
+		// Only show Govt teachers (sector must be Government)
+		$where[] = "UPPER(exp.sector) = 'GOVERNMENT'";
 
 		// IMPORTANT ACCESS RULE:
 		// Subject Specialist (role 18) can only see evaluator records where evaluator's
@@ -1175,11 +1195,21 @@ class Emarkers extends MY_Controller
 
 	public function approve($id = 0)
 	{
+		$role = (int) logged('role');
+		if ($role !== 1 && $role !== 18) {
+			redirect('errors/permission_denied');
+			die;
+		}
 		$id = (int) $id;
 		if ($id <= 0) show_404();
 
 		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
+
+		if ($role === 18 && !$this->ss_can_manage_emarker($id)) {
+			redirect('errors/permission_denied');
+			die;
+		}
 
 		$steps = $this->db->get_where('teacher_registration_steps', ['user_id' => $id])->row();
 		if (!$steps || (int) ($steps->registration_completed ?? 0) !== 1) {
@@ -1217,7 +1247,8 @@ class Emarkers extends MY_Controller
 			}
 			$this->db->where('user_id', $id)->update('teacher_registration_steps', $update);
 		}
-		$this->activity_model->add("Admin approved E-Marker user #{$id}", logged('id'));
+		$who = ($role === 18) ? 'Subject Specialist' : 'Admin';
+		$this->activity_model->add("{$who} approved E-Marker user #{$id}", logged('id'));
 
 		$this->session->set_flashdata('alert-type', 'success');
 		$this->session->set_flashdata('alert', 'E-Marker account approved and activated.');
@@ -1226,12 +1257,22 @@ class Emarkers extends MY_Controller
 
 	public function reject($id = 0)
 	{
+		$role = (int) logged('role');
+		if ($role !== 1 && $role !== 18) {
+			redirect('errors/permission_denied');
+			die;
+		}
 		$id = (int) $id;
 		if ($id <= 0) show_404();
 		postAllowed();
 
 		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
+
+		if ($role === 18 && !$this->ss_can_manage_emarker($id)) {
+			redirect('errors/permission_denied');
+			die;
+		}
 
 		$reason = trim((string) $this->input->post('reason', true));
 		if ($reason === '') {
@@ -1263,7 +1304,8 @@ class Emarkers extends MY_Controller
 		// Keep account inactive until approved.
 		$this->db->where('id', $id)->update('users', ['status' => 0]);
 
-		$this->activity_model->add("Admin rejected E-Marker user #{$id}", logged('id'));
+		$who = ($role === 18) ? 'Subject Specialist' : 'Admin';
+		$this->activity_model->add("{$who} rejected E-Marker user #{$id}", logged('id'));
 		$this->session->set_flashdata('alert-type', 'success');
 		$this->session->set_flashdata('alert', 'Request rejected.');
 		redirect('admin/emarkers/view/' . $id);
@@ -1271,12 +1313,22 @@ class Emarkers extends MY_Controller
 
 	public function seek_information($id = 0)
 	{
+		$role = (int) logged('role');
+		if ($role !== 1 && $role !== 18) {
+			redirect('errors/permission_denied');
+			die;
+		}
 		$id = (int) $id;
 		if ($id <= 0) show_404();
 		postAllowed();
 
 		$user = $this->get_emarker_user($id);
 		if (!$user) show_404();
+
+		if ($role === 18 && !$this->ss_can_manage_emarker($id)) {
+			redirect('errors/permission_denied');
+			die;
+		}
 
 		$note = trim((string) $this->input->post('note', true));
 		if ($note === '') {
@@ -1300,7 +1352,8 @@ class Emarkers extends MY_Controller
 			$this->db->where('user_id', $id)->update('teacher_registration_steps', $update);
 		}
 
-		$this->activity_model->add("Admin requested information from E-Marker user #{$id}", logged('id'));
+		$who = ($role === 18) ? 'Subject Specialist' : 'Admin';
+		$this->activity_model->add("{$who} requested information from E-Marker user #{$id}", logged('id'));
 		$this->session->set_flashdata('alert-type', 'success');
 		$this->session->set_flashdata('alert', 'Information request saved.');
 		redirect('admin/emarkers/view/' . $id);
@@ -1308,6 +1361,10 @@ class Emarkers extends MY_Controller
 
 	public function change_status($id = 0)
 	{
+		if ((int) logged('role') !== 1) {
+			$this->output->set_output('error');
+			return;
+		}
 		$id = (int) $id;
 		$status = $this->input->get('status');
 		$status = ($status === 'true' || $status === true || (string) $status === '1') ? 1 : 0;
