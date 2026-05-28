@@ -460,6 +460,21 @@ class Emarking_model extends CI_Model
 		$errors = [];
 		$now = date('Y-m-d H:i:s');
 
+		$baseParts = explode('/', trim($abs_base, '/'));
+		$fixed_grade = null;
+		$fixed_subject_code = null;
+		$fixed_version = null;
+		if (count($baseParts) >= 3) {
+			$last = $baseParts[count($baseParts) - 1];
+			$mid = $baseParts[count($baseParts) - 2];
+			$first = $baseParts[count($baseParts) - 3];
+			if (ctype_digit((string) $first) && ctype_digit((string) $mid) && ctype_digit((string) $last)) {
+				$fixed_grade = (int) $first;
+				$fixed_subject_code = (int) $mid;
+				$fixed_version = (int) $last;
+			}
+		}
+
 		$it = new RecursiveIteratorIterator(
 			new RecursiveDirectoryIterator($abs_base, FilesystemIterator::SKIP_DOTS)
 		);
@@ -475,19 +490,41 @@ class Emarking_model extends CI_Model
 			$rel_to_base = ltrim(substr($abs_path, strlen($abs_base)), '/');
 			$rel_parts = explode('/', $rel_to_base);
 
-			// Expect: grade/subject_code/version/page_no/question_no/filename
-			if (count($rel_parts) < 6) {
-				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
-				continue;
-			}
-
-			$grade = (int) $rel_parts[0];
-			$subject_code = (int) $rel_parts[1];
-			$version = (int) $rel_parts[2];
-			$page_no = (string) $rel_parts[3];
-			$question_no = (string) $rel_parts[4];
+			$grade = null;
+			$subject_code = null;
+			$version = null;
+			$page_no = null;
+			$question_no = null;
 			$filename = (string) $rel_parts[count($rel_parts) - 1];
+
+			// Two supported modes:
+			// 1) Legacy: {base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg
+			// 2) New:    {base}/{page_no}/{question_no}/{barcode}_1.jpg where base already includes grade/subject/version
+			if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
+				// New mode: rel parts => page_no/question_no/filename
+				if (count($rel_parts) < 3) {
+					$skipped++;
+					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					continue;
+				}
+				$grade = (int) $fixed_grade;
+				$subject_code = (int) $fixed_subject_code;
+				$version = (int) $fixed_version;
+				$page_no = (string) $rel_parts[0];
+				$question_no = (string) $rel_parts[1];
+			} else {
+				// Legacy mode: rel parts => grade/subject_code/version/page_no/question_no/filename
+				if (count($rel_parts) < 6) {
+					$skipped++;
+					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					continue;
+				}
+				$grade = (int) $rel_parts[0];
+				$subject_code = (int) $rel_parts[1];
+				$version = (int) $rel_parts[2];
+				$page_no = (string) $rel_parts[3];
+				$question_no = (string) $rel_parts[4];
+			}
 
 			if ($grade <= 0 || $subject_code <= 0 || $version <= 0 || trim($page_no) === '' || trim($question_no) === '') {
 				$skipped++;
@@ -677,6 +714,56 @@ class Emarking_model extends CI_Model
 		$errors = [];
 		$now = date('Y-m-d H:i:s');
 
+		$baseParts = explode('/', trim($abs_base, '/'));
+		$fixed_grade = null;
+		$fixed_subject_code = null;
+		$fixed_version = null;
+		if (count($baseParts) >= 3) {
+			$last = $baseParts[count($baseParts) - 1];
+			$mid = $baseParts[count($baseParts) - 2];
+			$first = $baseParts[count($baseParts) - 3];
+			if (ctype_digit((string) $first) && ctype_digit((string) $mid) && ctype_digit((string) $last)) {
+				$fixed_grade = (int) $first;
+				$fixed_subject_code = (int) $mid;
+				$fixed_version = (int) $last;
+			}
+		}
+
+		$questionIdMap = null;
+		if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
+			$questionIdMap = [];
+			$qrows = $this->db->select('id, page_no, question_no')
+				->from('emarking_questions')
+				->where('assessment_type', (string) $assessment_type)
+				->where('grade', (int) $fixed_grade)
+				->where('subject_code', (string) $fixed_subject_code)
+				->where('version', (int) $fixed_version)
+				->where('status', 1)
+				->get()
+				->result_array();
+			foreach ($qrows as $qr) {
+				$key = (string) ($qr['page_no'] ?? '') . '|' . (string) ($qr['question_no'] ?? '');
+				$questionIdMap[$key] = (int) ($qr['id'] ?? 0);
+			}
+		}
+
+		$fixed_source_table = null;
+		$fixed_cols = null;
+		$fixed_can_validate_source = false;
+		$fixed_paper_type_code = null;
+		if ($fixed_subject_code !== null) {
+			$fixed_source_table = $this->get_source_table($assessment_type, (int) $fixed_subject_code);
+			$fixed_cols = $fixed_source_table ? $this->resolve_source_columns($fixed_source_table) : [];
+			$fixed_can_validate_source = !empty($fixed_cols['barcode']) && !empty($fixed_cols['paper_generated']);
+			if ($assessment_type === 'CRQ') {
+				$fixed_paper_type_code = 1;
+			} else {
+				$fixed_paper_type_code = ((int) $fixed_subject_code === 2) ? 13 : 12;
+			}
+		}
+
+		$source_cache = [];
+
 		foreach (($abs_paths ?? []) as $abs_path_in) {
 			$abs_path = str_replace('\\', '/', (string) $abs_path_in);
 			if ($abs_path === '' || !is_file($abs_path)) {
@@ -687,18 +774,38 @@ class Emarking_model extends CI_Model
 			$rel_to_base = ltrim(substr($abs_path, strlen($abs_base)), '/');
 			$rel_parts = explode('/', $rel_to_base);
 
-			if (count($rel_parts) < 6) {
-				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
-				continue;
-			}
-
-			$grade = (int) $rel_parts[0];
-			$subject_code = (int) $rel_parts[1];
-			$version = (int) $rel_parts[2];
-			$page_no = (string) $rel_parts[3];
-			$question_no = (string) $rel_parts[4];
+			$grade = null;
+			$subject_code = null;
+			$version = null;
+			$page_no = null;
+			$question_no = null;
 			$filename = (string) $rel_parts[count($rel_parts) - 1];
+
+			if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
+				// New mode: base already includes grade/subject/version
+				if (count($rel_parts) < 3) {
+					$skipped++;
+					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					continue;
+				}
+				$grade = (int) $fixed_grade;
+				$subject_code = (int) $fixed_subject_code;
+				$version = (int) $fixed_version;
+				$page_no = (string) $rel_parts[0];
+				$question_no = (string) $rel_parts[1];
+			} else {
+				// Legacy mode
+				if (count($rel_parts) < 6) {
+					$skipped++;
+					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					continue;
+				}
+				$grade = (int) $rel_parts[0];
+				$subject_code = (int) $rel_parts[1];
+				$version = (int) $rel_parts[2];
+				$page_no = (string) $rel_parts[3];
+				$question_no = (string) $rel_parts[4];
+			}
 
 			if ($grade <= 0 || $subject_code <= 0 || $version <= 0 || trim($page_no) === '' || trim($question_no) === '') {
 				$skipped++;
@@ -716,46 +823,63 @@ class Emarking_model extends CI_Model
 				continue;
 			}
 
-			$source_table = $this->get_source_table($assessment_type, $subject_code);
+			$source_table = $fixed_source_table !== null ? $fixed_source_table : $this->get_source_table($assessment_type, $subject_code);
 			if (!$source_table) {
 				$skipped++;
 				$errors[] = ['file' => $abs_path, 'reason' => 'No source table mapping', 'subject_code' => $subject_code];
 				continue;
 			}
 
-			$cols = $this->resolve_source_columns($source_table);
-			$can_validate_source = !empty($cols['barcode']) && !empty($cols['paper_generated']);
+			$cols = $fixed_cols !== null ? $fixed_cols : $this->resolve_source_columns($source_table);
+			$can_validate_source = ($fixed_source_table !== null) ? (bool) $fixed_can_validate_source : (!empty($cols['barcode']) && !empty($cols['paper_generated']));
 
-			$paper_type_code = null;
-			if ($assessment_type === 'CRQ') {
-				$paper_type_code = 1;
-			} else {
-				$paper_type_code = ($subject_code === 2) ? 13 : 12;
+			$paper_type_code = $fixed_paper_type_code;
+			if ($paper_type_code === null) {
+				if ($assessment_type === 'CRQ') {
+					$paper_type_code = 1;
+				} else {
+					$paper_type_code = ($subject_code === 2) ? 13 : 12;
+				}
 			}
 
 			$source_row = null;
 			if ($can_validate_source) {
-				$this->db->from($source_table);
-				$this->db->where($cols['barcode'], $barcode);
-				$this->db->where($cols['paper_generated'], 1);
-				if (!empty($cols['paper_type_code']) && $paper_type_code !== null) {
-					$this->db->where($cols['paper_type_code'], (int) $paper_type_code);
+				if (array_key_exists($barcode, $source_cache)) {
+					$source_row = $source_cache[$barcode];
+				} else {
+					$this->db->from($source_table);
+					$this->db->where($cols['barcode'], $barcode);
+					$this->db->where($cols['paper_generated'], 1);
+					if (!empty($cols['paper_type_code']) && $paper_type_code !== null) {
+						$this->db->where($cols['paper_type_code'], (int) $paper_type_code);
+					}
+					$this->db->limit(1);
+					$source_row = $this->db->get()->row_array();
+					$source_cache[$barcode] = $source_row;
+					if (count($source_cache) > 5000) {
+						$source_cache = [];
+					}
 				}
-				$this->db->limit(1);
-				$source_row = $this->db->get()->row_array();
 			}
 
-			$q = $this->db->get_where('emarking_questions', [
-				'assessment_type' => $assessment_type,
-				'grade' => (int) $grade,
-				'subject_code' => (string) $subject_code,
-				'version' => (int) $version,
-				'page_no' => (string) $page_no,
-				'question_no' => (string) $question_no,
-				'status' => 1,
-			])->row();
+			$question_id = 0;
+			if (is_array($questionIdMap)) {
+				$key = (string) $page_no . '|' . (string) $question_no;
+				$question_id = (int) ($questionIdMap[$key] ?? 0);
+			} else {
+				$q = $this->db->get_where('emarking_questions', [
+					'assessment_type' => $assessment_type,
+					'grade' => (int) $grade,
+					'subject_code' => (string) $subject_code,
+					'version' => (int) $version,
+					'page_no' => (string) $page_no,
+					'question_no' => (string) $question_no,
+					'status' => 1,
+				])->row();
+				$question_id = $q ? (int) $q->id : 0;
+			}
 
-			if (!$q) {
+			if ($question_id <= 0) {
 				$skipped++;
 				$errors[] = ['file' => $abs_path, 'reason' => 'No matching emarking_questions row', 'grade' => $grade, 'subject_code' => $subject_code, 'version' => $version, 'page_no' => $page_no, 'question_no' => $question_no];
 				continue;
@@ -800,7 +924,7 @@ class Emarking_model extends CI_Model
 				'version' => (int) $version,
 				'roll_no' => (!empty($source_row) && !empty($cols['roll_no'])) ? (string) ($source_row[$cols['roll_no']] ?? '') : '',
 				'page_no' => (string) $page_no,
-				'question_id' => (int) $q->id,
+				'question_id' => (int) $question_id,
 				'question_no' => (string) $question_no,
 				'image_path' => $image_path,
 				'upload_batch_no' => (string) $upload_batch_no,

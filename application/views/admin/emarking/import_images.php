@@ -29,7 +29,9 @@
         <li>Tries to match source records where <code>paper_generated = 1</code> (if source columns exist)</li>
         <li>CRQ uses <code>paper_type_code = 1</code> (booklets tables) when validating source</li>
         <li>Dictation uses <code>paper_type_code = 12</code> (English subject_code 1) and <code>13</code> (Urdu subject_code 2) when validating source</li>
-        <li>Folder structure must be: <code>{base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg</code> (examples: <code>storagebox/crqs</code>, <code>storagebox/dictations</code>)</li>
+        <li>Folder structure supported:</li>
+        <li class="ml-3"><code>{base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg</code> (legacy)</li>
+        <li class="ml-3"><code>{base}/{page_no}/{question_no}/{barcode}_1.jpg</code> where <code>{base} = storagebox/crqs/{grade}/{subject_code}/{version}</code> or <code>storagebox/dictations/{grade}/{subject_code}/{version}</code> (recommended for large imports)</li>
         <li>If source validation fails, image is still imported with <code>source_paper_id = 0</code> (see Errors list)</li>
       </ul>
     </div>
