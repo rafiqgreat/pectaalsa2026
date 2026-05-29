@@ -31,7 +31,8 @@
         <li>Dictation uses <code>paper_type_code = 12</code> (English subject_code 1) and <code>13</code> (Urdu subject_code 2) when validating source</li>
         <li>Folder structure supported:</li>
         <li class="ml-3"><code>{base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg</code> (legacy)</li>
-        <li class="ml-3"><code>{base}/{page_no}/{question_no}/{barcode}_1.jpg</code> where <code>{base} = storagebox/crqs/{grade}/{subject_code}/{version}</code> or <code>storagebox/dictations/{grade}/{subject_code}/{version}</code> (recommended for large imports)</li>
+        <li class="ml-3"><code>{base}/{page_no}/{question_no}/{barcode}_1.jpg</code> where <code>{base} = storagebox/crqs/{grade}/{subject_code}/{version}</code> or <code>storagebox/dictations/{grade}/{subject_code}/{version}</code></li>
+        <li class="ml-3"><code>{base}/{question_no}/{barcode}_1.jpg</code> where <code>{base} = storagebox/crqs/{grade}/{subject_code}/{version}/{page_no}</code> or <code>storagebox/dictations/{grade}/{subject_code}/{version}/{page_no}</code> (fastest for huge imports)</li>
         <li>If source validation fails, image is still imported with <code>source_paper_id = 0</code> (see Errors list)</li>
       </ul>
     </div>

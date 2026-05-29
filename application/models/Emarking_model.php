@@ -464,7 +464,20 @@ class Emarking_model extends CI_Model
 		$fixed_grade = null;
 		$fixed_subject_code = null;
 		$fixed_version = null;
-		if (count($baseParts) >= 3) {
+		$fixed_page_no = null;
+		if (count($baseParts) >= 4) {
+			$p = $baseParts[count($baseParts) - 1];
+			$v = $baseParts[count($baseParts) - 2];
+			$s = $baseParts[count($baseParts) - 3];
+			$g = $baseParts[count($baseParts) - 4];
+			if (ctype_digit((string) $g) && ctype_digit((string) $s) && ctype_digit((string) $v) && ctype_digit((string) $p)) {
+				$fixed_grade = (int) $g;
+				$fixed_subject_code = (int) $s;
+				$fixed_version = (int) $v;
+				$fixed_page_no = (string) $p;
+			}
+		}
+		if ($fixed_grade === null && count($baseParts) >= 3) {
 			$last = $baseParts[count($baseParts) - 1];
 			$mid = $baseParts[count($baseParts) - 2];
 			$first = $baseParts[count($baseParts) - 3];
@@ -500,8 +513,21 @@ class Emarking_model extends CI_Model
 			// Two supported modes:
 			// 1) Legacy: {base}/{grade}/{subject_code}/{version}/{page_no}/{question_no}/{barcode}_1.jpg
 			// 2) New:    {base}/{page_no}/{question_no}/{barcode}_1.jpg where base already includes grade/subject/version
-			if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
-				// New mode: rel parts => page_no/question_no/filename
+			// 3) New:    {base}/{question_no}/{barcode}_1.jpg where base already includes grade/subject/version/page_no
+			if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null && $fixed_page_no !== null) {
+				// New mode (page scoped): rel parts => question_no/filename
+				if (count($rel_parts) < 2) {
+					$skipped++;
+					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					continue;
+				}
+				$grade = (int) $fixed_grade;
+				$subject_code = (int) $fixed_subject_code;
+				$version = (int) $fixed_version;
+				$page_no = (string) $fixed_page_no;
+				$question_no = (string) $rel_parts[0];
+			} elseif ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
+				// New mode (subject/version scoped): rel parts => page_no/question_no/filename
 				if (count($rel_parts) < 3) {
 					$skipped++;
 					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
@@ -718,7 +744,20 @@ class Emarking_model extends CI_Model
 		$fixed_grade = null;
 		$fixed_subject_code = null;
 		$fixed_version = null;
-		if (count($baseParts) >= 3) {
+		$fixed_page_no = null;
+		if (count($baseParts) >= 4) {
+			$p = $baseParts[count($baseParts) - 1];
+			$v = $baseParts[count($baseParts) - 2];
+			$s = $baseParts[count($baseParts) - 3];
+			$g = $baseParts[count($baseParts) - 4];
+			if (ctype_digit((string) $g) && ctype_digit((string) $s) && ctype_digit((string) $v) && ctype_digit((string) $p)) {
+				$fixed_grade = (int) $g;
+				$fixed_subject_code = (int) $s;
+				$fixed_version = (int) $v;
+				$fixed_page_no = (string) $p;
+			}
+		}
+		if ($fixed_grade === null && count($baseParts) >= 3) {
 			$last = $baseParts[count($baseParts) - 1];
 			$mid = $baseParts[count($baseParts) - 2];
 			$first = $baseParts[count($baseParts) - 3];
@@ -730,7 +769,22 @@ class Emarking_model extends CI_Model
 		}
 
 		$questionIdMap = null;
-		if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
+		if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null && $fixed_page_no !== null) {
+			$questionIdMap = [];
+			$qrows = $this->db->select('id, question_no')
+				->from('emarking_questions')
+				->where('assessment_type', (string) $assessment_type)
+				->where('grade', (int) $fixed_grade)
+				->where('subject_code', (string) $fixed_subject_code)
+				->where('version', (int) $fixed_version)
+				->where('page_no', (string) $fixed_page_no)
+				->where('status', 1)
+				->get()
+				->result_array();
+			foreach ($qrows as $qr) {
+				$questionIdMap[(string) ($qr['question_no'] ?? '')] = (int) ($qr['id'] ?? 0);
+			}
+		} elseif ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
 			$questionIdMap = [];
 			$qrows = $this->db->select('id, page_no, question_no')
 				->from('emarking_questions')
@@ -781,8 +835,20 @@ class Emarking_model extends CI_Model
 			$question_no = null;
 			$filename = (string) $rel_parts[count($rel_parts) - 1];
 
-			if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
-				// New mode: base already includes grade/subject/version
+			if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null && $fixed_page_no !== null) {
+				// New mode (page scoped): base already includes grade/subject/version/page_no
+				if (count($rel_parts) < 2) {
+					$skipped++;
+					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					continue;
+				}
+				$grade = (int) $fixed_grade;
+				$subject_code = (int) $fixed_subject_code;
+				$version = (int) $fixed_version;
+				$page_no = (string) $fixed_page_no;
+				$question_no = (string) $rel_parts[0];
+			} elseif ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
+				// New mode (subject/version scoped): base already includes grade/subject/version
 				if (count($rel_parts) < 3) {
 					$skipped++;
 					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
@@ -864,8 +930,12 @@ class Emarking_model extends CI_Model
 
 			$question_id = 0;
 			if (is_array($questionIdMap)) {
-				$key = (string) $page_no . '|' . (string) $question_no;
-				$question_id = (int) ($questionIdMap[$key] ?? 0);
+				if ($fixed_page_no !== null) {
+					$question_id = (int) ($questionIdMap[(string) $question_no] ?? 0);
+				} else {
+					$key = (string) $page_no . '|' . (string) $question_no;
+					$question_id = (int) ($questionIdMap[$key] ?? 0);
+				}
 			} else {
 				$q = $this->db->get_where('emarking_questions', [
 					'assessment_type' => $assessment_type,
