@@ -96,6 +96,33 @@
             <p>Batches</p>
           </a>
         </li>
+        <?php if ($role === 1): ?>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/qc_marking/create_batch'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'qc' && strpos((string) ($page->title ?? ''), 'QC - Create') !== false) ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>QC Create Batch</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/qc_marking/batches'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'qc' && strpos((string) ($page->title ?? ''), 'QC - Batches') !== false) ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>QC Batches</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/qc_marking/reports'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'qc' && strpos((string) ($page->title ?? ''), 'QC - SS') !== false) ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>QC SS Report</p>
+            </a>
+          </li>
+        <?php elseif ($role === 18): ?>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/qc_marking/my'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'qc' && strpos((string) ($page->title ?? ''), 'QC - My') !== false) ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>QC Dashboard</p>
+            </a>
+          </li>
+        <?php endif; ?>
         <?php if ($role !== 18): ?>
           <li class="nav-item has-treeview <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports') ? 'menu-open' : ''; ?>">
             <a href="#" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports') ? 'active' : ''; ?>">
