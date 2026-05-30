@@ -107,6 +107,46 @@ class Settings extends MY_Controller {
 		redirect('admin/settings/registration');
 	}
 
+	public function marking()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'marking';
+
+		$this->page_data['marking_enabled'] = (string) $this->settings_model->get_setting('marking_enabled', '1');
+		$this->page_data['marking_block_message'] = (string) $this->settings_model->get_setting('marking_block_message', 'Marking is stopped currently. Please try again later.');
+
+		$this->load->view('admin/settings/marking', $this->page_data);
+	}
+
+	public function markingUpdate()
+	{
+		ifPermissions('general_settings');
+		postAllowed();
+
+		$this->load->library('form_validation');
+		$this->form_validation->set_rules('marking_enabled', 'Enable Marking', 'trim|required|in_list[0,1]');
+		$this->form_validation->set_rules('marking_block_message', 'Blocked Marking Message', 'trim|required|min_length[3]');
+
+		if ($this->form_validation->run() === FALSE) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', validation_errors());
+			redirect('admin/settings/marking');
+			return;
+		}
+
+		$enabled = (string) post('marking_enabled');
+		$msg = trim((string) post('marking_block_message'));
+
+		$this->settings_model->set_setting('marking_enabled', $enabled === '1' ? '1' : '0');
+		$this->settings_model->set_setting('marking_block_message', $msg);
+
+		$this->session->set_flashdata('alert-type', 'success');
+		$this->session->set_flashdata('alert', 'Marking settings updated successfully.');
+		$this->activity_model->add("Marking settings updated by User: #".logged('id'));
+
+		redirect('admin/settings/marking');
+	}
+
 	public function _valid_optional_datetime($value)
 	{
 		$value = trim((string) $value);

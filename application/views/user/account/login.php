@@ -53,6 +53,11 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
 
       <!-- Right Side: Login Form -->
       <div class="bg-white shadow-lg rounded-lg p-2 md:pr-12 pl-12 pt-4 pb-4">
+        <?php if (isset($marking_enabled) && !$marking_enabled): ?>
+          <div class="alert alert-danger text-center fw-bold" style="color:#b91c1c;border:1px solid #ef4444;background:#fee2e2;">
+            <p class="mb-0"><?php echo htmlspecialchars((string) ($marking_block_message ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
+          </div>
+        <?php endif; ?>
         <?php if (!empty($user_access_blocked)): ?>
           <div class="alert alert-danger text-center fw-bold" style="color:#b91c1c;border:1px solid #ef4444;background:#fee2e2;">
             <p class="mb-0"><?php echo htmlspecialchars($user_access_block_message, ENT_QUOTES, 'UTF-8'); ?></p>
@@ -91,7 +96,7 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
 
         <!-- Login Button -->
         <div class="pl-10 pr-10 mt-4">
-          <button type="submit" class="btn-main py-2 px-4 w-full rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 block text-center" <?php echo !empty($user_access_blocked) ? 'disabled' : ''; ?>><?php echo lang('signin') ?></button>
+          <button type="submit" class="btn-main py-2 px-4 w-full rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 block text-center" <?php echo (!empty($user_access_blocked) || (isset($marking_enabled) && !$marking_enabled)) ? 'disabled' : ''; ?>><?php echo lang('signin') ?></button>
         </div>
         <!-- Register Link -->
         <p class="pl-10 pr-10">

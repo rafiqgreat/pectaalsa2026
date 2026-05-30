@@ -263,6 +263,24 @@ if (!function_exists('user_access_block_message')) {
 		return setting('user_access_block_message') ?: 'Applicants/ Users Access is Blocked Currently Please Wait';
 	}
 }
+
+if (!function_exists('marking_enabled')) {
+	function marking_enabled()
+	{
+		$CI = &get_instance();
+		$v = (string) $CI->settings_model->get_setting('marking_enabled', '1');
+		return $v === '1';
+	}
+}
+
+if (!function_exists('marking_block_message')) {
+	function marking_block_message()
+	{
+		$CI = &get_instance();
+		$v = (string) $CI->settings_model->get_setting('marking_block_message', '');
+		return $v !== '' ? $v : 'Marking is stopped currently. Please try again later.';
+	}
+}
 /**
  * Generates teh html for breadcrumb - Supports AdminLte
  *

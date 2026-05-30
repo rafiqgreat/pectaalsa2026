@@ -28,6 +28,11 @@ class Login extends CI_Controller {
 	{
 		return user_access_block_message();
 	}
+
+	private function getMarkingBlockedMessage()
+	{
+		return marking_block_message();
+	}
 	public function __construct()
 	{
 		parent::__construct();
@@ -44,6 +49,15 @@ class Login extends CI_Controller {
 			$this->session->set_flashdata('message', $this->getUserAccessBlockedMessage());
 			$this->session->set_flashdata('message_type', 'danger');
 		}
+		// If marking is disabled, force-logout any eMarker user session (role 2) and show message.
+		if (is_logged() && !marking_enabled() && (int) ($this->session->userdata('logged')['role'] ?? 0) === 2) {
+			$this->session->unset_userdata('login');
+			$this->session->unset_userdata('logged');
+			delete_cookie('login');
+			delete_cookie('login_token');
+			$this->session->set_flashdata('message', $this->getMarkingBlockedMessage());
+			$this->session->set_flashdata('message_type', 'danger');
+		}
 		if(is_logged()){
 			$role = (int) ($this->session->userdata('logged')['role'] ?? 0);
 			// Only role 2 users should access the user area; admin should stay in admin area.
@@ -56,7 +70,9 @@ class Login extends CI_Controller {
 			'assets' => assets_url(),
 			'body_classes'	=> setting('login_theme') == '1' ? 'login-page login-background' : 'login-page-side login-background',
 			'user_access_blocked' => user_access_blocked(),
-			'user_access_block_message' => $this->getUserAccessBlockedMessage()
+			'user_access_block_message' => $this->getUserAccessBlockedMessage(),
+			'marking_enabled' => marking_enabled(),
+			'marking_block_message' => $this->getMarkingBlockedMessage(),
 		];
 	}
 	public function index()
@@ -66,6 +82,12 @@ class Login extends CI_Controller {
 
 	public function check()
 	{
+		if (!marking_enabled()) {
+			$this->session->set_flashdata('message', $this->getMarkingBlockedMessage());
+			$this->session->set_flashdata('message_type', 'danger');
+			redirect('user/login', 'refresh');
+			return;
+		}
 		if (user_access_blocked()) {
 			$this->session->set_flashdata('message', $this->getUserAccessBlockedMessage());
 			$this->session->set_flashdata('message_type', 'danger');

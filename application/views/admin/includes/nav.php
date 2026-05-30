@@ -251,6 +251,14 @@
               <p>General Settings</p>
             </a>
           </li>
+          <?php if (hasPermissions('general_settings') || (int) logged('role') === 1): ?>
+            <li class="nav-item">
+              <a href="<?php echo url('admin/settings/marking'); ?>" class="nav-link <?php echo ($page->menu == 'settings' && $page->submenu == 'marking') ? 'active' : ''; ?>">
+                <i class="far fa-circle nav-icon"></i>
+                <p>Marking</p>
+              </a>
+            </li>
+          <?php endif; ?>
         <?php endif; ?>
 
         <?php if (hasPermissions('roles_list')): ?>

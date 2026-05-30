@@ -46,6 +46,17 @@ class MY_Controller extends CI_Controller {
 				$this->session->set_flashdata('message_type', 'danger');
 				redirect('user/login', 'refresh');
 			}
+
+			// If marking is disabled, force logout eMarkers (role 2) from user area.
+			if ($segment === 'user' && (int) logged('role') === 2 && !marking_enabled()) {
+				$this->session->unset_userdata('login');
+				$this->session->unset_userdata('logged');
+				delete_cookie('login');
+				delete_cookie('login_token');
+				$this->session->set_flashdata('message', marking_block_message());
+				$this->session->set_flashdata('message_type', 'danger');
+				redirect('user/login', 'refresh');
+			}
 
 
 			// Only e-marker users (role 2) can access the user area.

@@ -80,7 +80,7 @@ $role = (int) logged('role');
                 <thead>
                   <tr>
                     <th>Total Images</th>
-                    <th>Uploaded</th>
+                    <th>Uploaded/Pending</th>
                     <th>Assigned</th>
                     <th>Marked</th>
                     <th>Skipped</th>
