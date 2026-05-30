@@ -28,8 +28,8 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
       <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
         <?php /*?><a href="./Login.html"
                     class="p-2 cursor-pointer bg-green-400 rounded-lg p-4 text-dark font-semibold">Login</a><?php */ ?>
-        <a href="<?php echo !empty($user_access_blocked) ? 'javascript:void(0)' : url('user/login/register') ?>"
-          class="block w-full sm:w-auto px-4 py-3 text-center cursor-pointer bg-white rounded-lg text-dark font-semibold whitespace-nowrap <?php echo !empty($user_access_blocked) ? 'opacity-50 pointer-events-none' : ''; ?>">Register New eMarker</a>
+        <a href="<?php echo (!empty($user_access_blocked) || (isset($marking_enabled) && !$marking_enabled)) ? 'javascript:void(0)' : url('user/login/register') ?>"
+          class="block w-full sm:w-auto px-4 py-3 text-center cursor-pointer bg-white rounded-lg text-dark font-semibold whitespace-nowrap <?php echo (!empty($user_access_blocked) || (isset($marking_enabled) && !$marking_enabled)) ? 'opacity-50 pointer-events-none' : ''; ?>">Register New eMarker</a>
         <?php /*?><a href="./Admin_login.html"
                     class="p-2 cursor-pointer bg-white bg-blue-500
                      p-4 rounded-lg text-dark font-semibold">Admin Login</a><?php */ ?>
