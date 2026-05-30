@@ -117,6 +117,17 @@ class Users_model extends MY_Model {
 		$time = time();
 		$login_token = sha1($row->id . $row->password . $time);
 
+		// Enforce single active session for eMarkers (role 2).
+		// Stores current token/time server-side so previous sessions become invalid.
+		if ((int) ($row->role ?? 0) === 2) {
+			$update = [];
+			if ($this->db->field_exists('active_login_token', $this->table)) $update['active_login_token'] = $login_token;
+			if ($this->db->field_exists('active_login_time', $this->table)) $update['active_login_time'] = (int) $time;
+			if (!empty($update)) {
+				$this->db->where('id', (int) $row->id)->update($this->table, $update);
+			}
+		}
+
 		if ($remember === false) {
 			$this->session->set_userdata([
 				'login' => true,

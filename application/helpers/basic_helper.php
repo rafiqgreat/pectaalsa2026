@@ -168,6 +168,17 @@ if (!function_exists('dd')) {
 			if ($user) {
 				// verify login_token
 				$login_token_match = (sha1($user->id . $user->password . $isLogged->time) == $_token);
+
+				// Single-session enforcement for eMarkers (role 2):
+				// If user table has active_login_token/time, the session must match current server-side token.
+				if ($login_token_match && (int) ($user->role ?? 0) === 2) {
+					if (property_exists($user, 'active_login_token') && (string) ($user->active_login_token ?? '') !== '') {
+						$login_token_match = ((string) $user->active_login_token === (string) $_token);
+					}
+					if ($login_token_match && property_exists($user, 'active_login_time') && (string) ($user->active_login_time ?? '') !== '') {
+						$login_token_match = ((int) $user->active_login_time === (int) ($isLogged->time ?? 0));
+					}
+				}
 			}
 		}
 		return $isLogged && $login_token_match;
