@@ -1291,6 +1291,14 @@ class Emarking extends MY_Controller
 		if ($tab === 'subjects') {
 			$this->page_data['page']->title = 'Subject-wise Summary';
 			$this->page_data['subject_summary'] = $this->emarking_report->get_subject_summary($filters);
+		} elseif ($tab === 'emarkers_payment') {
+			// Admin-only report
+			if ((int) logged('role') !== 1) {
+				redirect('errors/permission_denied');
+				die;
+			}
+			$this->page_data['page']->title = 'eMarker-wise Payment Summary';
+			$this->page_data['emarker_payment_summary'] = $this->emarking_report->get_emarker_payment_summary($filters);
 		} elseif ($tab === 'emarkers') {
 			$this->page_data['page']->title = 'eMarker-wise Summary';
 			$this->page_data['emarker_summary'] = $this->emarking_report->get_emarker_summary($filters);
@@ -1320,6 +1328,11 @@ class Emarking extends MY_Controller
 	public function reports_emarkers()
 	{
 		$this->load_reports_tab('emarkers');
+	}
+
+	public function reports_emarkers_payment_summary()
+	{
+		$this->load_reports_tab('emarkers_payment');
 	}
 
 	public function reports_batches()

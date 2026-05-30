@@ -3,6 +3,74 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Emarking_model extends CI_Model
 {
+	private function question_no_candidates($question_no)
+	{
+		$orig = trim((string) $question_no);
+		if ($orig === '') return [];
+
+		$cands = [$orig];
+
+		// Common folder naming: q1, Q1 -> 1
+		$norm = preg_replace('/^\s*q\s*/i', '', $orig);
+		$norm = trim((string) $norm);
+		if ($norm !== '' && !in_array($norm, $cands, true)) $cands[] = $norm;
+
+		// If it became just digits, also try canonical "q{digits}"
+		if (ctype_digit($norm)) {
+			$qq = 'q' . $norm;
+			if (!in_array($qq, $cands, true)) $cands[] = $qq;
+			$QQ = 'Q' . $norm;
+			if (!in_array($QQ, $cands, true)) $cands[] = $QQ;
+		}
+
+		return $cands;
+	}
+
+	private function page_no_candidates_from_folder($folder_page_no)
+	{
+		$orig = trim((string) $folder_page_no);
+		if ($orig === '') return [];
+
+		$cands = [$orig];
+		$src = $this->folder_page_no_to_source_page_no($orig);
+		if ($src !== '' && !in_array($src, $cands, true)) $cands[] = $src;
+		return $cands;
+	}
+
+	private function insert_ignore_batch($table, array $fields, array $rows)
+	{
+		$table = preg_replace('/[^a-zA-Z0-9_]+/', '', (string) $table);
+		if ($table === '' || empty($fields) || empty($rows)) {
+			return ['ok' => false, 'inserted' => 0];
+		}
+
+		$colsSql = [];
+		foreach ($fields as $f) {
+			$f = preg_replace('/[^a-zA-Z0-9_]+/', '', (string) $f);
+			if ($f === '') continue;
+			$colsSql[] = '`' . $f . '`';
+		}
+		if (empty($colsSql)) {
+			return ['ok' => false, 'inserted' => 0];
+		}
+
+		$place = '(' . implode(',', array_fill(0, count($colsSql), '?')) . ')';
+		$valuesSql = implode(',', array_fill(0, count($rows), $place));
+
+		$params = [];
+		foreach ($rows as $r) {
+			foreach ($fields as $f) {
+				$params[] = $r[$f] ?? null;
+			}
+		}
+
+		$sql = 'INSERT IGNORE INTO `' . $table . '` (' . implode(',', $colsSql) . ') VALUES ' . $valuesSql;
+		$ok = $this->db->query($sql, $params);
+		if (!$ok) return ['ok' => false, 'inserted' => 0];
+
+		return ['ok' => true, 'inserted' => (int) $this->db->affected_rows()];
+	}
+
 	private function ensure_upload_dir($relativeDir)
 	{
 		$relativeDir = trim(str_replace(['\\', '..'], ['/', ''], (string) $relativeDir), '/');
@@ -459,6 +527,7 @@ class Emarking_model extends CI_Model
 		$skipped = 0;
 		$errors = [];
 		$now = date('Y-m-d H:i:s');
+		$maxErrors = 200;
 
 		$baseParts = explode('/', trim($abs_base, '/'));
 		$fixed_grade = null;
@@ -492,6 +561,14 @@ class Emarking_model extends CI_Model
 			new RecursiveDirectoryIterator($abs_base, FilesystemIterator::SKIP_DOTS)
 		);
 
+		$batchFields = [
+			'assessment_type', 'source_table', 'source_paper_id', 'paper_barcode', 'grade',
+			'school_id', 'lsacode', 'subject_code', 'version', 'roll_no',
+			'page_no', 'question_id', 'question_no', 'image_path', 'upload_batch_no',
+			'status', 'created_at',
+		];
+		$pendingRows = [];
+
 		foreach ($it as $fileInfo) {
 			/** @var SplFileInfo $fileInfo */
 			if (!$fileInfo->isFile()) continue;
@@ -518,7 +595,7 @@ class Emarking_model extends CI_Model
 				// New mode (page scoped): rel parts => question_no/filename
 				if (count($rel_parts) < 2) {
 					$skipped++;
-					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
 					continue;
 				}
 				$grade = (int) $fixed_grade;
@@ -530,7 +607,7 @@ class Emarking_model extends CI_Model
 				// New mode (subject/version scoped): rel parts => page_no/question_no/filename
 				if (count($rel_parts) < 3) {
 					$skipped++;
-					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
 					continue;
 				}
 				$grade = (int) $fixed_grade;
@@ -542,7 +619,7 @@ class Emarking_model extends CI_Model
 				// Legacy mode: rel parts => grade/subject_code/version/page_no/question_no/filename
 				if (count($rel_parts) < 6) {
 					$skipped++;
-					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
 					continue;
 				}
 				$grade = (int) $rel_parts[0];
@@ -635,44 +712,62 @@ class Emarking_model extends CI_Model
 					$source_row = $getSourceRow(null, false, false, false);
 				}
 			} else {
-				$errors[] = ['file' => $abs_path, 'reason' => 'Source validation skipped (missing source columns)', 'source_table' => $source_table];
+				if (count($errors) < $maxErrors) {
+					$errors[] = ['file' => $abs_path, 'reason' => 'Source validation skipped (missing source columns)', 'source_table' => $source_table];
+				}
 			}
 
 			if (empty($source_row)) {
 				// Do not skip: allow import so batches/marking can proceed, but record why source attach failed.
-				$errors[] = ['file' => $abs_path, 'reason' => 'Source record not found/eligible (imported with source_paper_id=0)', 'source_table' => $source_table];
+				if (count($errors) < $maxErrors) {
+					$errors[] = ['file' => $abs_path, 'reason' => 'Source record not found/eligible (imported with source_paper_id=0)', 'source_table' => $source_table];
+				}
 			}
 
 			// Find matching emarking_questions record
-			$q = $this->db->get_where('emarking_questions', [
-				'assessment_type' => $assessment_type,
-				'grade' => (int) $grade,
-				'subject_code' => (string) $subject_code,
-				'version' => (int) $version,
-				'page_no' => (string) $page_no,
-				'question_no' => (string) $question_no,
-				'status' => 1,
-			])->row();
+			$pageCandidates = $this->page_no_candidates_from_folder($page_no);
+			$qns = $this->question_no_candidates($question_no);
+			if (empty($qns)) $qns = [(string) $question_no];
+
+			$this->db->from('emarking_questions');
+			$this->db->where('assessment_type', (string) $assessment_type);
+			$this->db->where('grade', (int) $grade);
+			$this->db->where('TRIM(subject_code) =', (string) $subject_code, false);
+			$this->db->where('version', (int) $version);
+			$this->db->where_in('page_no', $pageCandidates);
+			$this->db->where_in('TRIM(question_no)', $qns, false);
+			$this->db->where('status', 1);
+			$this->db->limit(1);
+			$q = $this->db->get()->row();
+			if (!$q && count($errors) < $maxErrors) {
+				$errors[] = [
+					'file' => $abs_path,
+					'reason' => 'Debug: lookup miss',
+					'assessment_type' => (string) $assessment_type,
+					'grade' => (int) $grade,
+					'subject_code' => (string) $subject_code,
+					'version' => (int) $version,
+					'page_no_try' => implode(',', $pageCandidates),
+					'question_no_try' => implode(',', $qns),
+				];
+			}
 
 			if (!$q) {
 				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'No matching emarking_questions row', 'grade' => $grade, 'subject_code' => $subject_code, 'version' => $version, 'page_no' => $page_no, 'question_no' => $question_no];
-				continue;
-			}
-
-			// Resume: if the same upload_batch_no is reused, skip images already imported in that batch.
-			if (trim((string) $upload_batch_no) !== '') {
-				$exists = (int) $this->db->from('emarking_question_images')
-					->where('upload_batch_no', (string) $upload_batch_no)
-					->where('assessment_type', (string) $assessment_type)
-					->where('question_id', (int) $q->id)
-					->where('paper_barcode', (string) $barcode)
-					->limit(1)
-					->count_all_results();
-				if ($exists > 0) {
-					$skipped++;
-					continue;
+				if (count($errors) < $maxErrors) {
+					$errors[] = [
+						'file' => $abs_path,
+						'reason' => 'No matching emarking_questions row',
+						'grade' => $grade,
+						'subject_code' => $subject_code,
+						'version' => $version,
+						'page_no' => $page_no,
+						'page_no_try' => implode(',', $pageCandidates),
+						'question_no' => $question_no,
+						'question_no_try' => implode(',', $qns),
+					];
 				}
+				continue;
 			}
 
 			// Build DB image_path relative to web root
@@ -701,25 +796,48 @@ class Emarking_model extends CI_Model
 				'subject_code' => (string) $subject_code,
 				'version' => (int) $version,
 				'roll_no' => (!empty($source_row) && !empty($cols['roll_no'])) ? (string) ($source_row[$cols['roll_no']] ?? '') : '',
-				'page_no' => (string) $page_no,
+				'page_no' => (string) ($q->page_no ?? $page_no),
 				'question_id' => (int) $q->id,
-				'question_no' => (string) $question_no,
+				'question_no' => (string) ($q->question_no ?? $question_no),
 				'image_path' => $image_path,
 				'upload_batch_no' => (string) $upload_batch_no,
 				'status' => 'UPLOADED',
 				'created_at' => $now,
 			];
 
-			$this->db->insert('emarking_question_images', $payload);
-			$err = $this->db->error();
-			if (!empty($err['code'])) {
-				$skipped++;
-				// Duplicate key expected sometimes
-				$errors[] = ['file' => $abs_path, 'reason' => 'DB insert failed', 'db_code' => $err['code'], 'db_message' => $err['message']];
-				continue;
+			$pendingRows[] = $payload;
+			if (count($pendingRows) >= 300) {
+				$out = $this->insert_ignore_batch('emarking_question_images', $batchFields, $pendingRows);
+				if (empty($out['ok'])) {
+					foreach ($pendingRows as $pr) {
+						$skipped++;
+						if (count($errors) < $maxErrors) {
+							$errors[] = ['file' => (string) ($pr['image_path'] ?? ''), 'reason' => 'DB insert batch failed'];
+						}
+					}
+				} else {
+					$ins = (int) ($out['inserted'] ?? 0);
+					$inserted += $ins;
+					$skipped += (count($pendingRows) - $ins);
+				}
+				$pendingRows = [];
 			}
+		}
 
-			$inserted++;
+		if (!empty($pendingRows)) {
+			$out = $this->insert_ignore_batch('emarking_question_images', $batchFields, $pendingRows);
+			if (empty($out['ok'])) {
+				foreach ($pendingRows as $pr) {
+					$skipped++;
+					if (count($errors) < $maxErrors) {
+						$errors[] = ['file' => (string) ($pr['image_path'] ?? ''), 'reason' => 'DB insert batch failed'];
+					}
+				}
+			} else {
+				$ins = (int) ($out['inserted'] ?? 0);
+				$inserted += $ins;
+				$skipped += (count($pendingRows) - $ins);
+			}
 		}
 
 		return [
@@ -739,6 +857,15 @@ class Emarking_model extends CI_Model
 		$skipped = 0;
 		$errors = [];
 		$now = date('Y-m-d H:i:s');
+		$maxErrors = 200;
+
+		$batchFields = [
+			'assessment_type', 'source_table', 'source_paper_id', 'paper_barcode', 'grade',
+			'school_id', 'lsacode', 'subject_code', 'version', 'roll_no',
+			'page_no', 'question_id', 'question_no', 'image_path', 'upload_batch_no',
+			'status', 'created_at',
+		];
+		$pendingRows = [];
 
 		$baseParts = explode('/', trim($abs_base, '/'));
 		$fixed_grade = null;
@@ -771,18 +898,23 @@ class Emarking_model extends CI_Model
 		$questionIdMap = null;
 		if ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null && $fixed_page_no !== null) {
 			$questionIdMap = [];
+			$pageCandidates = $this->page_no_candidates_from_folder($fixed_page_no);
 			$qrows = $this->db->select('id, question_no')
 				->from('emarking_questions')
 				->where('assessment_type', (string) $assessment_type)
 				->where('grade', (int) $fixed_grade)
-				->where('subject_code', (string) $fixed_subject_code)
+				->where('TRIM(subject_code) =', (string) $fixed_subject_code, false)
 				->where('version', (int) $fixed_version)
-				->where('page_no', (string) $fixed_page_no)
+				->where_in('page_no', $pageCandidates)
 				->where('status', 1)
 				->get()
 				->result_array();
 			foreach ($qrows as $qr) {
-				$questionIdMap[(string) ($qr['question_no'] ?? '')] = (int) ($qr['id'] ?? 0);
+				$qno = (string) ($qr['question_no'] ?? '');
+				foreach ($this->question_no_candidates($qno) as $cand) {
+					if ($cand === '') continue;
+					$questionIdMap[$cand] = (int) ($qr['id'] ?? 0);
+				}
 			}
 		} elseif ($fixed_grade !== null && $fixed_subject_code !== null && $fixed_version !== null) {
 			$questionIdMap = [];
@@ -790,14 +922,26 @@ class Emarking_model extends CI_Model
 				->from('emarking_questions')
 				->where('assessment_type', (string) $assessment_type)
 				->where('grade', (int) $fixed_grade)
-				->where('subject_code', (string) $fixed_subject_code)
+				->where('TRIM(subject_code) =', (string) $fixed_subject_code, false)
 				->where('version', (int) $fixed_version)
 				->where('status', 1)
 				->get()
 				->result_array();
 			foreach ($qrows as $qr) {
-				$key = (string) ($qr['page_no'] ?? '') . '|' . (string) ($qr['question_no'] ?? '');
-				$questionIdMap[$key] = (int) ($qr['id'] ?? 0);
+				$pn = (string) ($qr['page_no'] ?? '');
+				$qno = (string) ($qr['question_no'] ?? '');
+				foreach ($this->question_no_candidates($qno) as $cand) {
+					if ($cand === '') continue;
+					$key = $pn . '|' . $cand;
+					$questionIdMap[$key] = (int) ($qr['id'] ?? 0);
+
+					// Also allow folder-style page numbers (e.g. 10 -> 101) to match folder input
+					$pnFolder = $this->source_page_no_to_folder_page_no($pn);
+					if ($pnFolder !== '' && $pnFolder !== $pn) {
+						$key2 = $pnFolder . '|' . $cand;
+						$questionIdMap[$key2] = (int) ($qr['id'] ?? 0);
+					}
+				}
 			}
 		}
 
@@ -839,7 +983,7 @@ class Emarking_model extends CI_Model
 				// New mode (page scoped): base already includes grade/subject/version/page_no
 				if (count($rel_parts) < 2) {
 					$skipped++;
-					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
 					continue;
 				}
 				$grade = (int) $fixed_grade;
@@ -851,7 +995,7 @@ class Emarking_model extends CI_Model
 				// New mode (subject/version scoped): base already includes grade/subject/version
 				if (count($rel_parts) < 3) {
 					$skipped++;
-					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
 					continue;
 				}
 				$grade = (int) $fixed_grade;
@@ -863,7 +1007,7 @@ class Emarking_model extends CI_Model
 				// Legacy mode
 				if (count($rel_parts) < 6) {
 					$skipped++;
-					$errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
+					if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Path structure invalid'];
 					continue;
 				}
 				$grade = (int) $rel_parts[0];
@@ -873,9 +1017,14 @@ class Emarking_model extends CI_Model
 				$question_no = (string) $rel_parts[4];
 			}
 
+			$pageCandidates = $this->page_no_candidates_from_folder($page_no);
+			$page_no_db = (string) ($pageCandidates[1] ?? $pageCandidates[0] ?? $page_no);
+			$qns = $this->question_no_candidates($question_no);
+			if (empty($qns)) $qns = [(string) $question_no];
+
 			if ($grade <= 0 || $subject_code <= 0 || $version <= 0 || trim($page_no) === '' || trim($question_no) === '') {
 				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'Invalid folder values'];
+				if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Invalid folder values'];
 				continue;
 			}
 
@@ -885,14 +1034,14 @@ class Emarking_model extends CI_Model
 			$barcode = trim((string) $barcode);
 			if ($barcode === '') {
 				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'Barcode missing in filename'];
+				if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'Barcode missing in filename'];
 				continue;
 			}
 
 			$source_table = $fixed_source_table !== null ? $fixed_source_table : $this->get_source_table($assessment_type, $subject_code);
 			if (!$source_table) {
 				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'No source table mapping', 'subject_code' => $subject_code];
+				if (count($errors) < $maxErrors) $errors[] = ['file' => $abs_path, 'reason' => 'No source table mapping', 'subject_code' => $subject_code];
 				continue;
 			}
 
@@ -931,42 +1080,52 @@ class Emarking_model extends CI_Model
 			$question_id = 0;
 			if (is_array($questionIdMap)) {
 				if ($fixed_page_no !== null) {
-					$question_id = (int) ($questionIdMap[(string) $question_no] ?? 0);
+					foreach ($qns as $cand) {
+						$question_id = (int) ($questionIdMap[(string) $cand] ?? 0);
+						if ($question_id > 0) break;
+					}
 				} else {
-					$key = (string) $page_no . '|' . (string) $question_no;
-					$question_id = (int) ($questionIdMap[$key] ?? 0);
+					foreach ($qns as $cand) {
+						$found = 0;
+						foreach ($pageCandidates as $pnTry) {
+							$key = (string) $pnTry . '|' . (string) $cand;
+							$found = (int) ($questionIdMap[$key] ?? 0);
+							if ($found > 0) break;
+						}
+						$question_id = $found;
+						if ($question_id > 0) break;
+					}
 				}
 			} else {
-				$q = $this->db->get_where('emarking_questions', [
-					'assessment_type' => $assessment_type,
-					'grade' => (int) $grade,
-					'subject_code' => (string) $subject_code,
-					'version' => (int) $version,
-					'page_no' => (string) $page_no,
-					'question_no' => (string) $question_no,
-					'status' => 1,
-				])->row();
+				$this->db->from('emarking_questions');
+				$this->db->where('assessment_type', (string) $assessment_type);
+				$this->db->where('grade', (int) $grade);
+				$this->db->where('TRIM(subject_code) =', (string) $subject_code, false);
+				$this->db->where('version', (int) $version);
+				$this->db->where_in('page_no', $pageCandidates);
+				$this->db->where_in('TRIM(question_no)', $qns, false);
+				$this->db->where('status', 1);
+				$this->db->limit(1);
+				$q = $this->db->get()->row();
 				$question_id = $q ? (int) $q->id : 0;
 			}
 
 			if ($question_id <= 0) {
 				$skipped++;
-				$errors[] = ['file' => $abs_path, 'reason' => 'No matching emarking_questions row', 'grade' => $grade, 'subject_code' => $subject_code, 'version' => $version, 'page_no' => $page_no, 'question_no' => $question_no];
-				continue;
-			}
-
-			if (trim((string) $upload_batch_no) !== '') {
-				$exists = (int) $this->db->from('emarking_question_images')
-					->where('upload_batch_no', (string) $upload_batch_no)
-					->where('assessment_type', (string) $assessment_type)
-					->where('question_id', (int) $q->id)
-					->where('paper_barcode', (string) $barcode)
-					->limit(1)
-					->count_all_results();
-				if ($exists > 0) {
-					$skipped++;
-					continue;
+				if (count($errors) < $maxErrors) {
+					$errors[] = [
+						'file' => $abs_path,
+						'reason' => 'No matching emarking_questions row',
+						'grade' => $grade,
+						'subject_code' => $subject_code,
+						'version' => $version,
+						'page_no' => $page_no,
+						'page_no_try' => implode(',', $pageCandidates),
+						'question_no' => $question_no,
+						'question_no_try' => implode(',', $qns),
+					];
 				}
+				continue;
 			}
 
 			$image_path = $base_folder;
@@ -993,22 +1152,44 @@ class Emarking_model extends CI_Model
 				'subject_code' => (string) $subject_code,
 				'version' => (int) $version,
 				'roll_no' => (!empty($source_row) && !empty($cols['roll_no'])) ? (string) ($source_row[$cols['roll_no']] ?? '') : '',
-				'page_no' => (string) $page_no,
+				'page_no' => (string) $page_no_db,
 				'question_id' => (int) $question_id,
-				'question_no' => (string) $question_no,
+				'question_no' => (string) ($qns[0] ?? $question_no),
 				'image_path' => $image_path,
 				'upload_batch_no' => (string) $upload_batch_no,
 				'status' => 'UPLOADED',
 				'created_at' => $now,
 			];
 
-			$this->db->insert('emarking_question_images', $payload);
-			$err = $this->db->error();
-			if (!empty($err['code'])) {
-				$skipped++;
-				continue;
+			$pendingRows[] = $payload;
+			if (count($pendingRows) >= 400) {
+				$out = $this->insert_ignore_batch('emarking_question_images', $batchFields, $pendingRows);
+				if (empty($out['ok'])) {
+					$skipped += count($pendingRows);
+					if (count($errors) < $maxErrors) {
+						$errors[] = ['file' => '', 'reason' => 'DB insert batch failed'];
+					}
+				} else {
+					$ins = (int) ($out['inserted'] ?? 0);
+					$inserted += $ins;
+					$skipped += (count($pendingRows) - $ins);
+				}
+				$pendingRows = [];
 			}
-			$inserted++;
+		}
+
+		if (!empty($pendingRows)) {
+			$out = $this->insert_ignore_batch('emarking_question_images', $batchFields, $pendingRows);
+			if (empty($out['ok'])) {
+				$skipped += count($pendingRows);
+				if (count($errors) < $maxErrors) {
+					$errors[] = ['file' => '', 'reason' => 'DB insert batch failed'];
+				}
+			} else {
+				$ins = (int) ($out['inserted'] ?? 0);
+				$inserted += $ins;
+				$skipped += (count($pendingRows) - $ins);
+			}
 		}
 
 		return ['inserted' => $inserted, 'skipped' => $skipped, 'errors' => $errors];

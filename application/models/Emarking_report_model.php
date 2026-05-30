@@ -161,6 +161,40 @@ class Emarking_report_model extends CI_Model
 		return $this->db->get()->result();
 	}
 
+	public function get_emarker_payment_summary($filters = [])
+	{
+		$from = $this->parse_date($filters['from'] ?? '', '00:00:00');
+		$to = $this->parse_date($filters['to'] ?? '', '23:59:59');
+
+		$this->db->select("
+			u.id AS emarker_id, u.name AS emarker_name, u.username AS emarker_username,
+			COUNT(m.id) AS total_actions,
+			SUM(CASE WHEN m.marking_status='MARKED' THEN 1 ELSE 0 END) AS marked,
+			SUM(CASE WHEN m.marking_status='SKIPPED' THEN 1 ELSE 0 END) AS skipped,
+			SUM(CASE WHEN m.marking_status='NOT_ATTEMPTED' THEN 1 ELSE 0 END) AS not_attempted,
+			SUM(CASE WHEN m.marking_status='MARKED' THEN m.marks_obtained ELSE 0 END) AS total_marks,
+			SUM(CASE WHEN m.marking_status='MARKED' THEN m.max_marks ELSE 0 END) AS total_max_marks,
+			ROUND(TIMESTAMPDIFF(SECOND, MIN(m.marked_at), MAX(m.marked_at)) / 3600, 2) AS duration_hours
+		", false);
+		$this->db->from('emarking_marks m');
+		$this->db->join('emarking_questions q', 'q.id = m.question_id', 'inner');
+		$this->db->join('users u', 'u.id = m.emarker_id', 'left');
+
+		if ($from) $this->db->where('m.marked_at >=', $from);
+		if ($to) $this->db->where('m.marked_at <=', $to);
+
+		$assessment_type = trim((string) ($filters['assessment_type'] ?? ''));
+		if ($assessment_type !== '' && $assessment_type !== 'all') $this->db->where('q.assessment_type', $assessment_type);
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+
+		$this->db->group_by(['m.emarker_id']);
+		$this->db->order_by('marked', 'DESC', false);
+		return $this->db->get()->result();
+	}
+
 	public function get_batch_summary($filters = [])
 	{
 		$from = $this->parse_date($filters['from'] ?? '', '00:00:00');

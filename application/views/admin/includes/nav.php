@@ -124,6 +124,14 @@
                   <p>eMarker-wise Summary</p>
                 </a>
               </li>
+              <?php if ($role === 1): ?>
+                <li class="nav-item">
+                  <a href="<?php echo url('admin/emarking/reports_emarkers_payment_summary'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'emarkers_payment') ? 'active' : ''; ?>">
+                    <i class="far fa-dot-circle nav-icon"></i>
+                    <p>eMarker-wise Payment Summary</p>
+                  </a>
+                </li>
+              <?php endif; ?>
               <li class="nav-item">
                 <a href="<?php echo url('admin/emarking/reports_batches'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'batches') ? 'active' : ''; ?>">
                   <i class="far fa-dot-circle nav-icon"></i>

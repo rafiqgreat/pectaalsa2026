@@ -3,7 +3,9 @@
 
 <?php
 $tab = (string) ($reports_tab ?? 'questions');
-if (!in_array($tab, ['questions', 'subjects', 'emarkers', 'batches'], true)) $tab = 'questions';
+$allowedTabs = ['questions', 'subjects', 'emarkers', 'batches', 'emarkers_payment'];
+if (!in_array($tab, $allowedTabs, true)) $tab = 'questions';
+$role = (int) logged('role');
 ?>
 
 <section class="content-header">
@@ -35,6 +37,9 @@ if (!in_array($tab, ['questions', 'subjects', 'emarkers', 'batches'], true)) $ta
             <a class="btn btn-<?php echo ($tab === 'questions') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_questions'); ?>">Question-wise</a>
             <a class="btn btn-<?php echo ($tab === 'subjects') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_subjects'); ?>">Subject-wise</a>
             <a class="btn btn-<?php echo ($tab === 'emarkers') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_emarkers'); ?>">eMarker-wise</a>
+            <?php if ($role === 1): ?>
+              <a class="btn btn-<?php echo ($tab === 'emarkers_payment') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_emarkers_payment_summary'); ?>">Payment Summary</a>
+            <?php endif; ?>
             <a class="btn btn-<?php echo ($tab === 'batches') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_batches'); ?>">Batch-wise</a>
           </div>
         </div>
@@ -216,6 +221,47 @@ if (!in_array($tab, ['questions', 'subjects', 'emarkers', 'batches'], true)) $ta
                       <td><?php echo (int) $subject_totals['not_attempted']; ?></td>
                       <td><?php echo (int) $subject_totals['recheck']; ?></td>
                     </tr>
+                  <?php endif; ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        <?php elseif ($tab === 'emarkers_payment'): ?>
+          <div class="mb-2">
+            <h5 class="mb-2">eMarker-wise Payment Summary</h5>
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered mb-0">
+                <thead>
+                  <tr>
+                    <th>eMarker</th>
+                    <th>Username</th>
+                    <th>Total Actions</th>
+                    <th>Marked</th>
+                    <th>Duration (Hours)</th>
+                    <th>Skipped</th>
+                    <th>Not Attempted</th>
+                    <th>Total Marks</th>
+                    <th>Total Max Marks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php $rows = isset($emarker_payment_summary) ? $emarker_payment_summary : []; ?>
+                  <?php if (empty($rows)): ?>
+                    <tr><td colspan="9" class="text-center text-muted">No records</td></tr>
+                  <?php else: ?>
+                    <?php foreach ($rows as $r): ?>
+                      <tr>
+                        <td><?php echo htmlspecialchars((string) $r->emarker_name); ?> (<?php echo (int) $r->emarker_id; ?>)</td>
+                        <td><?php echo htmlspecialchars((string) $r->emarker_username); ?></td>
+                        <td><?php echo (int) $r->total_actions; ?></td>
+                        <td><?php echo (int) $r->marked; ?></td>
+                        <td><?php echo number_format((float) ($r->duration_hours ?? 0), 2); ?></td>
+                        <td><?php echo (int) $r->skipped; ?></td>
+                        <td><?php echo (int) $r->not_attempted; ?></td>
+                        <td><?php echo number_format((float) ($r->total_marks ?? 0), 2); ?></td>
+                        <td><?php echo number_format((float) ($r->total_max_marks ?? 0), 2); ?></td>
+                      </tr>
+                    <?php endforeach; ?>
                   <?php endif; ?>
                 </tbody>
               </table>
