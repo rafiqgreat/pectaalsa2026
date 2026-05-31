@@ -104,6 +104,7 @@ class Marking extends MY_Controller
 		$this->page_data['timer_seconds'] = (int) $this->emarking_settings->get_timer_seconds($user_id, 15);
 		$this->page_data['batch_total_items'] = $this->marking->get_batch_total_items((int) $batch_id, $user_id);
 		$this->page_data['batch_current_index'] = $this->marking->get_batch_item_index((int) $batch_id, (int) $batch_item_id, $user_id);
+		$this->page_data['preload_image_paths'] = $this->marking->get_preload_image_paths((int) $batch_id, (int) $batch_item_id, $user_id, 3);
 		$this->load->view('emarker/marking_screen', $this->page_data);
 	}
 

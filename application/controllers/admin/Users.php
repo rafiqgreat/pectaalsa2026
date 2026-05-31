@@ -14,7 +14,11 @@ class Users extends MY_Controller {
 	{
 		ifPermissions('users_list');
 		$this->load->library('pagination');
-		$per_page = 50;
+		$per_page = (int) $this->input->get('per_page', true);
+		$allowed_per_page = [100, 200, 500];
+		if (!in_array($per_page, $allowed_per_page, true)) {
+			$per_page = 100;
+		}
 		$page = (int) $this->input->get('page');
 		$page = $page > 0 ? $page : 1;
 		$offset = ($page - 1) * $per_page;
@@ -24,6 +28,7 @@ class Users extends MY_Controller {
 			'username' => (string) $this->input->get('username', true),
 			'email' => (string) $this->input->get('email', true),
 			'role_id' => (int) $this->input->get('role_id', true),
+			'per_page' => $per_page,
 		];
 
 		$total = $this->admin_users_model->count_users_filtered($filters);
@@ -34,6 +39,7 @@ class Users extends MY_Controller {
 			'page_query_string' => true,
 			'query_string_segment' => 'page',
 			'use_page_numbers' => true,
+			'reuse_query_string' => true,
 		];
 		$this->pagination->initialize($config);
 

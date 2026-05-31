@@ -136,6 +136,59 @@ class Marking_model extends CI_Model
 		return $this->db->get()->row();
 	}
 
+	public function get_preload_image_paths($batch_id, $current_batch_item_id, $emarker_id, $limit = 3)
+	{
+		$batch_id = (int) $batch_id;
+		$current_batch_item_id = (int) $current_batch_item_id;
+		$emarker_id = (int) $emarker_id;
+		$limit = (int) $limit;
+		if ($limit < 1) $limit = 1;
+		if ($limit > 10) $limit = 10;
+
+		$out = [];
+
+		$rows = $this->db->select('qi.image_path')
+			->from('emarking_batch_items i')
+			->join('emarking_batches b', 'b.id = i.batch_id', 'inner')
+			->join('emarking_question_images qi', 'qi.id = i.question_image_id', 'inner')
+			->where('i.batch_id', $batch_id)
+			->where('b.assigned_to', $emarker_id)
+			->where('i.status', 'PENDING')
+			->where('i.id >', $current_batch_item_id)
+			->order_by('i.id', 'ASC')
+			->limit($limit)
+			->get()
+			->result();
+
+		foreach ($rows as $r) {
+			$p = trim((string) ($r->image_path ?? ''));
+			if ($p !== '') $out[] = $p;
+		}
+
+		$remaining = $limit - count($out);
+		if ($remaining <= 0) return $out;
+
+		$rows2 = $this->db->select('qi.image_path')
+			->from('emarking_batch_items i')
+			->join('emarking_batches b', 'b.id = i.batch_id', 'inner')
+			->join('emarking_question_images qi', 'qi.id = i.question_image_id', 'inner')
+			->where('i.batch_id', $batch_id)
+			->where('b.assigned_to', $emarker_id)
+			->where('i.status', 'PENDING')
+			->where('i.id <', $current_batch_item_id)
+			->order_by('i.id', 'ASC')
+			->limit($remaining)
+			->get()
+			->result();
+
+		foreach ($rows2 as $r) {
+			$p = trim((string) ($r->image_path ?? ''));
+			if ($p !== '') $out[] = $p;
+		}
+
+		return $out;
+	}
+
 	public function get_marking_data($batch_item_id, $emarker_id)
 	{
 		$this->db->select('i.*, b.batch_code, b.status as batch_status, b.question_id, q.assessment_type, q.grade, q.subject_code, q.version, q.page_no, q.question_no, q.question_title, q.question_type, q.max_marks, q.rubric_title, q.rubric_detail, q.sample_answer, q.sample_answer_file, q.guide_text, q.guide_file, qi.paper_barcode, qi.roll_no, qi.image_path, qi.id as question_image_id');
@@ -446,13 +499,15 @@ class Marking_model extends CI_Model
 		$batch_size = (int) ($settings['batch_size'] ?? 100);
 		$deadline_dt = (string) ($settings['deadline_dt'] ?? date('Y-m-d H:i:s', time() + (3 * 24 * 60 * 60)));
 
-		// Pick an available question within allowed subjects that has UPLOADED images and is not in any active batch.
+		// Pick an available question within allowed subjects that has UPLOADED images.
+		// NOTE: We intentionally do NOT block questions that already have active batches, because images are
+		// tracked by status (UPLOADED/ASSIGNED/...) and create_batch() only picks UPLOADED images.
+		// This allows multiple eMarkers to receive batches for the same question as long as images remain available.
 		$question = $this->db->select('q.id, q.assessment_type', false)
 			->from('emarking_questions q')
 			->where('q.status', 1)
 			->where_in('q.subject_code', $allowed_subjects)
 			->where('EXISTS (SELECT 1 FROM emarking_question_images qi WHERE qi.question_id = q.id AND qi.status = \'UPLOADED\')', null, false)
-			->where('NOT EXISTS (SELECT 1 FROM emarking_batches b WHERE b.question_id = q.id AND b.status IN (\'PENDING\',\'IN_PROGRESS\'))', null, false)
 			->order_by('q.id', 'ASC')
 			->limit(1)
 			->get()

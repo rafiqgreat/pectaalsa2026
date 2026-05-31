@@ -59,6 +59,14 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                 </select>
               </div>
               <div class="col-md-2 col-sm-6 mb-2">
+                <select id="filter-per-page" class="form-control form-control-sm">
+                  <?php $selectedPerPage = (int)($filters['per_page'] ?? 100); ?>
+                  <option value="100" <?php echo ($selectedPerPage === 100) ? 'selected' : ''; ?>>100 / page</option>
+                  <option value="200" <?php echo ($selectedPerPage === 200) ? 'selected' : ''; ?>>200 / page</option>
+                  <option value="500" <?php echo ($selectedPerPage === 500) ? 'selected' : ''; ?>>500 / page</option>
+                </select>
+              </div>
+              <div class="col-md-2 col-sm-6 mb-2">
                 <button type="button" id="filter-search" class="btn btn-sm btn-primary btn-block">Search</button>
               </div>
               <div class="col-md-2 col-sm-6 mb-2">
@@ -74,7 +82,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                   <th>Username/CNIC</th>
                   <th><?php echo lang('user_email') ?></th>
                   <th><?php echo lang('user_role') ?></th>
-                  <th><?php echo lang('user_last_login') ?></th>
+                  <th>eMarker Status</th>
                   <th><?php echo lang('user_status') ?></th>
                   <th><?php echo lang('action') ?></th>
                 </tr>
@@ -93,7 +101,35 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                     <td><?php echo $row->username ?></td>
                     <td><?php echo $row->email ?></td>
                     <td><?php echo htmlspecialchars((string)$row->role_title); ?></td>
-                    <td><?php echo ($row->last_login != '0000-00-00 00:00:00') ? date(setting('date_format'), strtotime($row->last_login)) : 'No Record' ?></td>
+                    <td>
+                      <?php if ((int) ($row->role ?? 0) === 2): ?>
+                        <?php
+                          $link = url('admin/emarkers/view/' . (int) $row->id);
+                          $sector = strtoupper(trim((string) ($row->sector ?? '')));
+                          $review = strtolower(trim((string) ($row->review_status ?? '')));
+                          $label = '';
+                          $cls = 'badge badge-secondary';
+
+                          if ($sector !== '' && $sector !== 'GOVERNMENT') {
+                            $label = 'Private';
+                            $cls = 'badge badge-dark';
+                          } else {
+                            if ($review === 'approved') { $label = 'Approved'; $cls = 'badge badge-success'; }
+                            elseif ($review === 'rejected') { $label = 'Rejected'; $cls = 'badge badge-danger'; }
+                            elseif ($review === 'pending') { $label = 'Pending'; $cls = 'badge badge-warning'; }
+                            else {
+                              $st = (int) ($row->status ?? 0);
+                              if ($st === 1) { $label = 'Approved'; $cls = 'badge badge-success'; }
+                              elseif ($st === -1) { $label = 'Rejected'; $cls = 'badge badge-danger'; }
+                              else { $label = 'Pending'; $cls = 'badge badge-warning'; }
+                            }
+                          }
+                        ?>
+                        <a href="<?php echo $link; ?>" class="<?php echo $cls; ?>" style="font-size:12px;"><?php echo htmlspecialchars($label); ?></a>
+                      <?php else: ?>
+                        <span class="text-muted">—</span>
+                      <?php endif; ?>
+                    </td>
                     <td>
                       <?php if (logged('id') !== $row->id): ?>
                         <input type="checkbox" name="my-checkbox" onchange="updateUserStatus('<?php echo $row->id ?>', $(this).is(':checked') )" <?php echo ($row->status) ? 'checked' : '' ?> data-bootstrap-switch data-off-color="secondary" data-on-color="success" data-off-text="<?php echo lang('user_inactive') ?>" data-on-text="<?php echo lang('user_active') ?>">
@@ -161,10 +197,12 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
       var username = $('#filter-username').val() || '';
       var email = $('#filter-email').val() || '';
       var roleId = $('#filter-role').val() || '';
+      var perPage = $('#filter-per-page').val() || '';
       if (name) params.push('name=' + encodeURIComponent(name));
       if (username) params.push('username=' + encodeURIComponent(username));
       if (email) params.push('email=' + encodeURIComponent(email));
       if (roleId) params.push('role_id=' + encodeURIComponent(roleId));
+      if (perPage) params.push('per_page=' + encodeURIComponent(perPage));
       return params.length ? (baseUrl + '?' + params.join('&')) : baseUrl;
     }
 

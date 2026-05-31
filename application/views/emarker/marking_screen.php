@@ -14,6 +14,13 @@ if ($timer_seconds < 0) $timer_seconds = 0;
 $is_urdu_subject = ((string) ($item->subject_code ?? '') === '2');
 $rubric_title = trim((string) ($item->rubric_title ?? ''));
 $panel_heading = $rubric_title !== '' ? $rubric_title : '';
+$preload_image_paths = isset($preload_image_paths) && is_array($preload_image_paths) ? $preload_image_paths : [];
+$preload_urls = [];
+foreach ($preload_image_paths as $p) {
+  $p = trim((string) $p);
+  if ($p === '') continue;
+  $preload_urls[] = base_url($p);
+}
 ?>
 
 <style>
@@ -500,6 +507,20 @@ $panel_heading = $rubric_title !== '' ? $rubric_title : '';
 
 <script>
 (function(){
+  // Warm browser cache for likely next items in this batch (reduces perceived load time).
+  try {
+    var preload = <?php echo json_encode(array_values(array_slice($preload_urls, 0, 3))); ?>;
+    if (Array.isArray(preload)) {
+      preload.forEach(function(u){
+        if (!u) return;
+        var img = new Image();
+        img.decoding = 'async';
+        img.loading = 'eager';
+        img.src = u;
+      });
+    }
+  } catch (e) {}
+
   function closest(el, sel) {
     while (el && el !== document) {
       if (el.matches && el.matches(sel)) return el;

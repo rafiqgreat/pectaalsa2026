@@ -285,6 +285,12 @@
                 <p>Marking</p>
               </a>
             </li>
+            <li class="nav-item">
+              <a href="<?php echo url('admin/settings/check_sizes'); ?>" class="nav-link <?php echo ($page->menu == 'settings' && $page->submenu == 'check_sizes') ? 'active' : ''; ?>">
+                <i class="far fa-circle nav-icon"></i>
+                <p>Check Sizes</p>
+              </a>
+            </li>
           <?php endif; ?>
         <?php endif; ?>
 

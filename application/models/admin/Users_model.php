@@ -43,8 +43,34 @@ class Users_model extends MY_Model {
 
 	public function get_users_page($limit, $offset)
 	{
-		return $this->db->select('u.id, u.name, u.username, u.email, u.role, u.last_login, u.status, r.title AS role_title')
-			->from('users u')
+		$this->db->select('u.id, u.name, u.username, u.email, u.role, u.status, r.title AS role_title');
+		if ($this->db->table_exists('teacher_registration_steps') && $this->db->field_exists('review_status', 'teacher_registration_steps')) {
+			$this->db->select('s.review_status');
+			$this->db->join('teacher_registration_steps s', 's.user_id = u.id', 'left');
+		} else {
+			$this->db->select("'' AS review_status", false);
+		}
+		if ($this->db->table_exists('teacher_experiences')) {
+			$this->db->join("(
+				SELECT x.user_id,
+					(
+						SELECT x2.sector
+						FROM teacher_experiences x2
+						WHERE x2.user_id = x.user_id
+						  AND x2.sector IS NOT NULL
+						  AND x2.sector <> ''
+						ORDER BY COALESCE(x2.end_date, CURDATE()) DESC, x2.id DESC
+						LIMIT 1
+					) AS sector
+				FROM teacher_experiences x
+				GROUP BY x.user_id
+			) exp", 'exp.user_id = u.id', 'left', false);
+			$this->db->select('exp.sector');
+		} else {
+			$this->db->select("'' AS sector", false);
+		}
+
+		return $this->db->from('users u')
 			->join('roles r', 'r.id = u.role', 'left')
 			->order_by('u.id', 'desc')
 			->limit((int)$limit, (int)$offset)
@@ -77,9 +103,34 @@ class Users_model extends MY_Model {
 
 	public function get_users_page_filtered($filters, $limit, $offset)
 	{
-		$this->db->select('u.id, u.name, u.username, u.email, u.role, u.last_login, u.status, r.title AS role_title')
+		$this->db->select('u.id, u.name, u.username, u.email, u.role, u.status, r.title AS role_title')
 			->from('users u')
 			->join('roles r', 'r.id = u.role', 'left');
+		if ($this->db->table_exists('teacher_registration_steps') && $this->db->field_exists('review_status', 'teacher_registration_steps')) {
+			$this->db->select('s.review_status');
+			$this->db->join('teacher_registration_steps s', 's.user_id = u.id', 'left');
+		} else {
+			$this->db->select("'' AS review_status", false);
+		}
+		if ($this->db->table_exists('teacher_experiences')) {
+			$this->db->join("(
+				SELECT x.user_id,
+					(
+						SELECT x2.sector
+						FROM teacher_experiences x2
+						WHERE x2.user_id = x.user_id
+						  AND x2.sector IS NOT NULL
+						  AND x2.sector <> ''
+						ORDER BY COALESCE(x2.end_date, CURDATE()) DESC, x2.id DESC
+						LIMIT 1
+					) AS sector
+				FROM teacher_experiences x
+				GROUP BY x.user_id
+			) exp", 'exp.user_id = u.id', 'left', false);
+			$this->db->select('exp.sector');
+		} else {
+			$this->db->select("'' AS sector", false);
+		}
 		$this->apply_user_filters($filters);
 		return $this->db->order_by('u.id', 'desc')
 			->limit((int)$limit, (int)$offset)
