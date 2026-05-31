@@ -1286,6 +1286,37 @@ class Emarking extends MY_Controller
 		$this->page_data['reports_tab'] = (string) $tab;
 
 		$filters = $this->reports_filters_from_get();
+
+		// Subject Specialist: restrict reports to assigned subjects and tabs.
+		if ($this->current_role() === 18) {
+			if (!in_array((string) $tab, ['questions', 'emarkers'], true)) {
+				redirect('errors/permission_denied');
+				die;
+			}
+
+			$allowed_codes = $this->ss_allowed_subject_codes();
+			if (empty($allowed_codes)) {
+				$this->session->set_flashdata('message', 'No subjects are assigned to your account.');
+				$this->session->set_flashdata('message_type', 'danger');
+				redirect('admin/dashboard/subject_specialist');
+				return;
+			}
+
+			// Limit filter dropdown options to SS assigned subjects.
+			$opts = [];
+			foreach ($this->subject_code_map as $code => $name) {
+				if (in_array((string) $code, $allowed_codes, true)) $opts[$code] = $name;
+			}
+			$this->page_data['subject_options'] = $opts;
+
+			$typed = trim((string) ($filters['subject_code'] ?? ''));
+			if ($typed !== '' && in_array($typed, $allowed_codes, true)) {
+				$filters['subject_code'] = $typed;
+			} else {
+				// When SS does not select a subject, show all of their subjects.
+				$filters['subject_code'] = $allowed_codes;
+			}
+		}
 		$this->page_data['filters'] = $filters;
 
 		if ($tab === 'subjects') {

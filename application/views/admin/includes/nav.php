@@ -123,32 +123,32 @@
             </a>
           </li>
         <?php endif; ?>
-        <?php if ($role !== 18): ?>
-          <li class="nav-item has-treeview <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports') ? 'menu-open' : ''; ?>">
-            <a href="#" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports') ? 'active' : ''; ?>">
-              <i class="far fa-circle nav-icon"></i>
-              <p>
-                Reports
-                <i class="right fas fa-angle-left"></i>
-              </p>
-            </a>
-            <ul class="nav nav-treeview">
-              <li class="nav-item">
-                <a href="<?php echo url('admin/emarking/reports_questions'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'questions') ? 'active' : ''; ?>">
-                  <i class="far fa-dot-circle nav-icon"></i>
-                  <p>Question-wise Summary</p>
-                </a>
-              </li>
+        <li class="nav-item has-treeview <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports') ? 'menu-open' : ''; ?>">
+          <a href="#" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>
+              Reports
+              <i class="right fas fa-angle-left"></i>
+            </p>
+          </a>
+          <ul class="nav nav-treeview">
+            <li class="nav-item">
+              <a href="<?php echo url('admin/emarking/reports_questions'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'questions') ? 'active' : ''; ?>">
+                <i class="far fa-dot-circle nav-icon"></i>
+                <p>Question-wise Summary</p>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="<?php echo url('admin/emarking/reports_emarkers'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'emarkers') ? 'active' : ''; ?>">
+                <i class="far fa-dot-circle nav-icon"></i>
+                <p>eMarker-wise Summary</p>
+              </a>
+            </li>
+            <?php if ($role !== 18): ?>
               <li class="nav-item">
                 <a href="<?php echo url('admin/emarking/reports_subjects'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'subjects') ? 'active' : ''; ?>">
                   <i class="far fa-dot-circle nav-icon"></i>
                   <p>Subject-wise Summary</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="<?php echo url('admin/emarking/reports_emarkers'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'emarkers') ? 'active' : ''; ?>">
-                  <i class="far fa-dot-circle nav-icon"></i>
-                  <p>eMarker-wise Summary</p>
                 </a>
               </li>
               <?php if ($role === 1): ?>
@@ -165,8 +165,10 @@
                   <p>Batch-wise Summary</p>
                 </a>
               </li>
-            </ul>
-          </li>
+            <?php endif; ?>
+          </ul>
+        </li>
+        <?php if ($role !== 18): ?>
           <li class="nav-item">
             <a href="<?php echo url('admin/emarking/billing'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'billing') ? 'active' : ''; ?>">
               <i class="far fa-circle nav-icon"></i>

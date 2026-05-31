@@ -67,8 +67,14 @@ class Emarking_report_model extends CI_Model
 		$grade = trim((string) ($filters['grade'] ?? ''));
 		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
 
-		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
-		if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		$subject_code = $filters['subject_code'] ?? '';
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('q.subject_code', $subject_code);
+		} else {
+			$subject_code = trim((string) $subject_code);
+			if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		}
 
 		if ($from) $this->db->where('qi.created_at >=', $from);
 		if ($to) $this->db->where('qi.created_at <=', $to);
@@ -90,17 +96,33 @@ class Emarking_report_model extends CI_Model
 
 		$this->db->select("
 			COUNT(*) AS total_images,
-			SUM(CASE WHEN status='UPLOADED' THEN 1 ELSE 0 END) AS uploaded,
-			SUM(CASE WHEN status='ASSIGNED' THEN 1 ELSE 0 END) AS assigned,
-			SUM(CASE WHEN status='MARKED' THEN 1 ELSE 0 END) AS marked,
-			SUM(CASE WHEN status='SKIPPED' THEN 1 ELSE 0 END) AS skipped,
-			SUM(CASE WHEN status='NOT_ATTEMPTED' THEN 1 ELSE 0 END) AS not_attempted,
-			SUM(CASE WHEN status='RECHECK' THEN 1 ELSE 0 END) AS recheck,
-			SUM(CASE WHEN status='FINALIZED' THEN 1 ELSE 0 END) AS finalized
+			SUM(CASE WHEN qi.status='UPLOADED' THEN 1 ELSE 0 END) AS uploaded,
+			SUM(CASE WHEN qi.status='ASSIGNED' THEN 1 ELSE 0 END) AS assigned,
+			SUM(CASE WHEN qi.status='MARKED' THEN 1 ELSE 0 END) AS marked,
+			SUM(CASE WHEN qi.status='SKIPPED' THEN 1 ELSE 0 END) AS skipped,
+			SUM(CASE WHEN qi.status='NOT_ATTEMPTED' THEN 1 ELSE 0 END) AS not_attempted,
+			SUM(CASE WHEN qi.status='RECHECK' THEN 1 ELSE 0 END) AS recheck,
+			SUM(CASE WHEN qi.status='FINALIZED' THEN 1 ELSE 0 END) AS finalized
 		", false);
-		$this->db->from('emarking_question_images');
-		if ($from) $this->db->where('created_at >=', $from);
-		if ($to) $this->db->where('created_at <=', $to);
+		$this->db->from('emarking_question_images qi');
+		$this->db->join('emarking_questions q', 'q.id = qi.question_id', 'inner');
+
+		$assessment_type = trim((string) ($filters['assessment_type'] ?? ''));
+		if ($assessment_type !== '' && $assessment_type !== 'all') $this->db->where('q.assessment_type', $assessment_type);
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
+
+		$subject_code = $filters['subject_code'] ?? '';
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('q.subject_code', $subject_code);
+		} else {
+			$subject_code = trim((string) $subject_code);
+			if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		}
+
+		if ($from) $this->db->where('qi.created_at >=', $from);
+		if ($to) $this->db->where('qi.created_at <=', $to);
 		return $this->db->get()->row();
 	}
 
@@ -126,8 +148,14 @@ class Emarking_report_model extends CI_Model
 		if ($assessment_type !== '' && $assessment_type !== 'all') $this->db->where('q.assessment_type', $assessment_type);
 		$grade = trim((string) ($filters['grade'] ?? ''));
 		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
-		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
-		if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		$subject_code = $filters['subject_code'] ?? '';
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('q.subject_code', $subject_code);
+		} else {
+			$subject_code = trim((string) $subject_code);
+			if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		}
 
 		if ($from) $this->db->where('qi.created_at >=', $from);
 		if ($to) $this->db->where('qi.created_at <=', $to);
@@ -146,6 +174,7 @@ class Emarking_report_model extends CI_Model
 
 		$this->db->select("
 			u.id AS emarker_id, u.name AS emarker_name, u.username AS emarker_username,
+			GROUP_CONCAT(DISTINCT q.subject_code ORDER BY q.subject_code SEPARATOR ', ') AS subjects,
 			COUNT(m.id) AS total_actions,
 			SUM(CASE WHEN m.marking_status='MARKED' THEN 1 ELSE 0 END) AS marked,
 			SUM(CASE WHEN m.marking_status='SKIPPED' THEN 1 ELSE 0 END) AS skipped,
@@ -154,8 +183,23 @@ class Emarking_report_model extends CI_Model
 		", false);
 		$this->db->from('emarking_marks m');
 		$this->db->join('users u', 'u.id = m.emarker_id', 'left');
+		$this->db->join('emarking_questions q', 'q.id = m.question_id', 'inner');
 		if ($from) $this->db->where('m.marked_at >=', $from);
 		if ($to) $this->db->where('m.marked_at <=', $to);
+
+		$assessment_type = trim((string) ($filters['assessment_type'] ?? ''));
+		if ($assessment_type !== '' && $assessment_type !== 'all') $this->db->where('q.assessment_type', $assessment_type);
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
+		$subject_code = $filters['subject_code'] ?? '';
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('q.subject_code', $subject_code);
+		} else {
+			$subject_code = trim((string) $subject_code);
+			if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		}
+
 		$this->db->group_by(['m.emarker_id']);
 		$this->db->order_by('marked', 'DESC', false);
 		return $this->db->get()->result();
@@ -168,6 +212,7 @@ class Emarking_report_model extends CI_Model
 
 		$this->db->select("
 			u.id AS emarker_id, u.name AS emarker_name, u.username AS emarker_username,
+			GROUP_CONCAT(DISTINCT q.subject_code ORDER BY q.subject_code SEPARATOR ', ') AS subjects,
 			COUNT(m.id) AS total_actions,
 			SUM(CASE WHEN m.marking_status='MARKED' THEN 1 ELSE 0 END) AS marked,
 			SUM(CASE WHEN m.marking_status='SKIPPED' THEN 1 ELSE 0 END) AS skipped,
@@ -187,8 +232,14 @@ class Emarking_report_model extends CI_Model
 		if ($assessment_type !== '' && $assessment_type !== 'all') $this->db->where('q.assessment_type', $assessment_type);
 		$grade = trim((string) ($filters['grade'] ?? ''));
 		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
-		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
-		if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		$subject_code = $filters['subject_code'] ?? '';
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('q.subject_code', $subject_code);
+		} else {
+			$subject_code = trim((string) $subject_code);
+			if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		}
 
 		$this->db->group_by(['m.emarker_id']);
 		$this->db->order_by('marked', 'DESC', false);
@@ -221,8 +272,14 @@ class Emarking_report_model extends CI_Model
 		if ($assessment_type !== '' && $assessment_type !== 'all') $this->db->where('b.assessment_type', $assessment_type);
 		$grade = trim((string) ($filters['grade'] ?? ''));
 		if ($grade !== '') $this->db->where('b.grade', (int) $grade);
-		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
-		if ($subject_code !== '') $this->db->where('b.subject_code', $subject_code);
+		$subject_code = $filters['subject_code'] ?? '';
+		if (is_array($subject_code)) {
+			$subject_code = array_values(array_unique(array_filter(array_map('trim', $subject_code), function ($v) { return (string) $v !== ''; })));
+			if (!empty($subject_code)) $this->db->where_in('b.subject_code', $subject_code);
+		} else {
+			$subject_code = trim((string) $subject_code);
+			if ($subject_code !== '') $this->db->where('b.subject_code', $subject_code);
+		}
 
 		$this->db->group_by(['b.id']);
 		$this->db->order_by('b.id', 'DESC');

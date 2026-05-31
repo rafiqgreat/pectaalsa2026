@@ -6,6 +6,29 @@ $tab = (string) ($reports_tab ?? 'questions');
 $allowedTabs = ['questions', 'subjects', 'emarkers', 'batches', 'emarkers_payment'];
 if (!in_array($tab, $allowedTabs, true)) $tab = 'questions';
 $role = (int) logged('role');
+$subjectName = function ($code) {
+  $c = trim((string) $code);
+  $map = [
+    '1' => 'English',
+    '2' => 'Urdu',
+    '3' => 'Math',
+    '4' => 'Science',
+  ];
+  return $map[$c] ?? ($c !== '' ? $c : '—');
+};
+$subjectMultiLabel = function ($codes) use ($subjectName) {
+  $raw = trim((string) $codes);
+  if ($raw === '') return '';
+  $parts = array_filter(array_map('trim', explode(',', $raw)), function ($v) { return $v !== ''; });
+  $labels = [];
+  foreach ($parts as $p) {
+    $labels[] = $subjectName($p);
+  }
+  return implode(', ', array_values(array_unique($labels)));
+};
+$subjectOptions = isset($subject_options) && is_array($subject_options) && !empty($subject_options)
+  ? $subject_options
+  : [1 => 'ENGLISH', 2 => 'URDU', 3 => 'MATH', 4 => 'SCIENCE'];
 ?>
 
 <section class="content-header">
@@ -61,10 +84,25 @@ $role = (int) logged('role');
               </select>
             </div>
             <div class="col-md-1 mb-2">
-              <input type="text" name="grade" value="<?php echo htmlspecialchars((string) ($filters['grade'] ?? '')); ?>" class="form-control" placeholder="Grade">
+              <?php $gr = trim((string) ($filters['grade'] ?? '')); ?>
+              <?php if ($gr === '') $gr = '4'; ?>
+              <select name="grade" class="form-control">
+                <option value="">Grade (All)</option>
+                <option value="4" <?php echo ($gr === '4') ? 'selected' : ''; ?>>4</option>
+              </select>
             </div>
             <div class="col-md-2 mb-2">
-              <input type="text" name="subject_code" value="<?php echo htmlspecialchars((string) ($filters['subject_code'] ?? '')); ?>" class="form-control" placeholder="Subject">
+              <select name="subject_code" class="form-control">
+                <?php $rawSc = $filters['subject_code'] ?? ''; ?>
+                <?php $sc = is_array($rawSc) ? '' : trim((string) $rawSc); ?>
+                <option value="">Subject (All)</option>
+                <?php foreach ($subjectOptions as $code => $name): ?>
+                  <?php $codeStr = (string) $code; ?>
+                  <option value="<?php echo html_escape($codeStr); ?>" <?php echo ($sc === $codeStr) ? 'selected' : ''; ?>>
+                    <?php echo html_escape((string) $subjectName($codeStr)); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
             </div>
             <div class="col-md-2 mb-2">
               <button type="submit" class="btn btn-secondary btn-block">Filter</button>
@@ -135,7 +173,7 @@ $role = (int) logged('role');
                       <tr>
                         <td><?php echo htmlspecialchars((string) $r->assessment_type); ?></td>
                         <td><?php echo (int) $r->grade; ?></td>
-                        <td><?php echo htmlspecialchars((string) $r->subject_code); ?></td>
+                        <td><?php echo htmlspecialchars((string) $subjectName($r->subject_code)); ?></td>
                         <td><?php echo htmlspecialchars((string) $r->version); ?></td>
                         <td><?php echo htmlspecialchars((string) $r->page_no); ?></td>
                         <td><?php echo htmlspecialchars((string) $r->question_no); ?></td>
@@ -201,7 +239,7 @@ $role = (int) logged('role');
                       <tr>
                         <td><?php echo htmlspecialchars((string) $r->assessment_type); ?></td>
                         <td><?php echo (int) $r->grade; ?></td>
-                        <td><?php echo htmlspecialchars((string) $r->subject_code); ?></td>
+                        <td><?php echo htmlspecialchars((string) $subjectName($r->subject_code)); ?></td>
                         <td><?php echo (int) $r->total_images; ?></td>
                         <td><?php echo (int) $r->uploaded; ?></td>
                         <td><?php echo (int) $r->assigned; ?></td>
@@ -233,8 +271,10 @@ $role = (int) logged('role');
               <table class="table table-sm table-bordered mb-0">
                 <thead>
                   <tr>
+                    <th style="width:70px;">Sr No</th>
                     <th>eMarker</th>
                     <th>Username</th>
+                    <th>Subject</th>
                     <th>Total Actions</th>
                     <th>Marked</th>
                     <th>Duration (Hours)</th>
@@ -247,12 +287,15 @@ $role = (int) logged('role');
                 <tbody>
                   <?php $rows = isset($emarker_payment_summary) ? $emarker_payment_summary : []; ?>
                   <?php if (empty($rows)): ?>
-                    <tr><td colspan="9" class="text-center text-muted">No records</td></tr>
+                    <tr><td colspan="11" class="text-center text-muted">No records</td></tr>
                   <?php else: ?>
+                    <?php $sr = 1; ?>
                     <?php foreach ($rows as $r): ?>
                       <tr>
+                        <td><?php echo (int) $sr++; ?></td>
                         <td><?php echo htmlspecialchars((string) $r->emarker_name); ?> (<?php echo (int) $r->emarker_id; ?>)</td>
                         <td><?php echo htmlspecialchars((string) $r->emarker_username); ?></td>
+                        <td><?php echo htmlspecialchars((string) $subjectMultiLabel($r->subjects ?? '')); ?></td>
                         <td><?php echo (int) $r->total_actions; ?></td>
                         <td><?php echo (int) $r->marked; ?></td>
                         <td><?php echo number_format((float) ($r->duration_hours ?? 0), 2); ?></td>
@@ -274,28 +317,37 @@ $role = (int) logged('role');
               <table class="table table-sm table-bordered mb-0">
                 <thead>
                   <tr>
+                    <th style="width:70px;">Sr No</th>
                     <th>eMarker</th>
                     <th>Username</th>
-                    <th>Total Actions</th>
+                    <th>Subject</th>
                     <th>Marked</th>
-                    <th>Skipped</th>
-                    <th>Not Attempted</th>
-                    <th>Total Marks</th>
+                    <?php if ((int) logged('role') !== 18): ?>
+                      <th>Total Actions</th>
+                      <th>Skipped</th>
+                      <th>Not Attempted</th>
+                      <th>Total Marks</th>
+                    <?php endif; ?>
                   </tr>
                 </thead>
                 <tbody>
                   <?php if (empty($emarker_summary)): ?>
-                    <tr><td colspan="7" class="text-center text-muted">No records</td></tr>
+                    <tr><td colspan="<?php echo ((int) logged('role') === 18) ? 5 : 9; ?>" class="text-center text-muted">No records</td></tr>
                   <?php else: ?>
+                    <?php $sr = 1; ?>
                     <?php foreach ($emarker_summary as $r): ?>
                       <tr>
+                        <td><?php echo (int) $sr++; ?></td>
                         <td><?php echo htmlspecialchars((string) $r->emarker_name); ?> (<?php echo (int) $r->emarker_id; ?>)</td>
                         <td><?php echo htmlspecialchars((string) $r->emarker_username); ?></td>
-                        <td><?php echo (int) $r->total_actions; ?></td>
+                        <td><?php echo htmlspecialchars((string) $subjectMultiLabel($r->subjects ?? '')); ?></td>
                         <td><?php echo (int) $r->marked; ?></td>
-                        <td><?php echo (int) $r->skipped; ?></td>
-                        <td><?php echo (int) $r->not_attempted; ?></td>
-                        <td><?php echo number_format((float) $r->total_marks, 2); ?></td>
+                        <?php if ((int) logged('role') !== 18): ?>
+                          <td><?php echo (int) $r->total_actions; ?></td>
+                          <td><?php echo (int) $r->skipped; ?></td>
+                          <td><?php echo (int) $r->not_attempted; ?></td>
+                          <td><?php echo number_format((float) $r->total_marks, 2); ?></td>
+                        <?php endif; ?>
                       </tr>
                     <?php endforeach; ?>
                   <?php endif; ?>
@@ -335,7 +387,7 @@ $role = (int) logged('role');
                         <td><?php echo htmlspecialchars((string) $r->batch_code); ?></td>
                         <td><?php echo htmlspecialchars((string) $r->assessment_type); ?></td>
                         <td><?php echo (int) $r->grade; ?></td>
-                        <td><?php echo htmlspecialchars((string) $r->subject_code); ?></td>
+                        <td><?php echo htmlspecialchars((string) $subjectName($r->subject_code)); ?></td>
                         <td><?php echo htmlspecialchars((string) $r->emarker_name); ?> (<?php echo (int) $r->assigned_to; ?>)</td>
                         <td><?php echo htmlspecialchars((string) $r->status); ?></td>
                         <td><?php echo (int) $r->total_items; ?></td>
