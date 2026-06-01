@@ -79,6 +79,7 @@ class Marking extends MY_Controller
 	public function marking_screen($batch_id, $batch_item_id = null)
 	{
 		$this->page_data['page']->submenu = 'marking';
+		$this->page_data['return_to'] = trim((string) $this->input->get('return', true));
 
 		$user_id = $this->current_user_id();
 		$batch = $this->marking->get_batch_for_emarker((int) $batch_id, $user_id);
@@ -116,6 +117,7 @@ class Marking extends MY_Controller
 
 		$batch_id = (int) $this->input->post('batch_id', true);
 		$batch_item_id = (int) $this->input->post('batch_item_id', true);
+		$return_to = trim((string) $this->input->post('return_to', true));
 		$action = strtoupper(trim((string) $this->input->post('action', true)));
 		if (!in_array($action, ['MARKED', 'SKIPPED', 'NOT_ATTEMPTED', 'RECHECK'], true)) {
 			$action = 'MARKED';
@@ -140,6 +142,11 @@ class Marking extends MY_Controller
 		$this->session->set_flashdata('message_type', 'success');
 
 		// Always return to start() to load next pending item
+		if ($return_to === 'view_batch') {
+			redirect('emarker/marking/view_batch/' . (int) $batch_id);
+			return;
+		}
+
 		redirect('emarker/marking/start/' . (int) $batch_id);
 	}
 

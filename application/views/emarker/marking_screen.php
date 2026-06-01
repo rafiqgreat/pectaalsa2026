@@ -152,6 +152,9 @@ foreach ($preload_image_paths as $p) {
         <form method="post" action="<?php echo base_url('emarker/marking/save_marks'); ?>">
           <input type="hidden" name="batch_id" value="<?php echo (int) $item->batch_id; ?>">
           <input type="hidden" name="batch_item_id" value="<?php echo (int) $item->id; ?>">
+          <?php if (!empty($return_to)): ?>
+            <input type="hidden" name="return_to" value="<?php echo html_escape((string) $return_to); ?>">
+          <?php endif; ?>
 
           <?php
             $qt = trim((string) ($item->question_type ?? ''));

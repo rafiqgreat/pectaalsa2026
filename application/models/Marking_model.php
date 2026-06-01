@@ -252,11 +252,6 @@ class Marking_model extends CI_Model
 		$item = $data['item'];
 		$steps = $data['steps'];
 
-		// Prevent duplicate marking of same batch item
-		if ((string) $item->status !== 'PENDING') {
-			return ['ok' => false, 'error' => 'This batch item is already processed.' ];
-		}
-
 		$action = strtoupper(trim((string) ($payload['action'] ?? 'MARKED')));
 		if (!in_array($action, ['MARKED', 'SKIPPED', 'NOT_ATTEMPTED', 'RECHECK'], true)) $action = 'MARKED';
 

@@ -88,6 +88,7 @@
                   <td><?php echo html_escape((string) ($it->marked_at ?? '')); ?></td>
                   <td>
                     <a class="btn btn-primary btn-xs" href="<?php echo base_url('emarker/marking/marking_screen/' . (int) $batch->id . '/' . (int) $it->id); ?>">Open</a>
+                    <a class="btn btn-warning btn-xs" href="<?php echo base_url('emarker/marking/marking_screen/' . (int) $batch->id . '/' . (int) $it->id) . '?return=view_batch'; ?>">Edit</a>
                   </td>
                 </tr>
               <?php endforeach; ?>
