@@ -26,6 +26,30 @@ $subjectMultiLabel = function ($codes) use ($subjectName) {
   }
   return implode(', ', array_values(array_unique($labels)));
 };
+$expectedCount = function ($assessment_type, $grade, $subject_code) {
+  $a = strtoupper(trim((string) $assessment_type));
+  $g = (int) $grade;
+  $s = trim((string) $subject_code);
+  if ($g !== 4) return 0;
+
+  if ($a === 'CRQ') {
+    $map = [
+      '1' => 440000,
+      '2' => 385000,
+      '3' => 715000,
+      '4' => 550000,
+    ];
+    return (int) ($map[$s] ?? 0);
+  }
+  if ($a === 'DICTATION') {
+    $map = [
+      '1' => 150000,
+      '2' => 150000,
+    ];
+    return (int) ($map[$s] ?? 0);
+  }
+  return 0;
+};
 $subjectOptions = isset($subject_options) && is_array($subject_options) && !empty($subject_options)
   ? $subject_options
   : [1 => 'ENGLISH', 2 => 'URDU', 3 => 'MATH', 4 => 'SCIENCE'];
@@ -202,6 +226,7 @@ $subjectOptions = isset($subject_options) && is_array($subject_options) && !empt
                     <th>Assessment</th>
                     <th>Grade</th>
                     <th>Subject</th>
+                    <th>Expected</th>
                     <th>Total</th>
                     <th>Uploaded</th>
                     <th>Assigned</th>
@@ -213,10 +238,11 @@ $subjectOptions = isset($subject_options) && is_array($subject_options) && !empt
                 </thead>
                 <tbody>
                   <?php if (empty($subject_summary)): ?>
-                    <tr><td colspan="10" class="text-center text-muted">No records</td></tr>
+                    <tr><td colspan="11" class="text-center text-muted">No records</td></tr>
                   <?php else: ?>
                     <?php
                     $subject_totals = [
+                      'expected' => 0,
                       'total_images' => 0,
                       'uploaded' => 0,
                       'assigned' => 0,
@@ -228,6 +254,8 @@ $subjectOptions = isset($subject_options) && is_array($subject_options) && !empt
                     ?>
                     <?php foreach ($subject_summary as $r): ?>
                       <?php
+                      $expected = (int) $expectedCount($r->assessment_type, $r->grade, $r->subject_code);
+                      $subject_totals['expected'] += $expected;
                       $subject_totals['total_images'] += (int) ($r->total_images ?? 0);
                       $subject_totals['uploaded'] += (int) ($r->uploaded ?? 0);
                       $subject_totals['assigned'] += (int) ($r->assigned ?? 0);
@@ -240,6 +268,7 @@ $subjectOptions = isset($subject_options) && is_array($subject_options) && !empt
                         <td><?php echo htmlspecialchars((string) $r->assessment_type); ?></td>
                         <td><?php echo (int) $r->grade; ?></td>
                         <td><?php echo htmlspecialchars((string) $subjectName($r->subject_code)); ?></td>
+                        <td><?php echo number_format((int) $expected); ?></td>
                         <td><?php echo (int) $r->total_images; ?></td>
                         <td><?php echo (int) $r->uploaded; ?></td>
                         <td><?php echo (int) $r->assigned; ?></td>
@@ -251,6 +280,7 @@ $subjectOptions = isset($subject_options) && is_array($subject_options) && !empt
                     <?php endforeach; ?>
                     <tr class="font-weight-bold table-secondary">
                       <td colspan="3" class="text-right">Total</td>
+                      <td><?php echo number_format((int) $subject_totals['expected']); ?></td>
                       <td><?php echo (int) $subject_totals['total_images']; ?></td>
                       <td><?php echo (int) $subject_totals['uploaded']; ?></td>
                       <td><?php echo (int) $subject_totals['assigned']; ?></td>

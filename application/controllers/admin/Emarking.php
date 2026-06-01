@@ -671,6 +671,11 @@ class Emarking extends MY_Controller
 		$dir = str_replace(['\\', '//'], ['/', '/'], $dir);
 		if (!is_dir($dir)) {
 			@mkdir($dir, 0777, true);
+			@chmod($dir, 0777);
+		}
+		if (!is_dir($dir) || !is_writable($dir)) {
+			// Try to relax permissions; if still not writable, caller will return an error.
+			@chmod($dir, 0777);
 		}
 		return $dir;
 	}
@@ -706,6 +711,7 @@ class Emarking extends MY_Controller
 	public function import_async_start()
 	{
 		postAllowed();
+		@set_time_limit(0);
 
 		$assessment_type = strtoupper(trim((string) $this->input->post('assessment_type', true)));
 		if (!in_array($assessment_type, ['CRQ', 'DICTATION'], true)) {
@@ -728,6 +734,11 @@ class Emarking extends MY_Controller
 		if ($chunk_size > 5000) $chunk_size = 5000;
 
 		$paths = $this->progress_paths($assessment_type, $upload_batch_no);
+		$progress_dir = $this->import_progress_dir();
+		if (!is_dir($progress_dir) || !is_writable($progress_dir)) {
+			$this->json(['ok' => false, 'error' => 'Import progress directory is not writable', 'dir' => $progress_dir], 500);
+			return;
+		}
 
 		// Resolve absolute base folder
 		$abs_base = str_replace('\\', '/', rtrim($base_folder, '/'));
@@ -744,25 +755,31 @@ class Emarking extends MY_Controller
 		// Build manifest (absolute paths), deterministic order.
 		$manifest_fp = @fopen($paths['manifest'], 'wb');
 		if (!$manifest_fp) {
-			$this->json(['ok' => false, 'error' => 'Unable to create manifest file'], 500);
+			$this->json(['ok' => false, 'error' => 'Unable to create manifest file', 'manifest' => $paths['manifest']], 500);
 			return;
 		}
 
 		$total = 0;
-		$it = new RecursiveIteratorIterator(
-			new RecursiveDirectoryIterator($abs_base, FilesystemIterator::SKIP_DOTS)
-		);
-		foreach ($it as $fileInfo) {
-			/** @var SplFileInfo $fileInfo */
-			if (!$fileInfo->isFile()) continue;
-			$ext = strtolower((string) $fileInfo->getExtension());
-			if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) continue;
+		try {
+			$it = new RecursiveIteratorIterator(
+				new RecursiveDirectoryIterator($abs_base, FilesystemIterator::SKIP_DOTS)
+			);
+			foreach ($it as $fileInfo) {
+				/** @var SplFileInfo $fileInfo */
+				if (!$fileInfo->isFile()) continue;
+				$ext = strtolower((string) $fileInfo->getExtension());
+				if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) continue;
 
-			$abs_path = str_replace('\\', '/', $fileInfo->getPathname());
-			fwrite($manifest_fp, $abs_path . "\n");
-			$total++;
+				$abs_path = str_replace('\\', '/', $fileInfo->getPathname());
+				@fwrite($manifest_fp, $abs_path . "\n");
+				$total++;
+			}
+		} catch (Exception $e) {
+			@fclose($manifest_fp);
+			$this->json(['ok' => false, 'error' => 'Failed to scan base folder', 'message' => $e->getMessage(), 'base_folder' => $abs_base], 500);
+			return;
 		}
-		fclose($manifest_fp);
+		@fclose($manifest_fp);
 
 		$progress = [
 			'ok' => true,
@@ -1245,7 +1262,23 @@ class Emarking extends MY_Controller
 
 		if ($this->input->method(true) === 'POST') {
 			postAllowed();
+			$set_all_seconds_raw = $this->input->post('set_all_seconds', true);
+			$set_all_seconds_raw = trim((string) $set_all_seconds_raw);
+			$set_all_seconds = null;
+			if ($set_all_seconds_raw !== '' && preg_match('/^\\d+$/', $set_all_seconds_raw)) {
+				$set_all_seconds = (int) $set_all_seconds_raw;
+				if ($set_all_seconds < 0) $set_all_seconds = 0;
+			}
+
 			$timers = (array) $this->input->post('timers');
+			if ($set_all_seconds !== null) {
+				$timers = [];
+				foreach (($emarkers ?? []) as $u) {
+					$uid = (int) ($u->id ?? 0);
+					if ($uid <= 0) continue;
+					$timers[$uid] = $set_all_seconds;
+				}
+			}
 			$saved = 0;
 			foreach ($timers as $uid => $sec) {
 				$uid = (int) $uid;

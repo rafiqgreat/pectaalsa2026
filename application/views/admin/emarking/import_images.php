@@ -363,15 +363,44 @@
             }
 
             setTimeout(tick, 50);
-          }).fail(function () {
-            setStatus($root, 'Import tick request failed');
+          }).fail(function (xhr) {
+            var msg = 'Import tick request failed';
+            try {
+              if (xhr && xhr.responseJSON && xhr.responseJSON.error) {
+                msg = xhr.responseJSON.error;
+              } else if (xhr && xhr.status) {
+                msg = 'Import tick request failed (' + xhr.status + ')';
+              }
+            } catch (e) {}
+            setStatus($root, msg);
             $form.find('button, input, select, textarea').prop('disabled', false);
           });
         }
 
         tick();
-      }).fail(function () {
-        setStatus($root, 'Start request failed');
+      }).fail(function (xhr) {
+        var msg = 'Start request failed';
+        try {
+          if (xhr && xhr.responseJSON && xhr.responseJSON.error) {
+            msg = xhr.responseJSON.error;
+            if (xhr.responseJSON.base_folder) msg += ' (' + xhr.responseJSON.base_folder + ')';
+            if (xhr.responseJSON.manifest) msg += ' (' + xhr.responseJSON.manifest + ')';
+            if (xhr.responseJSON.dir) msg += ' (' + xhr.responseJSON.dir + ')';
+          } else if (xhr && xhr.responseText) {
+            var t = xhr.responseText.toString();
+            // Try to extract JSON error from responseText
+            try {
+              var j = JSON.parse(t);
+              if (j && j.error) msg = j.error;
+            } catch (e) {}
+            if (msg === 'Start request failed') {
+              msg = 'Start request failed (' + (xhr.status || '') + ')';
+            }
+          } else if (xhr && xhr.status) {
+            msg = 'Start request failed (' + xhr.status + ')';
+          }
+        } catch (e) {}
+        setStatus($root, msg);
         $form.find('button, input, select, textarea').prop('disabled', false);
       });
     }

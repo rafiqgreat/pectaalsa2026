@@ -35,6 +35,17 @@
         </div>
 
         <form method="post" action="<?php echo base_url('admin/emarking/emarker_timers'); ?>">
+          <div class="form-row align-items-end mb-3">
+            <div class="col-md-3 mb-2">
+              <label class="mb-1">Set all timers (seconds)</label>
+              <input type="number" min="0" step="1" class="form-control" id="set-all-seconds" name="set_all_seconds" placeholder="e.g. 5">
+              <small class="text-muted">If set, Save will apply to all eMarkers.</small>
+            </div>
+            <div class="col-md-2 mb-2">
+              <button type="button" class="btn btn-outline-secondary btn-block" id="apply-set-all">Apply to table</button>
+            </div>
+          </div>
+
           <div class="table-responsive">
             <table class="table table-bordered table-hover mb-0">
               <thead>
@@ -79,3 +90,20 @@
 
 <?php include viewPath('admin/includes/footer'); ?>
 
+<script>
+  (function () {
+    var applyBtn = document.getElementById('apply-set-all');
+    var input = document.getElementById('set-all-seconds');
+    if (!applyBtn || !input) return;
+    applyBtn.addEventListener('click', function () {
+      var v = String(input.value || '').trim();
+      if (v === '') return;
+      var n = parseInt(v, 10);
+      if (isNaN(n) || n < 0) n = 0;
+      var timerInputs = document.querySelectorAll('input[name^="timers["]');
+      timerInputs.forEach(function (el) {
+        el.value = String(n);
+      });
+    });
+  })();
+</script>
