@@ -326,6 +326,7 @@ class Emarking_model extends CI_Model
 			'lsacode' => ['paper_lsacode', 'lsacode', 'lsa_code', 'lscode', 'l_s_a_code'],
 			'paper_type_code' => ['paper_type_code', 'paper_type', 'paperTypeCode'],
 			'paper_generated' => ['paper_generated', 'is_generated', 'generated'],
+			'paper_questions' => ['paper_questions', 'questions', 'paper_question_count', 'question_count'],
 		];
 
 		$out = [];
@@ -339,6 +340,74 @@ class Emarking_model extends CI_Model
 			}
 		}
 		return $out;
+	}
+
+	private function eng_crq_barcode_query_sql($version = '', $expand_by_questions = false, $count_only = false)
+	{
+		$table = 'digital_papers_booklets1';
+		if (!$this->db->table_exists($table)) return [null, []];
+
+		$cols = $this->resolve_source_columns($table);
+		if (empty($cols['barcode']) || empty($cols['paper_generated'])) return [null, []];
+
+		$tableSql = '`' . $table . '`';
+		$barcodeCol = '`' . $cols['barcode'] . '`';
+		$generatedCol = '`' . $cols['paper_generated'] . '`';
+		$gradeExpr = !empty($cols['grade']) ? ('src.`' . $cols['grade'] . '`') : '4';
+		$versionExpr = !empty($cols['version']) ? ('src.`' . $cols['version'] . '`') : '1';
+		$questionExpr = !empty($cols['paper_questions'])
+			? 'CASE WHEN COALESCE(src.`' . $cols['paper_questions'] . '`, 1) >= 2 THEN 2 ELSE 1 END'
+			: '1';
+
+		$where = ['src.' . $generatedCol . ' = ?'];
+		$params = [1];
+
+		$version = trim((string) $version);
+		if ($version !== '' && !empty($cols['version'])) {
+			$where[] = 'src.`' . $cols['version'] . '` = ?';
+			$params[] = (int) $version;
+		}
+
+		$whereSql = implode(' AND ', $where);
+
+		if ($expand_by_questions) {
+			$numbersSql = '(SELECT 1 AS image_no UNION ALL SELECT 2 AS image_no) nums';
+			if ($count_only) {
+				$sql = 'SELECT COUNT(*) AS total_rows
+					FROM ' . $tableSql . ' src
+					INNER JOIN ' . $numbersSql . ' ON nums.image_no <= ' . $questionExpr . '
+					WHERE ' . $whereSql;
+				return [$sql, $params];
+			}
+
+			$sql = 'SELECT '
+				. $gradeExpr . ' AS grade, '
+				. $versionExpr . ' AS version, '
+				. 'src.' . $barcodeCol . ' AS barcode, '
+				. 'CONCAT(\'q\', nums.image_no) AS question_no, '
+				. 'CONCAT(src.' . $barcodeCol . ', \'_\', nums.image_no) AS image_barcode, '
+				. 'nums.image_no AS image_no, '
+				. $questionExpr . ' AS paper_questions
+				FROM ' . $tableSql . ' src
+				INNER JOIN ' . $numbersSql . ' ON nums.image_no <= ' . $questionExpr . '
+				WHERE ' . $whereSql . '
+				ORDER BY version ASC, grade ASC, barcode ASC, image_no ASC';
+			return [$sql, $params];
+		}
+
+		if ($count_only) {
+			$sql = 'SELECT COUNT(*) AS total_rows FROM ' . $tableSql . ' src WHERE ' . $whereSql;
+			return [$sql, $params];
+		}
+
+		$sql = 'SELECT '
+			. $gradeExpr . ' AS grade, '
+			. $versionExpr . ' AS version, '
+			. 'src.' . $barcodeCol . ' AS barcode
+			FROM ' . $tableSql . ' src
+			WHERE ' . $whereSql . '
+			ORDER BY version ASC, grade ASC, barcode ASC';
+		return [$sql, $params];
 	}
 
 	public function get_eng_crq_barcode_versions()
@@ -366,89 +435,30 @@ class Emarking_model extends CI_Model
 		return array_values(array_unique($out));
 	}
 
-	public function get_eng_crq_barcodes($version = '')
+	public function get_eng_crq_barcodes($version = '', $expand_by_questions = false)
 	{
-		$table = 'digital_papers_booklets1';
-		if (!$this->db->table_exists($table)) return [];
-
-		$cols = $this->resolve_source_columns($table);
-		if (empty($cols['barcode']) || empty($cols['paper_generated'])) return [];
-
-		$gradeSelect = !empty($cols['grade']) ? ($cols['grade'] . ' AS grade') : '4 AS grade';
-		$versionSelect = !empty($cols['version']) ? ($cols['version'] . ' AS version') : '1 AS version';
-
-		$this->db->select($gradeSelect . ', ' . $versionSelect . ', ' . $cols['barcode'] . ' AS barcode', false);
-		$this->db->from($table);
-		$this->db->where($cols['paper_generated'], 1);
-
-		$version = trim((string) $version);
-		if ($version !== '' && !empty($cols['version'])) {
-			$this->db->where($cols['version'], (int) $version);
-		}
-
-		if (!empty($cols['version'])) {
-			$this->db->order_by($cols['version'], 'ASC');
-		}
-		if (!empty($cols['grade'])) {
-			$this->db->order_by($cols['grade'], 'ASC');
-		}
-		$this->db->order_by($cols['barcode'], 'ASC');
-
-		return $this->db->get()->result();
+		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false);
+		if ($sql === null) return [];
+		return $this->db->query($sql, $params)->result();
 	}
 
-	public function count_eng_crq_barcodes($version = '')
+	public function count_eng_crq_barcodes($version = '', $expand_by_questions = false)
 	{
-		$table = 'digital_papers_booklets1';
-		if (!$this->db->table_exists($table)) return 0;
-
-		$cols = $this->resolve_source_columns($table);
-		if (empty($cols['barcode']) || empty($cols['paper_generated'])) return 0;
-
-		$this->db->from($table);
-		$this->db->where($cols['paper_generated'], 1);
-
-		$version = trim((string) $version);
-		if ($version !== '' && !empty($cols['version'])) {
-			$this->db->where($cols['version'], (int) $version);
-		}
-
-		return (int) $this->db->count_all_results();
+		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, true);
+		if ($sql === null) return 0;
+		$row = $this->db->query($sql, $params)->row();
+		return (int) ($row->total_rows ?? 0);
 	}
 
-	public function get_eng_crq_barcodes_page($version = '', $limit = 100, $offset = 0)
+	public function get_eng_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false)
 	{
 		$limit = max(1, (int) $limit);
 		$offset = max(0, (int) $offset);
 
-		$table = 'digital_papers_booklets1';
-		if (!$this->db->table_exists($table)) return [];
-
-		$cols = $this->resolve_source_columns($table);
-		if (empty($cols['barcode']) || empty($cols['paper_generated'])) return [];
-
-		$gradeSelect = !empty($cols['grade']) ? ($cols['grade'] . ' AS grade') : '4 AS grade';
-		$versionSelect = !empty($cols['version']) ? ($cols['version'] . ' AS version') : '1 AS version';
-
-		$this->db->select($gradeSelect . ', ' . $versionSelect . ', ' . $cols['barcode'] . ' AS barcode', false);
-		$this->db->from($table);
-		$this->db->where($cols['paper_generated'], 1);
-
-		$version = trim((string) $version);
-		if ($version !== '' && !empty($cols['version'])) {
-			$this->db->where($cols['version'], (int) $version);
-		}
-
-		if (!empty($cols['version'])) {
-			$this->db->order_by($cols['version'], 'ASC');
-		}
-		if (!empty($cols['grade'])) {
-			$this->db->order_by($cols['grade'], 'ASC');
-		}
-		$this->db->order_by($cols['barcode'], 'ASC');
-		$this->db->limit($limit, $offset);
-
-		return $this->db->get()->result();
+		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false);
+		if ($sql === null) return [];
+		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+		return $this->db->query($sql, $params)->result();
 	}
 
 	/**

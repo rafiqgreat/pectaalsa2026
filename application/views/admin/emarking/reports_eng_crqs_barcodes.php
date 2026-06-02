@@ -10,6 +10,10 @@ $currentPage = max(1, (int) ($barcode_page ?? 1));
 $perPage = max(1, (int) ($barcode_per_page ?? 100));
 $paginationLinks = (string) ($pagination_links ?? '');
 $startSr = (($currentPage - 1) * $perPage) + 1;
+$totalPages = max(1, (int) ceil($totalRows / $perPage));
+$currentPage = min($currentPage, $totalPages);
+$shownCount = count($rows);
+$showImageBarcode = !empty($show_image_barcode);
 ?>
 
 <section class="content-header">
@@ -70,7 +74,9 @@ $startSr = (($currentPage - 1) * $perPage) + 1;
         </form>
 
         <div class="alert alert-info mb-3">
-          Showing <strong><?php echo number_format(count($rows)); ?></strong> of <strong><?php echo number_format($totalRows); ?></strong> booklet barcode(s) from <code>digital_papers_booklets1</code> where <code>paper_generated = 1</code>.
+          <div><strong>Page <?php echo number_format($currentPage); ?></strong> of <strong><?php echo number_format($totalPages); ?></strong></div>
+          <div>Showing <strong><?php echo number_format($shownCount); ?></strong> record(s) of <strong><?php echo number_format($totalRows); ?></strong></div>
+          <div>Source: <code>digital_papers_booklets1</code> with <code>paper_generated = 1</code></div>
         </div>
 
         <div class="table-responsive">
@@ -83,12 +89,16 @@ $startSr = (($currentPage - 1) * $perPage) + 1;
                 <th>Version</th>
                 <th>Type</th>
                 <th>Barcode</th>
+                <?php if ($showImageBarcode): ?>
+                  <th>question_no</th>
+                  <th>Image_Barcode</th>
+                <?php endif; ?>
               </tr>
             </thead>
             <tbody>
               <?php if (empty($rows)): ?>
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No records found</td>
+                  <td colspan="<?php echo $showImageBarcode ? 7 : 6; ?>" class="text-center text-muted">No records found</td>
                 </tr>
               <?php else: ?>
                 <?php $sr = $startSr; ?>
@@ -100,6 +110,10 @@ $startSr = (($currentPage - 1) * $perPage) + 1;
                     <td><?php echo html_escape((string) ($row->version ?? '')); ?></td>
                     <td>CRQ</td>
                     <td><?php echo html_escape((string) ($row->barcode ?? '')); ?></td>
+                    <?php if ($showImageBarcode): ?>
+                      <td><?php echo html_escape((string) ($row->question_no ?? 'q1')); ?></td>
+                      <td><?php echo html_escape((string) ($row->image_barcode ?? '')); ?></td>
+                    <?php endif; ?>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>

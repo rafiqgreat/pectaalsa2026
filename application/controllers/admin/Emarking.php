@@ -1483,6 +1483,7 @@ class Emarking extends MY_Controller
 	{
 		$this->ensure_english_subject_access();
 		$this->load->library('pagination');
+		$show_image_barcode = ((int) logged('role') === 1);
 
 		$this->page_data['page']->submenu = 'reports';
 		$this->page_data['reports_tab'] = 'eng_crqs_barcodes';
@@ -1506,7 +1507,7 @@ class Emarking extends MY_Controller
 			$selected_version = '';
 		}
 
-		$total = $this->emarking->count_eng_crq_barcodes($selected_version);
+		$total = $this->emarking->count_eng_crq_barcodes($selected_version, $show_image_barcode);
 		$config = [
 			'base_url' => url('admin/emarking/reports_eng_crqs_barcodes'),
 			'total_rows' => $total,
@@ -1518,11 +1519,12 @@ class Emarking extends MY_Controller
 		];
 		$this->pagination->initialize($config);
 
-		$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $per_page, $offset);
+		$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $per_page, $offset, $show_image_barcode);
 
 		$this->page_data['barcode_versions'] = $versions;
 		$this->page_data['selected_version'] = $selected_version;
 		$this->page_data['barcode_rows'] = $rows;
+		$this->page_data['show_image_barcode'] = $show_image_barcode;
 		$this->page_data['barcode_total'] = $total;
 		$this->page_data['barcode_page'] = $page;
 		$this->page_data['barcode_per_page'] = $per_page;
@@ -1533,6 +1535,7 @@ class Emarking extends MY_Controller
 	public function export_eng_crqs_barcodes_csv()
 	{
 		$this->ensure_english_subject_access();
+		$show_image_barcode = ((int) logged('role') === 1);
 
 		$selected_version = trim((string) $this->input->get('version', true));
 		if ($selected_version !== '' && !ctype_digit($selected_version)) {
@@ -1544,7 +1547,6 @@ class Emarking extends MY_Controller
 			$selected_version = '';
 		}
 
-		$rows = $this->emarking->get_eng_crq_barcodes($selected_version);
 		$ts = date('Ymd_His');
 		$suffix = ($selected_version === '') ? 'all_versions' : ('version_' . $selected_version);
 		$filename = 'eng_crqs_barcodes_' . $suffix . '_' . $ts . '.csv';
@@ -1560,18 +1562,49 @@ class Emarking extends MY_Controller
 			return;
 		}
 
-		fputcsv($out, ['Sr', 'Grade', 'Subject', 'Version', 'Type', 'Barcode']);
+		$headers = ['Sr', 'Grade', 'Subject', 'Version', 'Type', 'Barcode'];
+		if ($show_image_barcode) {
+			$headers[] = 'question_no';
+			$headers[] = 'Image_Barcode';
+		}
+		fputcsv($out, $headers);
 
 		$sr = 1;
-		foreach ((array) $rows as $row) {
-			fputcsv($out, [
-				$sr++,
-				(string) ($row->grade ?? '4'),
-				'ENGLISH',
-				(string) ($row->version ?? ''),
-				'CRQ',
-				(string) ($row->barcode ?? ''),
-			]);
+		$chunk = 5000;
+		$offset = 0;
+		while (true) {
+			$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $chunk, $offset, $show_image_barcode);
+			if (empty($rows)) {
+				break;
+			}
+
+			foreach ((array) $rows as $row) {
+				$line = [
+					$sr++,
+					(string) ($row->grade ?? '4'),
+					'ENGLISH',
+					(string) ($row->version ?? ''),
+					'CRQ',
+					(string) ($row->barcode ?? ''),
+				];
+				if ($show_image_barcode) {
+					$line[] = (string) ($row->question_no ?? 'q1');
+					$line[] = (string) ($row->image_barcode ?? '');
+				}
+				fputcsv($out, $line);
+			}
+
+			$offset += $chunk;
+			if (function_exists('ob_get_level')) {
+				while (ob_get_level() > 0) {
+					@ob_end_flush();
+				}
+			}
+			flush();
+
+			if (count($rows) < $chunk) {
+				break;
+			}
 		}
 
 		fclose($out);
