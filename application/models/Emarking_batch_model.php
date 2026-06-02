@@ -182,13 +182,9 @@ class Emarking_batch_model extends CI_Model
 		return ['ok' => true, 'batch_id' => $batch_id, 'batch_code' => $batch_code, 'items_created' => count($items)];
 	}
 
-	public function get_batches($filters = [])
+	private function apply_batch_filters($filters = [])
 	{
-		$this->db->select('b.*, q.question_no, q.question_title, u.name as emarker_name, u.username as emarker_username');
-		$this->db->select('(SELECT COUNT(*) FROM emarking_batch_items bi WHERE bi.batch_id = b.id) AS allotment', false);
 		$this->db->from('emarking_batches b');
-		$this->db->join('emarking_questions q', 'q.id = b.question_id', 'left');
-		$this->db->join('users u', 'u.id = b.assigned_to', 'left');
 
 		$status = isset($filters['status']) ? trim((string) $filters['status']) : '';
 		if ($status !== '' && $status !== 'all') $this->db->where('b.status', $status);
@@ -214,8 +210,26 @@ class Emarking_batch_model extends CI_Model
 
 		$question_id = isset($filters['question_id']) ? trim((string) $filters['question_id']) : '';
 		if ($question_id !== '') $this->db->where('b.question_id', (int) $question_id);
+	}
+
+	public function count_batches($filters = [])
+	{
+		$this->apply_batch_filters($filters);
+		return (int) $this->db->count_all_results();
+	}
+
+	public function get_batches($filters = [], $limit = null, $offset = 0)
+	{
+		$this->db->select('b.*, q.question_no, q.question_title, u.name as emarker_name, u.username as emarker_username');
+		$this->db->select('(SELECT COUNT(*) FROM emarking_batch_items bi WHERE bi.batch_id = b.id) AS allotment', false);
+		$this->apply_batch_filters($filters);
+		$this->db->join('emarking_questions q', 'q.id = b.question_id', 'left');
+		$this->db->join('users u', 'u.id = b.assigned_to', 'left');
 
 		$this->db->order_by('b.id', 'DESC');
+		if ($limit !== null) {
+			$this->db->limit((int) $limit, max(0, (int) $offset));
+		}
 		return $this->db->get()->result();
 	}
 }

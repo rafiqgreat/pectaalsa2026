@@ -1202,6 +1202,16 @@ class Emarking extends MY_Controller
 	{
 		$this->page_data['page']->submenu = 'batches';
 		$this->page_data['page']->title = 'Batches';
+		$this->load->library('pagination');
+
+		$per_page = (int) $this->input->get('per_page', true);
+		$allowed_per_page = [100, 200, 500];
+		if (!in_array($per_page, $allowed_per_page, true)) {
+			$per_page = 100;
+		}
+		$page = (int) $this->input->get('page', true);
+		$page = $page > 0 ? $page : 1;
+		$offset = ($page - 1) * $per_page;
 
 		$filters = [
 			'status' => trim((string) $this->input->get('status', true)),
@@ -1210,6 +1220,7 @@ class Emarking extends MY_Controller
 			'subject_code' => trim((string) $this->input->get('subject_code', true)),
 			'assigned_to' => trim((string) $this->input->get('assigned_to', true)),
 			'question_id' => trim((string) $this->input->get('question_id', true)),
+			'per_page' => $per_page,
 		];
 		// Grade fixed to 4 for this module UI.
 		$filters['grade'] = '4';
@@ -1235,7 +1246,39 @@ class Emarking extends MY_Controller
 			}
 		}
 
-		$this->page_data['batches'] = $this->emarking_batch->get_batches($query_filters);
+		$total = $this->emarking_batch->count_batches($query_filters);
+		$config = [
+			'base_url' => url('admin/emarking/batches'),
+			'total_rows' => $total,
+			'per_page' => $per_page,
+			'page_query_string' => true,
+			'query_string_segment' => 'page',
+			'use_page_numbers' => true,
+			'reuse_query_string' => true,
+			'full_tag_open' => '<ul class="pagination pagination-sm mb-0">',
+			'full_tag_close' => '</ul>',
+			'first_link' => 'First',
+			'first_tag_open' => '<li class="page-item">',
+			'first_tag_close' => '</li>',
+			'last_link' => 'Last',
+			'last_tag_open' => '<li class="page-item">',
+			'last_tag_close' => '</li>',
+			'next_link' => '&raquo;',
+			'next_tag_open' => '<li class="page-item">',
+			'next_tag_close' => '</li>',
+			'prev_link' => '&laquo;',
+			'prev_tag_open' => '<li class="page-item">',
+			'prev_tag_close' => '</li>',
+			'cur_tag_open' => '<li class="page-item active"><a class="page-link" href="#">',
+			'cur_tag_close' => '</a></li>',
+			'num_tag_open' => '<li class="page-item">',
+			'num_tag_close' => '</li>',
+			'attributes' => ['class' => 'page-link'],
+		];
+		$this->pagination->initialize($config);
+
+		$this->page_data['batches'] = $this->emarking_batch->get_batches($query_filters, $per_page, $offset);
+		$this->page_data['pagination_links'] = $this->pagination->create_links();
 		$this->load->view('admin/emarking/batches', $this->page_data);
 	}
 

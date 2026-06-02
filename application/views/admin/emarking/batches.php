@@ -84,11 +84,19 @@
                 <?php endforeach; ?>
               </select>
             </div>
-            <div class="col-md-2 mb-2">
+            <div class="col-md-1 mb-2">
               <input type="text" name="assigned_to" value="<?php echo htmlspecialchars((string) ($filters['assigned_to'] ?? '')); ?>" class="form-control" placeholder="eMarker ID">
             </div>
-            <div class="col-md-2 mb-2">
+            <div class="col-md-1 mb-2">
               <input type="text" name="question_id" value="<?php echo htmlspecialchars((string) ($filters['question_id'] ?? '')); ?>" class="form-control" placeholder="Question ID">
+            </div>
+            <div class="col-md-1 mb-2">
+              <?php $selected_per_page = (int) ($filters['per_page'] ?? 100); ?>
+              <select name="per_page" class="form-control">
+                <option value="100" <?php echo ($selected_per_page === 100) ? 'selected' : ''; ?>>100 / page</option>
+                <option value="200" <?php echo ($selected_per_page === 200) ? 'selected' : ''; ?>>200 / page</option>
+                <option value="500" <?php echo ($selected_per_page === 500) ? 'selected' : ''; ?>>500 / page</option>
+              </select>
             </div>
             <div class="col-md-1 mb-2">
               <button type="submit" class="btn btn-secondary btn-block">Go</button>
@@ -155,6 +163,11 @@
         </div>
       </div>
     </div>
+    <?php if (!empty($pagination_links)): ?>
+      <div class="mt-3 d-flex justify-content-end">
+        <?php echo $pagination_links; ?>
+      </div>
+    <?php endif; ?>
 
   </div>
 </section>
