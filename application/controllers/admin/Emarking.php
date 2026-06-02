@@ -1289,12 +1289,53 @@ class Emarking extends MY_Controller
 		$this->pagination->initialize($config);
 
 		$this->page_data['batches'] = $this->emarking_batch->get_batches($query_filters, $per_page, $offset);
+		$subject_transfer_emarkers = [];
+		if ($this->current_role() === 1) {
+			foreach ($this->subject_code_map as $subject_code => $subject_name) {
+				$subject_transfer_emarkers[(string) $subject_code] = $this->emarking_batch->get_emarkers_for_subject_code($subject_code);
+			}
+		}
+		$this->page_data['subject_transfer_emarkers'] = $subject_transfer_emarkers;
 		$this->page_data['pagination_links'] = $this->pagination->create_links();
 		$this->page_data['total_rows'] = $total;
 		$this->page_data['offset'] = $offset;
 		$this->page_data['per_page'] = $per_page;
 		$this->page_data['current_page'] = $page;
 		$this->load->view('admin/emarking/batches', $this->page_data);
+	}
+
+	public function transfer_batch()
+	{
+		if ((int) logged('role') !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		if (strtoupper((string) $this->input->method()) !== 'POST') {
+			redirect('admin/emarking/batches');
+			return;
+		}
+
+		$batch_id = (int) $this->input->post('batch_id', true);
+		$new_emarker_id = (int) $this->input->post('new_emarker_id', true);
+		$remarks = trim((string) $this->input->post('remarks', true));
+
+		$result = $this->emarking_batch->transfer_batch(
+			$batch_id,
+			$new_emarker_id,
+			$this->current_user_id(),
+			$remarks
+		);
+
+		if (!empty($result['ok'])) {
+			$this->session->set_flashdata('message', 'Batch transferred successfully');
+			$this->session->set_flashdata('message_type', 'success');
+		} else {
+			$this->session->set_flashdata('message', (string) ($result['error'] ?? 'Unable to transfer batch'));
+			$this->session->set_flashdata('message_type', 'danger');
+		}
+
+		redirect('admin/emarking/batches?' . http_build_query($this->input->get(null, true)));
 	}
 
 	public function emarker_timers()

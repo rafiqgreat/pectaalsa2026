@@ -3,6 +3,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Emarking_batch_model extends CI_Model
 {
+	private $subject_code_map = [
+		1 => 'ENGLISH',
+		2 => 'URDU',
+		3 => 'MATH',
+		4 => 'SCIENCE',
+	];
+
 	private function role_column()
 	{
 		if ($this->db->field_exists('role', 'users')) return 'role';
@@ -66,6 +73,50 @@ class Emarking_batch_model extends CI_Model
 	{
 		$role_col = $this->role_column();
 		return $this->db->get_where('users', ['id' => (int) $id, $role_col => 2])->row();
+	}
+
+	private function get_active_emarker_user($id)
+	{
+		$role_col = $this->role_column();
+		$this->db->from('users');
+		$this->db->where('id', (int) $id);
+		$this->db->where($role_col, 2);
+		if ($this->db->field_exists('status', 'users')) {
+			$this->db->where('status', 1);
+		}
+		if ($this->db->field_exists('blacklisted', 'users')) {
+			$this->db->where('blacklisted', 0);
+		}
+		return $this->db->get()->row();
+	}
+
+	private function transferable_statuses()
+	{
+		return ['PENDING', 'IN_PROGRESS'];
+	}
+
+	private function get_subject_specialization_name($subject_code)
+	{
+		$subject_code = (int) $subject_code;
+		return isset($this->subject_code_map[$subject_code]) ? (string) $this->subject_code_map[$subject_code] : '';
+	}
+
+	private function emarker_matches_subject($emarker_id, $subject_code)
+	{
+		$expected = strtoupper(trim($this->get_subject_specialization_name($subject_code)));
+		if ($expected === '') {
+			return false;
+		}
+
+		$row = $this->db->select('specialization')->get_where('teacher_specializations', ['user_id' => (int) $emarker_id])->row();
+		$actual = strtoupper(trim((string) ($row->specialization ?? '')));
+		return $actual !== '' && $actual === $expected;
+	}
+
+	private function transfer_reset_deadline()
+	{
+		// Match the existing batch creation default by giving the new assignee 3 fresh days.
+		return date('Y-m-d H:i:s', time() + (3 * 24 * 60 * 60));
 	}
 
 	private function generate_batch_code($assessment_type)
@@ -232,5 +283,104 @@ class Emarking_batch_model extends CI_Model
 			$this->db->limit((int) $limit, max(0, (int) $offset));
 		}
 		return $this->db->get()->result();
+	}
+
+	public function get_batch_for_transfer($batch_id)
+	{
+		$this->db->select('b.id, b.batch_code, b.status, b.assigned_to, b.subject_code, u.name as emarker_name, u.username as emarker_username');
+		$this->db->from('emarking_batches b');
+		$this->db->join('users u', 'u.id = b.assigned_to', 'left');
+		$this->db->where('b.id', (int) $batch_id);
+		return $this->db->get()->row();
+	}
+
+	public function get_emarkers_for_subject_code($subject_code)
+	{
+		$specialization = $this->get_subject_specialization_name($subject_code);
+		if ($specialization === '') {
+			return [];
+		}
+
+		return $this->get_emarkers_by_specializations([$specialization]);
+	}
+
+	public function transfer_batch($batch_id, $new_emarker_id, $transferred_by, $remarks = null)
+	{
+		$batch_id = (int) $batch_id;
+		$new_emarker_id = (int) $new_emarker_id;
+		$transferred_by = (int) $transferred_by;
+		$remarks = trim((string) $remarks);
+
+		if ($batch_id <= 0) {
+			return ['ok' => false, 'error' => 'Invalid batch selected'];
+		}
+
+		$batch = $this->get_batch_for_transfer($batch_id);
+		if (!$batch) {
+			return ['ok' => false, 'error' => 'Batch not found'];
+		}
+
+		$current_status = strtoupper((string) ($batch->status ?? ''));
+		if (!in_array($current_status, $this->transferable_statuses(), true)) {
+			return ['ok' => false, 'error' => 'Only pending/in-progress batches can be transferred'];
+		}
+
+		if ($new_emarker_id <= 0) {
+			return ['ok' => false, 'error' => 'Please select a different emarker'];
+		}
+
+		if ((int) $batch->assigned_to === $new_emarker_id) {
+			return ['ok' => false, 'error' => 'Please select a different emarker'];
+		}
+
+		$new_emarker = $this->get_active_emarker_user($new_emarker_id);
+		if (!$new_emarker) {
+			return ['ok' => false, 'error' => 'Selected eMarker is invalid or inactive'];
+		}
+
+		if (!$this->emarker_matches_subject($new_emarker_id, (int) ($batch->subject_code ?? 0))) {
+			return ['ok' => false, 'error' => 'Selected eMarker is not approved for this subject'];
+		}
+
+		$this->db->trans_begin();
+		$new_deadline = $this->transfer_reset_deadline();
+
+		// Keep status unchanged, reassign the owner, and refresh deadline for the new assignee.
+		$this->db->where('id', $batch_id);
+		$this->db->where_in('status', $this->transferable_statuses());
+		$this->db->update('emarking_batches', [
+			'assigned_to' => $new_emarker_id,
+			'deadline' => $new_deadline,
+		]);
+
+		if ($this->db->affected_rows() !== 1) {
+			$this->db->trans_rollback();
+			return ['ok' => false, 'error' => 'Only pending/in-progress batches can be transferred'];
+		}
+
+		// Record every transfer so reassignment remains auditable.
+		$this->db->insert('emarking_batch_transfers', [
+			'batch_id' => $batch_id,
+			'old_emarker_id' => (int) $batch->assigned_to,
+			'new_emarker_id' => $new_emarker_id,
+			'transferred_by' => $transferred_by,
+			'old_status' => (string) ($batch->status ?? ''),
+			'remarks' => $remarks !== '' ? $remarks : null,
+			'created_at' => date('Y-m-d H:i:s'),
+		]);
+
+		if ($this->db->trans_status() === false) {
+			$this->db->trans_rollback();
+			return ['ok' => false, 'error' => 'Unable to transfer batch'];
+		}
+
+		$this->db->trans_commit();
+
+		return [
+			'ok' => true,
+			'batch' => $batch,
+			'new_emarker' => $new_emarker,
+			'new_deadline' => $new_deadline,
+		];
 	}
 }
