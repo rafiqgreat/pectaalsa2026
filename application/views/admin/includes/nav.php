@@ -209,6 +209,12 @@
                 </a>
               </li>
             <?php endif; ?>
+            <li class="nav-item">
+              <a href="<?php echo url('admin/emarking/reports_eng_crqs_barcodes'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'eng_crqs_barcodes') ? 'active' : ''; ?>">
+                <i class="far fa-dot-circle nav-icon"></i>
+                <p>ENG CRQs Barcodes</p>
+              </a>
+            </li>
           </ul>
         </li>
         <?php if ($role !== 18): ?>

@@ -114,6 +114,8 @@ $route['admin/emarking/import-dictation-images'] = 'admin/emarking/import_dictat
 $route['admin/emarking/create-batch'] = 'admin/emarking/create_batch';
 $route['admin/emarking/batches'] = 'admin/emarking/batches';
 $route['admin/emarking/reports'] = 'admin/emarking/reports';
+$route['admin/emarking/reports-eng-crqs-barcodes'] = 'admin/emarking/reports_eng_crqs_barcodes';
+$route['admin/emarking/export-eng-crqs-barcodes-csv'] = 'admin/emarking/export_eng_crqs_barcodes_csv';
 $route['admin/emarking/billing'] = 'admin/emarking/billing';
 
 // eMarker marking routes

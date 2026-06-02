@@ -341,6 +341,116 @@ class Emarking_model extends CI_Model
 		return $out;
 	}
 
+	public function get_eng_crq_barcode_versions()
+	{
+		$table = 'digital_papers_booklets1';
+		if (!$this->db->table_exists($table)) return [];
+
+		$cols = $this->resolve_source_columns($table);
+		if (empty($cols['paper_generated']) || empty($cols['version'])) return [];
+
+		$rows = $this->db->distinct()
+			->select($cols['version'] . ' AS version', false)
+			->from($table)
+			->where($cols['paper_generated'], 1)
+			->order_by($cols['version'], 'ASC')
+			->get()
+			->result();
+
+		$out = [];
+		foreach ($rows as $row) {
+			$version = trim((string) ($row->version ?? ''));
+			if ($version !== '') $out[] = $version;
+		}
+
+		return array_values(array_unique($out));
+	}
+
+	public function get_eng_crq_barcodes($version = '')
+	{
+		$table = 'digital_papers_booklets1';
+		if (!$this->db->table_exists($table)) return [];
+
+		$cols = $this->resolve_source_columns($table);
+		if (empty($cols['barcode']) || empty($cols['paper_generated'])) return [];
+
+		$gradeSelect = !empty($cols['grade']) ? ($cols['grade'] . ' AS grade') : '4 AS grade';
+		$versionSelect = !empty($cols['version']) ? ($cols['version'] . ' AS version') : '1 AS version';
+
+		$this->db->select($gradeSelect . ', ' . $versionSelect . ', ' . $cols['barcode'] . ' AS barcode', false);
+		$this->db->from($table);
+		$this->db->where($cols['paper_generated'], 1);
+
+		$version = trim((string) $version);
+		if ($version !== '' && !empty($cols['version'])) {
+			$this->db->where($cols['version'], (int) $version);
+		}
+
+		if (!empty($cols['version'])) {
+			$this->db->order_by($cols['version'], 'ASC');
+		}
+		if (!empty($cols['grade'])) {
+			$this->db->order_by($cols['grade'], 'ASC');
+		}
+		$this->db->order_by($cols['barcode'], 'ASC');
+
+		return $this->db->get()->result();
+	}
+
+	public function count_eng_crq_barcodes($version = '')
+	{
+		$table = 'digital_papers_booklets1';
+		if (!$this->db->table_exists($table)) return 0;
+
+		$cols = $this->resolve_source_columns($table);
+		if (empty($cols['barcode']) || empty($cols['paper_generated'])) return 0;
+
+		$this->db->from($table);
+		$this->db->where($cols['paper_generated'], 1);
+
+		$version = trim((string) $version);
+		if ($version !== '' && !empty($cols['version'])) {
+			$this->db->where($cols['version'], (int) $version);
+		}
+
+		return (int) $this->db->count_all_results();
+	}
+
+	public function get_eng_crq_barcodes_page($version = '', $limit = 100, $offset = 0)
+	{
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		$table = 'digital_papers_booklets1';
+		if (!$this->db->table_exists($table)) return [];
+
+		$cols = $this->resolve_source_columns($table);
+		if (empty($cols['barcode']) || empty($cols['paper_generated'])) return [];
+
+		$gradeSelect = !empty($cols['grade']) ? ($cols['grade'] . ' AS grade') : '4 AS grade';
+		$versionSelect = !empty($cols['version']) ? ($cols['version'] . ' AS version') : '1 AS version';
+
+		$this->db->select($gradeSelect . ', ' . $versionSelect . ', ' . $cols['barcode'] . ' AS barcode', false);
+		$this->db->from($table);
+		$this->db->where($cols['paper_generated'], 1);
+
+		$version = trim((string) $version);
+		if ($version !== '' && !empty($cols['version'])) {
+			$this->db->where($cols['version'], (int) $version);
+		}
+
+		if (!empty($cols['version'])) {
+			$this->db->order_by($cols['version'], 'ASC');
+		}
+		if (!empty($cols['grade'])) {
+			$this->db->order_by($cols['grade'], 'ASC');
+		}
+		$this->db->order_by($cols['barcode'], 'ASC');
+		$this->db->limit($limit, $offset);
+
+		return $this->db->get()->result();
+	}
+
 	/**
 	 * Source tables store paper_page_no as 2 digits (00-99), while folder structure may use 3 digits
 	 * with a fixed trailing "1" (e.g. 01 -> 011, 10 -> 101, 13 -> 131).

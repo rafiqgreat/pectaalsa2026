@@ -45,6 +45,17 @@ class Emarking extends MY_Controller
 		return (int) logged('role');
 	}
 
+	private function ensure_english_subject_access()
+	{
+		if ($this->current_role() !== 18) return;
+
+		$allowed_codes = $this->ss_allowed_subject_codes();
+		if (!in_array('1', $allowed_codes, true)) {
+			redirect('errors/permission_denied');
+			die;
+		}
+	}
+
 	private function require_role_access()
 	{
 		if (!in_array($this->current_role(), $this->allowed_roles, true)) {
@@ -1466,6 +1477,105 @@ class Emarking extends MY_Controller
 	public function reports_batches()
 	{
 		$this->load_reports_tab('batches');
+	}
+
+	public function reports_eng_crqs_barcodes()
+	{
+		$this->ensure_english_subject_access();
+		$this->load->library('pagination');
+
+		$this->page_data['page']->submenu = 'reports';
+		$this->page_data['reports_tab'] = 'eng_crqs_barcodes';
+		$this->page_data['page']->title = 'ENG CRQs Barcodes';
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$per_page = (int) $this->input->get('per_page', true);
+		$allowed_per_page = [100, 200, 500];
+		if (!in_array($per_page, $allowed_per_page, true)) {
+			$per_page = 100;
+		}
+		$page = (int) $this->input->get('page', true);
+		$page = $page > 0 ? $page : 1;
+		$offset = ($page - 1) * $per_page;
+
+		$versions = $this->emarking->get_eng_crq_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$total = $this->emarking->count_eng_crq_barcodes($selected_version);
+		$config = [
+			'base_url' => url('admin/emarking/reports_eng_crqs_barcodes'),
+			'total_rows' => $total,
+			'per_page' => $per_page,
+			'page_query_string' => true,
+			'query_string_segment' => 'page',
+			'use_page_numbers' => true,
+			'reuse_query_string' => true,
+		];
+		$this->pagination->initialize($config);
+
+		$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $per_page, $offset);
+
+		$this->page_data['barcode_versions'] = $versions;
+		$this->page_data['selected_version'] = $selected_version;
+		$this->page_data['barcode_rows'] = $rows;
+		$this->page_data['barcode_total'] = $total;
+		$this->page_data['barcode_page'] = $page;
+		$this->page_data['barcode_per_page'] = $per_page;
+		$this->page_data['pagination_links'] = $this->pagination->create_links();
+		$this->load->view('admin/emarking/reports_eng_crqs_barcodes', $this->page_data);
+	}
+
+	public function export_eng_crqs_barcodes_csv()
+	{
+		$this->ensure_english_subject_access();
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+
+		$versions = $this->emarking->get_eng_crq_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$rows = $this->emarking->get_eng_crq_barcodes($selected_version);
+		$ts = date('Ymd_His');
+		$suffix = ($selected_version === '') ? 'all_versions' : ('version_' . $selected_version);
+		$filename = 'eng_crqs_barcodes_' . $suffix . '_' . $ts . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create export output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, ['Sr', 'Grade', 'Subject', 'Version', 'Type', 'Barcode']);
+
+		$sr = 1;
+		foreach ((array) $rows as $row) {
+			fputcsv($out, [
+				$sr++,
+				(string) ($row->grade ?? '4'),
+				'ENGLISH',
+				(string) ($row->version ?? ''),
+				'CRQ',
+				(string) ($row->barcode ?? ''),
+			]);
+		}
+
+		fclose($out);
+		die;
 	}
 
 	public function reports_dictation_csv()
