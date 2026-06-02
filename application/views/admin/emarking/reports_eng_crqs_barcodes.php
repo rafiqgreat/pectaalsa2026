@@ -14,6 +14,11 @@ $totalPages = max(1, (int) ceil($totalRows / $perPage));
 $currentPage = min($currentPage, $totalPages);
 $shownCount = count($rows);
 $showImageBarcode = !empty($show_image_barcode);
+$selectedStatus = strtolower(trim((string) ($selected_status ?? '')));
+$exportParams = [];
+if ($selectedVersion !== '') $exportParams[] = 'version=' . urlencode($selectedVersion);
+if ($selectedStatus !== '') $exportParams[] = 'status=' . urlencode($selectedStatus);
+$exportUrl = base_url('admin/emarking/export_eng_crqs_barcodes_csv' . (!empty($exportParams) ? ('?' . implode('&', $exportParams)) : ''));
 ?>
 
 <section class="content-header">
@@ -56,6 +61,14 @@ $showImageBarcode = !empty($show_image_barcode);
                 <?php endforeach; ?>
               </select>
             </div>
+            <div class="col-md-2 mb-2">
+              <label for="status" class="mb-1">Status</label>
+              <select name="status" id="status" class="form-control">
+                <option value="">All Statuses</option>
+                <option value="exist" <?php echo ($selectedStatus === 'exist') ? 'selected' : ''; ?>>Exist</option>
+                <option value="missing" <?php echo ($selectedStatus === 'missing') ? 'selected' : ''; ?>>Missing</option>
+              </select>
+            </div>
             <div class="col-md-3 mb-2">
               <label for="per_page" class="mb-1">Rows Per Page</label>
               <select name="per_page" id="per_page" class="form-control">
@@ -64,11 +77,11 @@ $showImageBarcode = !empty($show_image_barcode);
                 <option value="500" <?php echo ($perPage === 500) ? 'selected' : ''; ?>>500 / page</option>
               </select>
             </div>
-            <div class="col-md-2 mb-2">
+            <div class="col-md-1 mb-2">
               <button type="submit" class="btn btn-secondary btn-block">Filter</button>
             </div>
-            <div class="col-md-3 mb-2">
-              <a href="<?php echo base_url('admin/emarking/export_eng_crqs_barcodes_csv' . ($selectedVersion !== '' ? '?version=' . urlencode($selectedVersion) : '')); ?>" class="btn btn-primary btn-block">Download CSV</a>
+            <div class="col-md-2 mb-2">
+              <a href="<?php echo $exportUrl; ?>" class="btn btn-primary btn-block">Download CSV</a>
             </div>
           </div>
         </form>

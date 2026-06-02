@@ -1497,6 +1497,10 @@ class Emarking extends MY_Controller
 		if ($selected_version !== '' && !ctype_digit($selected_version)) {
 			$selected_version = '';
 		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
 		$per_page = (int) $this->input->get('per_page', true);
 		$allowed_per_page = [100, 200, 500];
 		if (!in_array($per_page, $allowed_per_page, true)) {
@@ -1511,7 +1515,7 @@ class Emarking extends MY_Controller
 			$selected_version = '';
 		}
 
-		$total = $this->emarking->count_eng_crq_barcodes($selected_version, $show_image_barcode);
+		$total = $this->emarking->count_eng_crq_barcodes($selected_version, $show_image_barcode, $selected_status);
 		$config = [
 			'base_url' => url('admin/emarking/reports_eng_crqs_barcodes'),
 			'total_rows' => $total,
@@ -1523,10 +1527,11 @@ class Emarking extends MY_Controller
 		];
 		$this->pagination->initialize($config);
 
-		$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $per_page, $offset, $show_image_barcode);
+		$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $per_page, $offset, $show_image_barcode, $selected_status);
 
 		$this->page_data['barcode_versions'] = $versions;
 		$this->page_data['selected_version'] = $selected_version;
+		$this->page_data['selected_status'] = $selected_status;
 		$this->page_data['barcode_rows'] = $rows;
 		$this->page_data['show_image_barcode'] = $show_image_barcode;
 		$this->page_data['barcode_total'] = $total;
@@ -1544,6 +1549,10 @@ class Emarking extends MY_Controller
 		$selected_version = trim((string) $this->input->get('version', true));
 		if ($selected_version !== '' && !ctype_digit($selected_version)) {
 			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
 		}
 
 		$versions = $this->emarking->get_eng_crq_barcode_versions();
@@ -1577,7 +1586,7 @@ class Emarking extends MY_Controller
 		$chunk = 5000;
 		$offset = 0;
 		while (true) {
-			$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $chunk, $offset, $show_image_barcode);
+			$rows = $this->emarking->get_eng_crq_barcodes_page($selected_version, $chunk, $offset, $show_image_barcode, $selected_status);
 			if (empty($rows)) {
 				break;
 			}

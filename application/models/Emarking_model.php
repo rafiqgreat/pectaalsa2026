@@ -342,7 +342,7 @@ class Emarking_model extends CI_Model
 		return $out;
 	}
 
-	private function eng_crq_barcode_query_sql($version = '', $expand_by_questions = false, $count_only = false)
+	private function eng_crq_barcode_query_sql($version = '', $expand_by_questions = false, $count_only = false, $status_filter = '')
 	{
 		$table = 'digital_papers_booklets1';
 		if (!$this->db->table_exists($table)) return [null, []];
@@ -373,15 +373,26 @@ class Emarking_model extends CI_Model
 			$params[] = (int) $version;
 		}
 
+		$status_filter = strtolower(trim((string) $status_filter));
+		$has_status_filter = in_array($status_filter, ['exist', 'missing'], true);
+
 		$whereSql = implode(' AND ', $where);
 
 		if ($expand_by_questions) {
 			$numbersSql = '(SELECT 1 AS image_no UNION ALL SELECT 2 AS image_no) nums';
+			$statusWhereSql = '';
+			if ($has_status_filter) {
+				$statusWhereSql = ($status_filter === 'exist')
+					? ' AND qi.paper_barcode_key IS NOT NULL'
+					: ' AND qi.paper_barcode_key IS NULL';
+			}
 			if ($count_only) {
 				$sql = 'SELECT COUNT(*) AS total_rows
 					FROM ' . $tableSql . ' src
 					INNER JOIN ' . $numbersSql . ' ON nums.image_no <= ' . $questionExpr . '
+					' . $imageMatchJoin . ' AND qi.question_no_key = UPPER(CONCAT(\'q\', nums.image_no))
 					WHERE ' . $whereSql;
+				$sql .= $statusWhereSql;
 				return [$sql, $params];
 			}
 
@@ -398,12 +409,22 @@ class Emarking_model extends CI_Model
 				INNER JOIN ' . $numbersSql . ' ON nums.image_no <= ' . $questionExpr . '
 				' . $imageMatchJoin . ' AND qi.question_no_key = UPPER(CONCAT(\'q\', nums.image_no))
 				WHERE ' . $whereSql . '
+				' . $statusWhereSql . '
 				ORDER BY version ASC, grade ASC, barcode ASC, image_no ASC';
 			return [$sql, $params];
 		}
 
+		$statusWhereSql = '';
+		if ($has_status_filter) {
+			$statusWhereSql = ($status_filter === 'exist')
+				? ' AND qi.paper_barcode_key IS NOT NULL'
+				: ' AND qi.paper_barcode_key IS NULL';
+		}
+
 		if ($count_only) {
-			$sql = 'SELECT COUNT(*) AS total_rows FROM ' . $tableSql . ' src WHERE ' . $whereSql;
+			$sql = 'SELECT COUNT(*) AS total_rows FROM ' . $tableSql . ' src
+			' . $imageMatchJoin . ' AND qi.question_no_key = \'Q1\'
+			WHERE ' . $whereSql . $statusWhereSql;
 			return [$sql, $params];
 		}
 
@@ -414,7 +435,7 @@ class Emarking_model extends CI_Model
 			. 'CASE WHEN qi.paper_barcode_key IS NULL THEN \'Missing\' ELSE \'Exist\' END AS status
 			FROM ' . $tableSql . ' src
 			' . $imageMatchJoin . ' AND qi.question_no_key = \'Q1\'
-			WHERE ' . $whereSql . '
+			WHERE ' . $whereSql . $statusWhereSql . '
 			ORDER BY version ASC, grade ASC, barcode ASC';
 		return [$sql, $params];
 	}
@@ -444,27 +465,27 @@ class Emarking_model extends CI_Model
 		return array_values(array_unique($out));
 	}
 
-	public function get_eng_crq_barcodes($version = '', $expand_by_questions = false)
+	public function get_eng_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
 	{
-		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false);
+		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false, $status_filter);
 		if ($sql === null) return [];
 		return $this->db->query($sql, $params)->result();
 	}
 
-	public function count_eng_crq_barcodes($version = '', $expand_by_questions = false)
+	public function count_eng_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
 	{
-		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, true);
+		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, true, $status_filter);
 		if ($sql === null) return 0;
 		$row = $this->db->query($sql, $params)->row();
 		return (int) ($row->total_rows ?? 0);
 	}
 
-	public function get_eng_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false)
+	public function get_eng_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
 	{
 		$limit = max(1, (int) $limit);
 		$offset = max(0, (int) $offset);
 
-		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false);
+		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false, $status_filter);
 		if ($sql === null) return [];
 		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
 		return $this->db->query($sql, $params)->result();
