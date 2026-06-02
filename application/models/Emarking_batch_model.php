@@ -222,6 +222,7 @@ class Emarking_batch_model extends CI_Model
 	{
 		$this->db->select('b.*, q.question_no, q.question_title, u.name as emarker_name, u.username as emarker_username');
 		$this->db->select('(SELECT COUNT(*) FROM emarking_batch_items bi WHERE bi.batch_id = b.id) AS allotment', false);
+		$this->db->select("(SELECT COUNT(*) FROM emarking_batch_items bi WHERE bi.batch_id = b.id AND bi.status IN ('MARKED','FINALIZED')) AS marked", false);
 		$this->apply_batch_filters($filters);
 		$this->db->join('emarking_questions q', 'q.id = b.question_id', 'left');
 		$this->db->join('users u', 'u.id = b.assigned_to', 'left');

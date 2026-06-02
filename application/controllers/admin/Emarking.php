@@ -1290,6 +1290,10 @@ class Emarking extends MY_Controller
 
 		$this->page_data['batches'] = $this->emarking_batch->get_batches($query_filters, $per_page, $offset);
 		$this->page_data['pagination_links'] = $this->pagination->create_links();
+		$this->page_data['total_rows'] = $total;
+		$this->page_data['offset'] = $offset;
+		$this->page_data['per_page'] = $per_page;
+		$this->page_data['current_page'] = $page;
 		$this->load->view('admin/emarking/batches', $this->page_data);
 	}
 

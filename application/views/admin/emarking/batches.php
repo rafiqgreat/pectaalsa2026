@@ -105,6 +105,19 @@
           <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.location.href='<?php echo base_url('admin/emarking/batches'); ?>'">Reset</button>
         </form>
 
+        <?php
+          $total_rows = (int) ($total_rows ?? 0);
+          $offset = (int) ($offset ?? 0);
+          $current_count = is_array($batches ?? null) ? count($batches) : (is_iterable($batches ?? null) ? iterator_count($batches) : 0);
+          $showing_from = $total_rows > 0 ? ($offset + 1) : 0;
+          $showing_to = $total_rows > 0 ? min($offset + $current_count, $total_rows) : 0;
+        ?>
+        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">
+          <div class="text-muted">
+            Showing <?php echo $showing_from; ?> to <?php echo $showing_to; ?> of <?php echo $total_rows; ?> entries
+          </div>
+        </div>
+
         <div class="table-responsive">
           <table class="table table-bordered table-hover mb-0">
             <thead>
@@ -119,6 +132,7 @@
                 <th>Assigned To</th>
                 <th>Size</th>
                 <th>Allotment</th>
+                <th>Marked</th>
                 <th>Status</th>
                 <th>Deadline</th>
                 <th>Created</th>
@@ -126,7 +140,7 @@
             </thead>
             <tbody>
               <?php if (empty($batches)): ?>
-                <tr><td colspan="13" class="text-center text-muted">No records</td></tr>
+                <tr><td colspan="14" class="text-center text-muted">No records</td></tr>
               <?php else: ?>
                 <?php foreach ($batches as $b): ?>
                   <tr>
@@ -152,6 +166,7 @@
                     </td>
                     <td><?php echo (int) $b->batch_size; ?></td>
                     <td><?php echo (int) ($b->allotment ?? 0); ?></td>
+                    <td><?php echo (int) ($b->marked ?? 0); ?></td>
                     <td><span class="badge badge-info"><?php echo htmlspecialchars((string) $b->status); ?></span></td>
                     <td><?php echo htmlspecialchars((string) $b->deadline); ?></td>
                     <td><?php echo htmlspecialchars((string) $b->created_at); ?></td>
@@ -164,7 +179,10 @@
       </div>
     </div>
     <?php if (!empty($pagination_links)): ?>
-      <div class="mt-3 d-flex justify-content-end">
+      <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap">
+        <div class="text-muted mb-2 mb-md-0">
+          Showing <?php echo $showing_from; ?> to <?php echo $showing_to; ?> of <?php echo $total_rows; ?> entries
+        </div>
         <?php echo $pagination_links; ?>
       </div>
     <?php endif; ?>
