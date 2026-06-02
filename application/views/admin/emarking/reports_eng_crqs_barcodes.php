@@ -89,6 +89,7 @@ $showImageBarcode = !empty($show_image_barcode);
                 <th>Version</th>
                 <th>Type</th>
                 <th>Barcode</th>
+                <th>Status</th>
                 <?php if ($showImageBarcode): ?>
                   <th>question_no</th>
                   <th>Image_Barcode</th>
@@ -98,7 +99,7 @@ $showImageBarcode = !empty($show_image_barcode);
             <tbody>
               <?php if (empty($rows)): ?>
                 <tr>
-                  <td colspan="<?php echo $showImageBarcode ? 7 : 6; ?>" class="text-center text-muted">No records found</td>
+                  <td colspan="<?php echo $showImageBarcode ? 8 : 7; ?>" class="text-center text-muted">No records found</td>
                 </tr>
               <?php else: ?>
                 <?php $sr = $startSr; ?>
@@ -110,6 +111,7 @@ $showImageBarcode = !empty($show_image_barcode);
                     <td><?php echo html_escape((string) ($row->version ?? '')); ?></td>
                     <td>CRQ</td>
                     <td><?php echo html_escape((string) ($row->barcode ?? '')); ?></td>
+                    <td><?php echo html_escape((string) ($row->status ?? 'Missing')); ?></td>
                     <?php if ($showImageBarcode): ?>
                       <td><?php echo html_escape((string) ($row->question_no ?? 'q1')); ?></td>
                       <td><?php echo html_escape((string) ($row->image_barcode ?? '')); ?></td>

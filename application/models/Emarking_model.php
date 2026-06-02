@@ -358,6 +358,11 @@ class Emarking_model extends CI_Model
 		$questionExpr = !empty($cols['paper_questions'])
 			? 'CASE WHEN COALESCE(src.`' . $cols['paper_questions'] . '`, 1) >= 2 THEN 2 ELSE 1 END'
 			: '1';
+		$imageMatchJoin = 'LEFT JOIN (
+			SELECT DISTINCT TRIM(paper_barcode) AS paper_barcode_key, UPPER(TRIM(question_no)) AS question_no_key
+			FROM `emarking_question_images`
+			WHERE TRIM(source_table) = \'digital_papers_booklets1\'
+		) qi ON qi.paper_barcode_key = TRIM(src.' . $barcodeCol . ')';
 
 		$where = ['src.' . $generatedCol . ' = ?'];
 		$params = [1];
@@ -386,10 +391,12 @@ class Emarking_model extends CI_Model
 				. 'src.' . $barcodeCol . ' AS barcode, '
 				. 'CONCAT(\'q\', nums.image_no) AS question_no, '
 				. 'CONCAT(src.' . $barcodeCol . ', \'_\', nums.image_no) AS image_barcode, '
+				. 'CASE WHEN qi.paper_barcode_key IS NULL THEN \'Missing\' ELSE \'Exist\' END AS status, '
 				. 'nums.image_no AS image_no, '
 				. $questionExpr . ' AS paper_questions
 				FROM ' . $tableSql . ' src
 				INNER JOIN ' . $numbersSql . ' ON nums.image_no <= ' . $questionExpr . '
+				' . $imageMatchJoin . ' AND qi.question_no_key = UPPER(CONCAT(\'q\', nums.image_no))
 				WHERE ' . $whereSql . '
 				ORDER BY version ASC, grade ASC, barcode ASC, image_no ASC';
 			return [$sql, $params];
@@ -403,8 +410,10 @@ class Emarking_model extends CI_Model
 		$sql = 'SELECT '
 			. $gradeExpr . ' AS grade, '
 			. $versionExpr . ' AS version, '
-			. 'src.' . $barcodeCol . ' AS barcode
+			. 'src.' . $barcodeCol . ' AS barcode, '
+			. 'CASE WHEN qi.paper_barcode_key IS NULL THEN \'Missing\' ELSE \'Exist\' END AS status
 			FROM ' . $tableSql . ' src
+			' . $imageMatchJoin . ' AND qi.question_no_key = \'Q1\'
 			WHERE ' . $whereSql . '
 			ORDER BY version ASC, grade ASC, barcode ASC';
 		return [$sql, $params];
