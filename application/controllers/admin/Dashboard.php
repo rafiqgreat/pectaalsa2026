@@ -176,6 +176,7 @@ class Dashboard extends MY_Controller
 	public function head_markers()
 	{
 		if ((int) logged('role') !== 19) show_404();
+		$this->page_data['hide_profile_cards'] = true;
 		$this->render_role_dashboard('Head Markers');
 	}
 }

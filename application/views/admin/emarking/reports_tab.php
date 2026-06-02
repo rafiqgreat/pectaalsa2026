@@ -86,6 +86,7 @@ $subjectOptions = isset($subject_options) && is_array($subject_options) && !empt
             <a class="btn btn-<?php echo ($tab === 'emarkers') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_emarkers'); ?>">eMarker-wise</a>
             <?php if ($role === 1): ?>
               <a class="btn btn-<?php echo ($tab === 'emarkers_payment') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_emarkers_payment_summary'); ?>">Payment Summary</a>
+              <a class="btn btn-outline-secondary" href="<?php echo base_url('admin/emarking/reports_dictation_csv'); ?>">Dictation Result CSV</a>
             <?php endif; ?>
             <a class="btn btn-<?php echo ($tab === 'batches') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_batches'); ?>">Batch-wise</a>
           </div>

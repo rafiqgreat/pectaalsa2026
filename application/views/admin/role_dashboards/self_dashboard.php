@@ -14,56 +14,58 @@
 <section class="content">
 	<div class="container-fluid">
 
-		<div class="row">
-			<div class="col-md-7">
-				<div class="card">
-					<div class="card-header">
-						<h3 class="card-title">My Profile</h3>
+		<?php if (empty($hide_profile_cards)): ?>
+			<div class="row">
+				<div class="col-md-7">
+					<div class="card">
+						<div class="card-header">
+							<h3 class="card-title">My Profile</h3>
+						</div>
+						<div class="card-body">
+							<table class="table table-bordered mb-0">
+								<tr><th style="width:220px;">Name</th><td><?php echo html_escape((string) ($user->name ?? '')); ?></td></tr>
+								<tr><th>Email</th><td><?php echo html_escape((string) ($user->email ?? '')); ?></td></tr>
+								<tr><th>Username</th><td><?php echo html_escape((string) ($user->username ?? '')); ?></td></tr>
+								<tr><th>Phone</th><td><?php echo html_escape((string) ($user->phone ?? '')); ?></td></tr>
+								<tr><th>Role</th><td><?php echo html_escape((string) (($user->role->title ?? '') ?: '')); ?></td></tr>
+								<?php if (!empty($subjects) && is_array($subjects)): ?>
+									<tr><th>Subjects</th><td><?php echo html_escape(implode(', ', $subjects)); ?></td></tr>
+								<?php endif; ?>
+							</table>
+							<div class="mt-3">
+								<a class="btn btn-outline-primary" href="<?php echo url('admin/profile/index/edit'); ?>">Edit Profile</a>
+							</div>
+						</div>
 					</div>
-					<div class="card-body">
-						<table class="table table-bordered mb-0">
-							<tr><th style="width:220px;">Name</th><td><?php echo html_escape((string) ($user->name ?? '')); ?></td></tr>
-							<tr><th>Email</th><td><?php echo html_escape((string) ($user->email ?? '')); ?></td></tr>
-							<tr><th>Username</th><td><?php echo html_escape((string) ($user->username ?? '')); ?></td></tr>
-							<tr><th>Phone</th><td><?php echo html_escape((string) ($user->phone ?? '')); ?></td></tr>
-							<tr><th>Role</th><td><?php echo html_escape((string) (($user->role->title ?? '') ?: '')); ?></td></tr>
-							<?php if (!empty($subjects) && is_array($subjects)): ?>
-								<tr><th>Subjects</th><td><?php echo html_escape(implode(', ', $subjects)); ?></td></tr>
-							<?php endif; ?>
-						</table>
-						<div class="mt-3">
-							<a class="btn btn-outline-primary" href="<?php echo url('admin/profile/index/edit'); ?>">Edit Profile</a>
+				</div>
+
+				<div class="col-md-5">
+					<div class="card">
+						<div class="card-header">
+							<h3 class="card-title">Reset Password</h3>
+						</div>
+						<div class="card-body">
+							<?php echo form_open('admin/profile/updatePassword', ['method' => 'POST', 'autocomplete' => 'off']); ?>
+								<div class="form-group">
+									<label>Old Password</label>
+									<input type="password" class="form-control" name="old_password" required>
+								</div>
+								<div class="form-group">
+									<label>New Password</label>
+									<input type="password" class="form-control" name="password" minlength="6" required>
+								</div>
+								<div class="form-group">
+									<label>Confirm Password</label>
+									<input type="password" class="form-control" name="password_confirm" minlength="6" required>
+								</div>
+								<button type="submit" class="btn btn-success">Update Password</button>
+							<?php echo form_close(); ?>
+							<div class="text-muted mt-2" style="font-size:12px;">After changing password you will be asked to login again.</div>
 						</div>
 					</div>
 				</div>
 			</div>
-
-			<div class="col-md-5">
-				<div class="card">
-					<div class="card-header">
-						<h3 class="card-title">Reset Password</h3>
-					</div>
-					<div class="card-body">
-						<?php echo form_open('admin/profile/updatePassword', ['method' => 'POST', 'autocomplete' => 'off']); ?>
-							<div class="form-group">
-								<label>Old Password</label>
-								<input type="password" class="form-control" name="old_password" required>
-							</div>
-							<div class="form-group">
-								<label>New Password</label>
-								<input type="password" class="form-control" name="password" minlength="6" required>
-							</div>
-							<div class="form-group">
-								<label>Confirm Password</label>
-								<input type="password" class="form-control" name="password_confirm" minlength="6" required>
-							</div>
-							<button type="submit" class="btn btn-success">Update Password</button>
-						<?php echo form_close(); ?>
-						<div class="text-muted mt-2" style="font-size:12px;">After changing password you will be asked to login again.</div>
-					</div>
-				</div>
-			</div>
-		</div>
+		<?php endif; ?>
 
 		<div class="card">
 			<div class="card-header">

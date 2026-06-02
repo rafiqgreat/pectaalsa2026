@@ -28,6 +28,21 @@
       </a>
     </div>
 
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+      <div class="text-muted mb-2">
+        Total Batches: <?php echo (int) ($batches_total ?? 0); ?>
+      </div>
+      <form method="get" action="<?php echo base_url('emarker/marking/dashboard'); ?>" class="form-inline mb-2">
+        <label for="per_page" class="mr-2 mb-0">Per Page</label>
+        <select name="per_page" id="per_page" class="form-control form-control-sm mr-2" onchange="this.form.submit()">
+          <?php foreach ([10, 20, 50] as $opt): ?>
+            <option value="<?php echo $opt; ?>" <?php echo ((int) ($per_page ?? 10) === $opt) ? 'selected' : ''; ?>><?php echo $opt; ?></option>
+          <?php endforeach; ?>
+        </select>
+        <noscript><button type="submit" class="btn btn-sm btn-secondary">Apply</button></noscript>
+      </form>
+    </div>
+
     <style>
       .batch-meta { color:#6c757d; font-size:12px; }
       .batch-kv { display:flex; gap:6px; flex-wrap:wrap; }
@@ -128,6 +143,12 @@
         <?php endforeach; ?>
       <?php endif; ?>
     </div>
+
+    <?php if (!empty($pagination_links)): ?>
+      <div class="d-flex justify-content-end mt-3">
+        <?php echo $pagination_links; ?>
+      </div>
+    <?php endif; ?>
 
   </div>
 </section>

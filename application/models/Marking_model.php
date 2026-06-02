@@ -97,7 +97,51 @@ class Marking_model extends CI_Model
 		$this->db->join('emarking_batch_items bi', 'bi.batch_id = b.id', 'left');
 		$this->db->where('b.assigned_to', $emarker_id);
 		$this->db->group_by('b.id');
+		$this->db->order_by("CASE b.status
+			WHEN 'IN_PROGRESS' THEN 0
+			WHEN 'PENDING' THEN 1
+			WHEN 'COMPLETED' THEN 2
+			WHEN 'FINALIZED' THEN 3
+			ELSE 4
+		END", '', false);
 		$this->db->order_by('b.id', 'DESC');
+		return $this->db->get()->result();
+	}
+
+	public function count_emarker_batches($emarker_id)
+	{
+		$emarker_id = (int) $emarker_id;
+
+		$this->db->from('emarking_batches b');
+		$this->db->where('b.assigned_to', $emarker_id);
+		return (int) $this->db->count_all_results();
+	}
+
+	public function get_emarker_batches_page($emarker_id, $limit, $offset = 0)
+	{
+		$emarker_id = (int) $emarker_id;
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		$this->db->select("b.*, q.question_no, q.question_title, q.max_marks", false);
+		$this->db->select("COUNT(bi.id) AS total_questions", false);
+		$this->db->select("SUM(CASE WHEN bi.status IN ('MARKED','NOT_ATTEMPTED','FINALIZED') THEN 1 ELSE 0 END) AS checked_questions", false);
+		$this->db->select("SUM(CASE WHEN bi.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_questions", false);
+		$this->db->select("SUM(CASE WHEN bi.status = 'SKIPPED' THEN 1 ELSE 0 END) AS skipped_questions", false);
+		$this->db->from('emarking_batches b');
+		$this->db->join('emarking_questions q', 'q.id = b.question_id', 'left');
+		$this->db->join('emarking_batch_items bi', 'bi.batch_id = b.id', 'left');
+		$this->db->where('b.assigned_to', $emarker_id);
+		$this->db->group_by('b.id');
+		$this->db->order_by("CASE b.status
+			WHEN 'IN_PROGRESS' THEN 0
+			WHEN 'PENDING' THEN 1
+			WHEN 'COMPLETED' THEN 2
+			WHEN 'FINALIZED' THEN 3
+			ELSE 4
+		END", '', false);
+		$this->db->order_by('b.id', 'DESC');
+		$this->db->limit($limit, $offset);
 		return $this->db->get()->result();
 	}
 
