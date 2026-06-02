@@ -28,6 +28,24 @@ class Emarking_report_model extends CI_Model
 		'Q5',
 		'Total Obtained',
 	];
+	private $result_csv_base_headers = [
+		'Unique Identifier',
+		'School ID',
+		'Student ID',
+		'EMIS Code',
+		'School Name',
+		'District',
+		'Tehsil',
+		'School Admin',
+		'School Level',
+		'School Type',
+		'Gender',
+		'Grade',
+		'Exam ID',
+		'Subject',
+		'Version',
+		'Obtained Marks in Each Question',
+	];
 
 	private function parse_date($s, $defaultTime)
 	{
@@ -99,6 +117,263 @@ class Emarking_report_model extends CI_Model
 			return 'Q' . $m[1];
 		}
 		return '';
+	}
+
+	private function normalize_result_question_no($question_no)
+	{
+		$q = strtoupper(trim((string) $question_no));
+		if (preg_match('/^Q(\d+)$/', $q, $m)) {
+			return 'Q' . (int) $m[1];
+		}
+		return '';
+	}
+
+	private function sort_question_labels(array $labels)
+	{
+		$labels = array_values(array_unique(array_filter(array_map(function ($label) {
+			return $this->normalize_result_question_no($label);
+		}, $labels))));
+
+		usort($labels, function ($a, $b) {
+			$an = (int) preg_replace('/\D+/', '', $a);
+			$bn = (int) preg_replace('/\D+/', '', $b);
+			if ($an === $bn) return strcmp($a, $b);
+			return $an <=> $bn;
+		});
+
+		return $labels;
+	}
+
+	private function assessment_export_where_sql($assessment_type, $filters = [])
+	{
+		$assessment_type = strtoupper(trim((string) $assessment_type));
+		$where = [
+			"q.assessment_type = " . $this->db->escape($assessment_type),
+			"qi.assessment_type = " . $this->db->escape($assessment_type),
+		];
+
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') {
+			$where[] = 'qi.grade = ' . (int) $grade;
+		}
+
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') {
+			$where[] = 'qi.subject_code = ' . $this->db->escape($subject_code);
+		}
+
+		$version = trim((string) ($filters['version'] ?? ''));
+		if ($version !== '') {
+			$where[] = 'qi.version = ' . (int) $version;
+		}
+
+		$district_id = trim((string) ($filters['district_id'] ?? ''));
+		if ($district_id !== '') {
+			$where[] = 's.school_district_id = ' . (int) $district_id;
+		}
+
+		$school_query = trim((string) ($filters['school_query'] ?? ''));
+		if ($school_query !== '') {
+			$like = $this->db->escape_like_str($school_query);
+			$where[] = "("
+				. "s.school_name LIKE '%{$like}%' ESCAPE '!'"
+				. " OR s.school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR s.school_lsacode LIKE '%{$like}%' ESCAPE '!'"
+				. " OR qi.lsacode LIKE '%{$like}%' ESCAPE '!'"
+				. " OR qi.paper_barcode LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src1.paper_school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src2.paper_school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src3.paper_school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src4.paper_school_code LIKE '%{$like}%' ESCAPE '!'"
+				. ")";
+		}
+
+		return implode(' AND ', $where);
+	}
+
+	private function get_assessment_question_labels($assessment_type, $filters = [])
+	{
+		$assessment_type = strtoupper(trim((string) $assessment_type));
+
+		$this->db->distinct();
+		$this->db->select('q.question_no');
+		$this->db->from('emarking_questions q');
+		$this->db->join('emarking_question_images qi', 'qi.question_id = q.id', 'inner');
+		$this->db->where('q.assessment_type', $assessment_type);
+		$this->db->where('qi.assessment_type', $assessment_type);
+
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') $this->db->where('qi.grade', (int) $grade);
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') $this->db->where('qi.subject_code', $subject_code);
+		$version = trim((string) ($filters['version'] ?? ''));
+		if ($version !== '') $this->db->where('qi.version', (int) $version);
+
+		$rows = $this->db->get()->result();
+		$labels = [];
+		foreach ($rows as $row) {
+			$label = $this->normalize_result_question_no($row->question_no ?? '');
+			if ($label !== '') $labels[] = $label;
+		}
+		return $this->sort_question_labels($labels);
+	}
+
+	private function get_assessment_csv_headers($assessment_type, $filters = [])
+	{
+		$question_labels = $this->get_assessment_question_labels($assessment_type, $filters);
+		return array_merge($this->result_csv_base_headers, $question_labels, ['Total Obtained']);
+	}
+
+	private function build_assessment_export_sql($assessment_type, array $question_labels, $filters = [], $limit = null)
+	{
+		$assessment_type = strtoupper(trim((string) $assessment_type));
+		$where_sql = $this->assessment_export_where_sql($assessment_type, $filters);
+
+		$source_tables = ($assessment_type === 'CRQ')
+			? ['digital_papers_booklets1', 'digital_papers_booklets2', 'digital_papers_booklets3', 'digital_papers_booklets4']
+			: ['digital_papers_dictation1', 'digital_papers_dictation2', 'digital_papers_dictation3', 'digital_papers_dictation4'];
+
+		$question_selects = [];
+		foreach ($question_labels as $label) {
+			$escaped = $this->db->escape($label);
+			$col_alias = strtolower($label);
+			$question_selects[] = "MAX(CASE WHEN UPPER(q.question_no) = {$escaped} THEN sm.marks_obtained END) AS `{$col_alias}`";
+		}
+		$question_select_sql = empty($question_selects) ? '' : ",\n\t\t\t\t" . implode(",\n\t\t\t\t", $question_selects);
+
+		$limit_sql = '';
+		if ($limit !== null) {
+			$limit_sql = "\n\t\t\tLIMIT " . max(0, (int) $limit);
+		}
+
+		return "
+			SELECT
+				qi.paper_barcode AS unique_identifier,
+				MAX(qi.school_id) AS school_id,
+				MAX(qi.roll_no) AS student_id,
+				COALESCE(
+					NULLIF(MAX(s.school_code), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_school_code END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_school_code END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_school_code END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_school_code END), ''),
+					NULLIF(MAX(s.school_lsacode), ''),
+					NULLIF(MAX(qi.lsacode), '')
+				) AS emis_code,
+				COALESCE(
+					NULLIF(MAX(s.school_name), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_school_name END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_school_name END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_school_name END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_school_name END), '')
+				) AS school_name,
+				COALESCE(
+					NULLIF(MAX(d.district_name_en), ''),
+					NULLIF(MAX(s.school_district), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_district END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_district END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_district END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_district END), '')
+				) AS district,
+				COALESCE(
+					NULLIF(MAX(t.tehsil_name_en), ''),
+					NULLIF(MAX(s.school_tehsil), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_tehsil END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_tehsil END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_tehsil END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_tehsil END), '')
+				) AS tehsil,
+				MAX(s.username) AS school_admin,
+				MAX(s.school_level) AS school_level,
+				MAX(s.school_department) AS school_type,
+				MAX(s.school_gender) AS gender,
+				MAX(qi.grade) AS grade,
+				MAX(qi.source_paper_id) AS exam_id,
+				MAX(qi.subject_code) AS subject_code,
+				MAX(qi.version) AS version{$question_select_sql}
+			FROM emarking_question_images qi
+			INNER JOIN emarking_questions q ON q.id = qi.question_id
+			LEFT JOIN schools s ON s.school_id = qi.school_id
+			LEFT JOIN districts d ON d.district_id = s.school_district_id
+			LEFT JOIN tehsils t ON t.tehsil_id = s.school_tehsil_id
+			LEFT JOIN {$source_tables[0]} src1 ON qi.source_table = '{$source_tables[0]}' AND src1.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[1]} src2 ON qi.source_table = '{$source_tables[1]}' AND src2.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[2]} src3 ON qi.source_table = '{$source_tables[2]}' AND src3.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[3]} src4 ON qi.source_table = '{$source_tables[3]}' AND src4.paper_id = qi.source_paper_id
+			LEFT JOIN (
+				SELECT m1.question_image_id, m1.question_id, m1.marks_obtained
+				FROM emarking_marks m1
+				INNER JOIN (
+					SELECT
+						question_image_id,
+						question_id,
+						MAX(
+							CONCAT(
+								LPAD(COALESCE(is_final, 0), 1, '0'),
+								'|',
+								IFNULL(DATE_FORMAT(finalized_at, '%Y%m%d%H%i%s'), '00000000000000'),
+								'|',
+								IFNULL(DATE_FORMAT(marked_at, '%Y%m%d%H%i%s'), '00000000000000'),
+								'|',
+								LPAD(id, 12, '0')
+							)
+						) AS pick_key
+					FROM emarking_marks
+					GROUP BY question_image_id, question_id
+				) picked
+					ON picked.question_image_id = m1.question_image_id
+					AND picked.question_id = m1.question_id
+					AND CONCAT(
+						LPAD(COALESCE(m1.is_final, 0), 1, '0'),
+						'|',
+						IFNULL(DATE_FORMAT(m1.finalized_at, '%Y%m%d%H%i%s'), '00000000000000'),
+						'|',
+						IFNULL(DATE_FORMAT(m1.marked_at, '%Y%m%d%H%i%s'), '00000000000000'),
+						'|',
+						LPAD(m1.id, 12, '0')
+					) = picked.pick_key
+			) sm ON sm.question_image_id = qi.id AND sm.question_id = qi.question_id
+			WHERE {$where_sql}
+			GROUP BY qi.source_table, qi.source_paper_id, qi.paper_barcode
+			ORDER BY qi.source_paper_id ASC, qi.paper_barcode ASC{$limit_sql}
+		";
+	}
+
+	private function build_assessment_csv_row_from_sql_row(array $row, array $question_labels)
+	{
+		$out = [
+			'Unique Identifier' => (string) ($row['unique_identifier'] ?? ''),
+			'School ID' => (string) ($row['school_id'] ?? ''),
+			'Student ID' => (string) ($row['student_id'] ?? ''),
+			'EMIS Code' => (string) ($row['emis_code'] ?? ''),
+			'School Name' => (string) ($row['school_name'] ?? ''),
+			'District' => (string) ($row['district'] ?? ''),
+			'Tehsil' => (string) ($row['tehsil'] ?? ''),
+			'School Admin' => (string) ($row['school_admin'] ?? ''),
+			'School Level' => (string) ($row['school_level'] ?? ''),
+			'School Type' => (string) ($row['school_type'] ?? ''),
+			'Gender' => (string) ($row['gender'] ?? ''),
+			'Grade' => (string) ($row['grade'] ?? ''),
+			'Exam ID' => (string) ($row['exam_id'] ?? ''),
+			'Subject' => $this->dictation_subject_name($row['subject_code'] ?? ''),
+			'Version' => (string) ($row['version'] ?? ''),
+		];
+
+		$parts = [];
+		$total = 0.0;
+		foreach ($question_labels as $label) {
+			$key = strtolower($label);
+			$value = $this->format_mark_value($row[$key] ?? null);
+			$out[$label] = $value;
+			if ($value !== '') {
+				$parts[] = $label . '=' . $value;
+				$total += (float) $value;
+			}
+		}
+
+		$out['Obtained Marks in Each Question'] = implode(', ', $parts);
+		$out['Total Obtained'] = $this->format_mark_value($total);
+		return $out;
 	}
 
 	private function dictation_export_where_sql($filters = [])
@@ -610,6 +885,50 @@ class Emarking_report_model extends CI_Model
 					'Q5' => $q5,
 					'Total Obtained' => $this->format_mark_value($total),
 				]);
+			}
+		} finally {
+			$result->free();
+		}
+	}
+
+	public function get_crq_csv_headers($filters = [])
+	{
+		return $this->get_assessment_csv_headers('CRQ', $filters);
+	}
+
+	public function get_crq_csv_rows($filters = [], $limit = 50)
+	{
+		$question_labels = $this->get_assessment_question_labels('CRQ', $filters);
+		if (empty($question_labels)) {
+			return [];
+		}
+
+		$sql = $this->build_assessment_export_sql('CRQ', $question_labels, $filters, $limit);
+		$rows = $this->db->query($sql)->result_array();
+		$out = [];
+		foreach ($rows as $row) {
+			$out[] = $this->build_assessment_csv_row_from_sql_row($row, $question_labels);
+		}
+		return $out;
+	}
+
+	public function stream_crq_csv_export($filters = [], callable $writer)
+	{
+		$question_labels = $this->get_assessment_question_labels('CRQ', $filters);
+		if (empty($question_labels)) {
+			return;
+		}
+
+		$sql = $this->build_assessment_export_sql('CRQ', $question_labels, $filters, null);
+		$mysqli = $this->db->conn_id;
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			throw new RuntimeException('Unable to stream CRQ CSV export: ' . $mysqli->error);
+		}
+
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$writer($this->build_assessment_csv_row_from_sql_row($row, $question_labels));
 			}
 		} finally {
 			$result->free();
