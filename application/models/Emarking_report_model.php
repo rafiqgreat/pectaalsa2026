@@ -338,7 +338,7 @@ class Emarking_report_model extends CI_Model
 				$group_key = $this->mcq_group_key_from_row($row);
 				if ($current_key !== $group_key) {
 					if ($current !== null) {
-						$rows[] = $this->build_mcq_row_from_accumulator($current, $question_labels);
+						$rows[] = $this->build_mcq_row_from_accumulator($current, array_keys($question_labels));
 						$group_count++;
 						if ($limit !== null && $group_count >= (int) $limit) {
 							break;
