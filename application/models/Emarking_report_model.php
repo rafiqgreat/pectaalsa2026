@@ -47,6 +47,355 @@ class Emarking_report_model extends CI_Model
 		'Obtained Marks in Each Question',
 	];
 
+	private function mcq_source_table_where_sql($alias, $filters = [])
+	{
+		$where = ['1 = 1'];
+
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') {
+			$where[] = "{$alias}.paper_grade = " . (int) $grade;
+		}
+
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') {
+			$where[] = "{$alias}.paper_subject_code = " . $this->db->escape($subject_code);
+		}
+
+		$version = trim((string) ($filters['version'] ?? ''));
+		if ($version !== '') {
+			$where[] = "{$alias}.paper_version = " . (int) $version;
+		}
+
+		$school_query = trim((string) ($filters['school_query'] ?? ''));
+		if ($school_query !== '') {
+			$like = $this->db->escape_like_str($school_query);
+			$where[] = "("
+				. "{$alias}.paper_school_name LIKE '%{$like}%' ESCAPE '!'"
+				. " OR {$alias}.paper_school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR {$alias}.paper_barcode LIKE '%{$like}%' ESCAPE '!'"
+				. " OR {$alias}.paper_sr_roll LIKE '%{$like}%' ESCAPE '!'"
+				. ")";
+		}
+
+		return implode(' AND ', $where);
+	}
+
+	private function mcq_source_union_sql($filters = [])
+	{
+		$tables = [
+			'digital_papers_booklets1',
+			'digital_papers_booklets2',
+			'digital_papers_booklets3',
+			'digital_papers_booklets4',
+		];
+
+		$parts = [];
+		foreach ($tables as $table) {
+			$where_sql = $this->mcq_source_table_where_sql($table, $filters);
+			$parts[] = "
+				SELECT
+					'{$table}' AS source_table,
+					paper_id,
+					paper_grade AS grade,
+					paper_school_id AS school_id,
+					paper_school_code,
+					paper_school_name,
+					paper_district,
+					paper_tehsil,
+					paper_subject_code AS subject_code,
+					paper_version AS version,
+					paper_sr_roll AS student_id,
+					paper_page_no,
+					paper_barcode
+				FROM {$table}
+				WHERE {$where_sql}
+			";
+		}
+
+		return implode("\nUNION ALL\n", $parts);
+	}
+
+	private function mcq_export_where_sql($filters = [])
+	{
+		$where = ['1 = 1'];
+
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') {
+			$where[] = 'src.grade = ' . (int) $grade;
+		}
+
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') {
+			$where[] = 'src.subject_code = ' . $this->db->escape($subject_code);
+		}
+
+		$version = trim((string) ($filters['version'] ?? ''));
+		if ($version !== '') {
+			$where[] = 'src.version = ' . (int) $version;
+		}
+
+		$district_id = trim((string) ($filters['district_id'] ?? ''));
+		if ($district_id !== '') {
+			$where[] = 's.school_district_id = ' . (int) $district_id;
+		}
+
+		$school_query = trim((string) ($filters['school_query'] ?? ''));
+		if ($school_query !== '') {
+			$like = $this->db->escape_like_str($school_query);
+			$where[] = "("
+				. "s.school_name LIKE '%{$like}%' ESCAPE '!'"
+				. " OR s.school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR s.school_lsacode LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src.paper_school_name LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src.paper_school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src.paper_barcode LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src.student_id LIKE '%{$like}%' ESCAPE '!'"
+				. ")";
+		}
+
+		return implode(' AND ', $where);
+	}
+
+	private function build_mcq_export_sql($filters = [])
+	{
+		$where_sql = $this->mcq_export_where_sql($filters);
+		$source_union_sql = $this->mcq_source_union_sql($filters);
+
+		return "
+			SELECT
+				src.source_table,
+				src.paper_id,
+				src.grade,
+				src.school_id,
+				src.paper_school_code,
+				src.paper_school_name,
+				src.paper_district,
+				src.paper_tehsil,
+				src.subject_code,
+				src.version,
+				src.student_id,
+				src.paper_page_no,
+				src.paper_barcode,
+				s.school_code,
+				s.school_lsacode,
+				s.school_name,
+				s.school_district,
+				s.school_tehsil,
+				s.username AS school_admin,
+				s.school_level,
+				s.school_department AS school_type,
+				s.school_gender,
+				d.district_name_en,
+				t.tehsil_name_en,
+				r.Q1 AS page_q1,
+				r.Q2 AS page_q2,
+				r.Q3 AS page_q3,
+				r.Q4 AS page_q4
+			FROM ({$source_union_sql}) src
+			INNER JOIN crq_mcq_results r ON r.barcode = src.paper_barcode
+			LEFT JOIN schools s ON s.school_id = src.school_id
+			LEFT JOIN districts d ON d.district_id = s.school_district_id
+			LEFT JOIN tehsils t ON t.tehsil_id = s.school_tehsil_id
+			WHERE {$where_sql}
+			ORDER BY
+				COALESCE(src.school_id, 0) ASC,
+				TRIM(COALESCE(src.student_id, '')) ASC,
+				TRIM(COALESCE(src.subject_code, '')) ASC,
+				COALESCE(src.version, 0) ASC,
+				CAST(COALESCE(NULLIF(src.paper_page_no, ''), '0') AS UNSIGNED) ASC,
+				src.paper_barcode ASC
+		";
+	}
+
+	private function get_mcq_question_labels($filters = [])
+	{
+		$where_sql = $this->mcq_export_where_sql($filters);
+		$source_union_sql = $this->mcq_source_union_sql($filters);
+
+		$sql = "
+			SELECT MAX(group_question_count) AS max_question_count
+			FROM (
+				SELECT
+					SUM(
+						CASE WHEN NULLIF(TRIM(COALESCE(r.Q1, '')), '') IS NULL THEN 0 ELSE 1 END +
+						CASE WHEN NULLIF(TRIM(COALESCE(r.Q2, '')), '') IS NULL THEN 0 ELSE 1 END +
+						CASE WHEN NULLIF(TRIM(COALESCE(r.Q3, '')), '') IS NULL THEN 0 ELSE 1 END +
+						CASE WHEN NULLIF(TRIM(COALESCE(r.Q4, '')), '') IS NULL THEN 0 ELSE 1 END
+					) AS group_question_count
+				FROM ({$source_union_sql}) src
+				INNER JOIN crq_mcq_results r ON r.barcode = src.paper_barcode
+				LEFT JOIN schools s ON s.school_id = src.school_id
+				WHERE {$where_sql}
+				GROUP BY src.school_id, src.student_id, src.subject_code, src.version, src.grade
+			) grouped_counts
+		";
+
+		$row = $this->db->query($sql)->row_array();
+		$max_question_count = (int) ($row['max_question_count'] ?? 0);
+		if ($max_question_count <= 0) {
+			return [];
+		}
+
+		$labels = [];
+		for ($i = 1; $i <= $max_question_count; $i++) {
+			$labels[] = 'Q' . $i;
+		}
+		return $labels;
+	}
+
+	private function mcq_group_key_from_row(array $row)
+	{
+		return implode('|', [
+			trim((string) ($row['school_id'] ?? '')),
+			trim((string) ($row['student_id'] ?? '')),
+			trim((string) ($row['subject_code'] ?? '')),
+			trim((string) ($row['version'] ?? '')),
+			trim((string) ($row['grade'] ?? '')),
+		]);
+	}
+
+	private function build_mcq_base_row(array $row)
+	{
+		$district = trim((string) ($row['district_name_en'] ?? ''));
+		if ($district === '') $district = trim((string) ($row['school_district'] ?? ''));
+		if ($district === '') $district = trim((string) ($row['paper_district'] ?? ''));
+
+		$tehsil = trim((string) ($row['tehsil_name_en'] ?? ''));
+		if ($tehsil === '') $tehsil = trim((string) ($row['school_tehsil'] ?? ''));
+		if ($tehsil === '') $tehsil = trim((string) ($row['paper_tehsil'] ?? ''));
+
+		$school_name = trim((string) ($row['school_name'] ?? ''));
+		if ($school_name === '') $school_name = trim((string) ($row['paper_school_name'] ?? ''));
+
+		$emis_code = trim((string) ($row['school_code'] ?? ''));
+		if ($emis_code === '') $emis_code = trim((string) ($row['paper_school_code'] ?? ''));
+		if ($emis_code === '') $emis_code = trim((string) ($row['school_lsacode'] ?? ''));
+
+		return [
+			'Unique Identifier' => trim((string) ($row['paper_barcode'] ?? '')),
+			'School ID' => trim((string) ($row['school_id'] ?? '')),
+			'Student ID' => trim((string) ($row['student_id'] ?? '')),
+			'EMIS Code' => $emis_code,
+			'School Name' => $school_name,
+			'District' => $district,
+			'Tehsil' => $tehsil,
+			'School Admin' => trim((string) ($row['school_admin'] ?? '')),
+			'School Level' => trim((string) ($row['school_level'] ?? '')),
+			'School Type' => trim((string) ($row['school_type'] ?? '')),
+			'Gender' => trim((string) ($row['school_gender'] ?? '')),
+			'Grade' => trim((string) ($row['grade'] ?? '')),
+			// For merged multi-page rows, keep the first encountered source paper id as the representative exam id.
+			'Exam ID' => trim((string) ($row['paper_id'] ?? '')),
+			'Subject' => $this->dictation_subject_name($row['subject_code'] ?? ''),
+			'Version' => trim((string) ($row['version'] ?? '')),
+			'Obtained Marks in Each Question' => '',
+		];
+	}
+
+	private function build_mcq_row_from_accumulator(array $current, array $question_labels)
+	{
+		$parts = [];
+		foreach ($question_labels as $label) {
+			$value = trim((string) ($current['questions'][$label] ?? ''));
+			if ($value === '') {
+				continue;
+			}
+			$parts[] = $label . '=' . $value;
+		}
+
+		$row = $current['base'];
+		$row['Obtained Marks in Each Question'] = implode(', ', $parts);
+		foreach ($question_labels as $label) {
+			$row[$label] = (string) ($current['questions'][$label] ?? '');
+		}
+
+		foreach ($this->result_csv_base_headers as $header) {
+			if (!isset($row[$header])) {
+				$row[$header] = '';
+			}
+		}
+
+		return $row;
+	}
+
+	private function collect_mcq_rows($filters = [], $limit = null, $question_labels_only = false)
+	{
+		$sql = $this->build_mcq_export_sql($filters);
+		$mysqli = $this->db->conn_id;
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			throw new RuntimeException('Unable to query MCQ CSV export rows: ' . $mysqli->error);
+		}
+
+		$question_labels = [];
+		$rows = [];
+		$current_key = null;
+		$current = null;
+		$group_count = 0;
+
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$group_key = $this->mcq_group_key_from_row($row);
+				if ($current_key !== $group_key) {
+					if ($current !== null) {
+						$rows[] = $this->build_mcq_row_from_accumulator($current, $question_labels);
+						$group_count++;
+						if ($limit !== null && $group_count >= (int) $limit) {
+							break;
+						}
+					}
+
+					$current_key = $group_key;
+					$current = [
+						'base' => $this->build_mcq_base_row($row),
+						'questions' => [],
+						'question_index' => 1,
+					];
+				}
+
+				foreach (['page_q1', 'page_q2', 'page_q3', 'page_q4'] as $page_key) {
+					$value = $this->format_mark_value($row[$page_key] ?? null);
+					if ($value === '') {
+						continue;
+					}
+					$label = 'Q' . $current['question_index'];
+					$current['questions'][$label] = $value;
+					$question_labels[$label] = true;
+					$current['question_index']++;
+				}
+			}
+
+			if (!($limit !== null && $group_count >= (int) $limit) && $current !== null) {
+				$rows[] = $this->build_mcq_row_from_accumulator($current, array_keys($question_labels));
+			}
+		} finally {
+			$result->free();
+		}
+
+		$labels = $this->sort_question_labels(array_keys($question_labels));
+		if ($question_labels_only) {
+			return $labels;
+		}
+
+		// Rebuild rows with final normalized label order so preview/export stay aligned.
+		$normalized_rows = [];
+		foreach ($rows as $row) {
+			$normalized = [];
+			foreach ($this->result_csv_base_headers as $header) {
+				$normalized[$header] = (string) ($row[$header] ?? '');
+			}
+			foreach ($labels as $label) {
+				$normalized[$label] = (string) ($row[$label] ?? '');
+			}
+			$normalized_rows[] = $normalized;
+		}
+
+		return [
+			'question_labels' => $labels,
+			'rows' => $normalized_rows,
+		];
+	}
+
 	private function parse_date($s, $defaultTime)
 	{
 		$s = trim((string) $s);
@@ -929,6 +1278,70 @@ class Emarking_report_model extends CI_Model
 		try {
 			while ($row = $result->fetch_assoc()) {
 				$writer($this->build_assessment_csv_row_from_sql_row($row, $question_labels));
+			}
+		} finally {
+			$result->free();
+		}
+	}
+
+	public function get_mcq_csv_headers($filters = [])
+	{
+		$question_labels = $this->get_mcq_question_labels($filters);
+		return array_merge($this->result_csv_base_headers, $question_labels);
+	}
+
+	public function get_mcq_csv_rows($filters = [], $limit = 50)
+	{
+		$data = $this->collect_mcq_rows($filters, $limit);
+		return $data['rows'] ?? [];
+	}
+
+	public function stream_mcq_csv_export($filters = [], callable $writer)
+	{
+		$question_labels = $this->get_mcq_question_labels($filters);
+		if (empty($question_labels)) {
+			return;
+		}
+
+		$sql = $this->build_mcq_export_sql($filters);
+		$mysqli = $this->db->conn_id;
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			throw new RuntimeException('Unable to stream MCQ CSV export: ' . $mysqli->error);
+		}
+
+		$current_key = null;
+		$current = null;
+
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$group_key = $this->mcq_group_key_from_row($row);
+				if ($current_key !== $group_key) {
+					if ($current !== null) {
+						$writer($this->build_mcq_row_from_accumulator($current, $question_labels));
+					}
+
+					$current_key = $group_key;
+					$current = [
+						'base' => $this->build_mcq_base_row($row),
+						'questions' => [],
+						'question_index' => 1,
+					];
+				}
+
+				foreach (['page_q1', 'page_q2', 'page_q3', 'page_q4'] as $page_key) {
+					$value = $this->format_mark_value($row[$page_key] ?? null);
+					if ($value === '') {
+						continue;
+					}
+					$label = 'Q' . $current['question_index'];
+					$current['questions'][$label] = $value;
+					$current['question_index']++;
+				}
+			}
+
+			if ($current !== null) {
+				$writer($this->build_mcq_row_from_accumulator($current, $question_labels));
 			}
 		} finally {
 			$result->free();

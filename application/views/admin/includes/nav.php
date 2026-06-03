@@ -306,6 +306,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a href="<?php echo url('admin/emarking/reports_mcq_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'mcq_csv') ? 'active' : ''; ?>">
+            <i class="far fa-circle nav-icon"></i>
+            <p>MCQ Result CSV</p>
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="<?php echo url('admin/emarking/reports_dictation_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'dictation_csv') ? 'active' : ''; ?>">
             <i class="far fa-circle nav-icon"></i>
             <p>Dictation Result CSV</p>
