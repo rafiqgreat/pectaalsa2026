@@ -15,23 +15,27 @@ $currentPage = min($currentPage, $totalPages);
 $shownCount = count($rows);
 $showImageBarcode = !empty($show_image_barcode);
 $selectedStatus = strtolower(trim((string) ($selected_status ?? '')));
+$subjectLabel = trim((string) ($barcode_subject_label ?? 'ENGLISH'));
+$titleLabel = trim((string) ($barcode_title_label ?? 'ENG CRQs Barcodes'));
+$sourceTable = trim((string) ($barcode_source_table ?? 'digital_papers_booklets1'));
+$exportPath = trim((string) ($barcode_export_url ?? 'admin/emarking/export_eng_crqs_barcodes_csv'));
 $exportParams = [];
 if ($selectedVersion !== '') $exportParams[] = 'version=' . urlencode($selectedVersion);
 if ($selectedStatus !== '') $exportParams[] = 'status=' . urlencode($selectedStatus);
-$exportUrl = base_url('admin/emarking/export_eng_crqs_barcodes_csv' . (!empty($exportParams) ? ('?' . implode('&', $exportParams)) : ''));
+$exportUrl = base_url($exportPath . (!empty($exportParams) ? ('?' . implode('&', $exportParams)) : ''));
 ?>
 
 <section class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
       <div class="col-sm-6">
-        <h1 class="m-0 text-dark"><?php echo htmlspecialchars((string) ($page->title ?? 'ENG CRQs Barcodes')); ?></h1>
+        <h1 class="m-0 text-dark"><?php echo htmlspecialchars((string) ($page->title ?? $titleLabel)); ?></h1>
       </div>
       <div class="col-sm-6">
         <ol class="breadcrumb float-sm-right">
           <li class="breadcrumb-item"><a href="<?php echo base_url('admin'); ?>">Home</a></li>
           <li class="breadcrumb-item"><a href="<?php echo base_url('admin/emarking/reports_questions'); ?>">Reports</a></li>
-          <li class="breadcrumb-item active">ENG CRQs Barcodes</li>
+          <li class="breadcrumb-item active"><?php echo htmlspecialchars($titleLabel); ?></li>
         </ol>
       </div>
     </div>
@@ -44,7 +48,7 @@ $exportUrl = base_url('admin/emarking/export_eng_crqs_barcodes_csv' . (!empty($e
 
     <div class="card">
       <div class="card-header">
-        <h3 class="card-title mb-0">Download English CRQ Booklet Barcodes</h3>
+        <h3 class="card-title mb-0">Download <?php echo htmlspecialchars($subjectLabel); ?> CRQ Booklet Barcodes</h3>
       </div>
       <div class="card-body">
         <form method="get" class="mb-3">
@@ -89,7 +93,7 @@ $exportUrl = base_url('admin/emarking/export_eng_crqs_barcodes_csv' . (!empty($e
         <div class="alert alert-info mb-3">
           <div><strong>Page <?php echo number_format($currentPage); ?></strong> of <strong><?php echo number_format($totalPages); ?></strong></div>
           <div>Showing <strong><?php echo number_format($shownCount); ?></strong> record(s) of <strong><?php echo number_format($totalRows); ?></strong></div>
-          <div>Source: <code>digital_papers_booklets1</code> with <code>paper_generated = 1</code></div>
+          <div>Source: <code><?php echo htmlspecialchars($sourceTable); ?></code> with <code>paper_generated = 1</code></div>
         </div>
 
         <div class="table-responsive">
@@ -120,7 +124,7 @@ $exportUrl = base_url('admin/emarking/export_eng_crqs_barcodes_csv' . (!empty($e
                   <tr>
                     <td><?php echo (int) $sr++; ?></td>
                     <td><?php echo html_escape((string) ($row->grade ?? '4')); ?></td>
-                    <td>ENGLISH</td>
+                    <td><?php echo htmlspecialchars($subjectLabel); ?></td>
                     <td><?php echo html_escape((string) ($row->version ?? '')); ?></td>
                     <td>CRQ</td>
                     <td><?php echo html_escape((string) ($row->barcode ?? '')); ?></td>

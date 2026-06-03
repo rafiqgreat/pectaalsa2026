@@ -342,9 +342,9 @@ class Emarking_model extends CI_Model
 		return $out;
 	}
 
-	private function eng_crq_barcode_query_sql($version = '', $expand_by_questions = false, $count_only = false, $status_filter = '')
+	private function crq_barcode_query_sql($source_table, $version = '', $expand_by_questions = false, $count_only = false, $status_filter = '')
 	{
-		$table = 'digital_papers_booklets1';
+		$table = trim((string) $source_table);
 		if (!$this->db->table_exists($table)) return [null, []];
 
 		$cols = $this->resolve_source_columns($table);
@@ -361,7 +361,7 @@ class Emarking_model extends CI_Model
 		$imageMatchJoin = 'LEFT JOIN (
 			SELECT DISTINCT TRIM(paper_barcode) AS paper_barcode_key, UPPER(TRIM(question_no)) AS question_no_key
 			FROM `emarking_question_images`
-			WHERE TRIM(source_table) = \'digital_papers_booklets1\'
+			WHERE TRIM(source_table) = ' . $this->db->escape($table) . '
 		) qi ON qi.paper_barcode_key = TRIM(src.' . $barcodeCol . ')';
 
 		$where = ['src.' . $generatedCol . ' = ?'];
@@ -442,7 +442,38 @@ class Emarking_model extends CI_Model
 
 	public function get_eng_crq_barcode_versions()
 	{
-		$table = 'digital_papers_booklets1';
+		return $this->get_crq_barcode_versions_by_table('digital_papers_booklets1');
+	}
+
+	public function get_eng_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets1', $version, (bool) $expand_by_questions, false, $status_filter);
+		if ($sql === null) return [];
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function count_eng_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets1', $version, (bool) $expand_by_questions, true, $status_filter);
+		if ($sql === null) return 0;
+		$row = $this->db->query($sql, $params)->row();
+		return (int) ($row->total_rows ?? 0);
+	}
+
+	public function get_eng_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
+	{
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets1', $version, (bool) $expand_by_questions, false, $status_filter);
+		if ($sql === null) return [];
+		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function get_crq_barcode_versions_by_table($source_table)
+	{
+		$table = trim((string) $source_table);
 		if (!$this->db->table_exists($table)) return [];
 
 		$cols = $this->resolve_source_columns($table);
@@ -465,27 +496,94 @@ class Emarking_model extends CI_Model
 		return array_values(array_unique($out));
 	}
 
-	public function get_eng_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	public function get_urdu_crq_barcode_versions()
 	{
-		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false, $status_filter);
+		return $this->get_crq_barcode_versions_by_table('digital_papers_booklets2');
+	}
+
+	public function get_urdu_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets2', $version, (bool) $expand_by_questions, false, $status_filter);
 		if ($sql === null) return [];
 		return $this->db->query($sql, $params)->result();
 	}
 
-	public function count_eng_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	public function count_urdu_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
 	{
-		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, true, $status_filter);
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets2', $version, (bool) $expand_by_questions, true, $status_filter);
 		if ($sql === null) return 0;
 		$row = $this->db->query($sql, $params)->row();
 		return (int) ($row->total_rows ?? 0);
 	}
 
-	public function get_eng_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
+	public function get_urdu_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
 	{
 		$limit = max(1, (int) $limit);
 		$offset = max(0, (int) $offset);
 
-		list($sql, $params) = $this->eng_crq_barcode_query_sql($version, (bool) $expand_by_questions, false, $status_filter);
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets2', $version, (bool) $expand_by_questions, false, $status_filter);
+		if ($sql === null) return [];
+		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function get_math_crq_barcode_versions()
+	{
+		return $this->get_crq_barcode_versions_by_table('digital_papers_booklets3');
+	}
+
+	public function get_math_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets3', $version, (bool) $expand_by_questions, false, $status_filter);
+		if ($sql === null) return [];
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function count_math_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets3', $version, (bool) $expand_by_questions, true, $status_filter);
+		if ($sql === null) return 0;
+		$row = $this->db->query($sql, $params)->row();
+		return (int) ($row->total_rows ?? 0);
+	}
+
+	public function get_math_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
+	{
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets3', $version, (bool) $expand_by_questions, false, $status_filter);
+		if ($sql === null) return [];
+		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function get_science_crq_barcode_versions()
+	{
+		return $this->get_crq_barcode_versions_by_table('digital_papers_booklets4');
+	}
+
+	public function get_science_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets4', $version, (bool) $expand_by_questions, false, $status_filter);
+		if ($sql === null) return [];
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function count_science_crq_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets4', $version, (bool) $expand_by_questions, true, $status_filter);
+		if ($sql === null) return 0;
+		$row = $this->db->query($sql, $params)->row();
+		return (int) ($row->total_rows ?? 0);
+	}
+
+	public function get_science_crq_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
+	{
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets4', $version, (bool) $expand_by_questions, false, $status_filter);
 		if ($sql === null) return [];
 		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
 		return $this->db->query($sql, $params)->result();

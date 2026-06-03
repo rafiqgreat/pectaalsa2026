@@ -116,6 +116,12 @@ $route['admin/emarking/batches'] = 'admin/emarking/batches';
 $route['admin/emarking/reports'] = 'admin/emarking/reports';
 $route['admin/emarking/reports-eng-crqs-barcodes'] = 'admin/emarking/reports_eng_crqs_barcodes';
 $route['admin/emarking/export-eng-crqs-barcodes-csv'] = 'admin/emarking/export_eng_crqs_barcodes_csv';
+$route['admin/emarking/reports-urdu-crqs-barcodes'] = 'admin/emarking/reports_urdu_crqs_barcodes';
+$route['admin/emarking/export-urdu-crqs-barcodes-csv'] = 'admin/emarking/export_urdu_crqs_barcodes_csv';
+$route['admin/emarking/reports-math-crqs-barcodes'] = 'admin/emarking/reports_math_crqs_barcodes';
+$route['admin/emarking/export-math-crqs-barcodes-csv'] = 'admin/emarking/export_math_crqs_barcodes_csv';
+$route['admin/emarking/reports-science-crqs-barcodes'] = 'admin/emarking/reports_science_crqs_barcodes';
+$route['admin/emarking/export-science-crqs-barcodes-csv'] = 'admin/emarking/export_science_crqs_barcodes_csv';
 $route['admin/emarking/billing'] = 'admin/emarking/billing';
 
 // eMarker marking routes

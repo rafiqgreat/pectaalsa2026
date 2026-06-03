@@ -3,6 +3,528 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Settings extends MY_Controller {
 
+	private function sync_eng_crqs_table()
+	{
+		return 'tbl_missing_barcodes_englishcrq';
+	}
+
+	private function sync_eng_crqs_counts()
+	{
+		$table = $this->sync_eng_crqs_table();
+		if (!$this->db->table_exists($table)) {
+			return [
+				'total' => 0,
+				'pending' => 0,
+				'done' => 0,
+			];
+		}
+
+		$row = $this->db->select('COUNT(*) AS total, SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS done', false)
+			->from($table)
+			->get()
+			->row();
+
+		return [
+			'total' => (int) ($row->total ?? 0),
+			'pending' => (int) ($row->pending ?? 0),
+			'done' => (int) ($row->done ?? 0),
+		];
+	}
+
+	private function sync_eng_crqs_path_meta($image_barcode)
+	{
+		$raw = trim((string) $image_barcode);
+		if ($raw === '') return null;
+
+		$filename = basename(str_replace('\\', '/', $raw));
+		if (!preg_match('/^([0-9]+)_(1|2)(\.[A-Za-z0-9]+)?$/', $filename, $matches)) {
+			return null;
+		}
+
+		$digits = (string) $matches[1];
+		if (strlen($digits) < 14) {
+			return null;
+		}
+
+		$image_no = (string) $matches[2];
+		$ext = trim((string) ($matches[3] ?? ''));
+		if ($ext === '') {
+			$ext = '.jpg';
+			$filename = $digits . '_' . $image_no . $ext;
+		}
+
+		$dir_parts = [
+			substr($digits, 0, 1),
+			substr($digits, 7, 1),
+			substr($digits, 8, 1),
+			substr($digits, 11, 3),
+			($image_no === '2') ? 'q2' : 'q1',
+		];
+		$dir_parts = array_map(function ($part) {
+			return trim((string) $part);
+		}, $dir_parts);
+		if (in_array('', $dir_parts, true)) {
+			return null;
+		}
+
+		$relative_dir = implode('/', $dir_parts);
+		return [
+			'filename' => $filename,
+			'relative_dir' => $relative_dir,
+			'source_relative_dir' => 'storagebox/crqs/' . $relative_dir,
+			'target_relative_dir' => 'storagebox/mcrqs/' . $relative_dir,
+		];
+	}
+
+	private function sync_eng_crqs_abs_path($relative_path)
+	{
+		$relative_path = trim(str_replace('\\', '/', (string) $relative_path), '/');
+		return rtrim((string) FCPATH, '/\\') . '/' . $relative_path;
+	}
+
+	private function sync_eng_crqs_pick_random_file($dir)
+	{
+		$dir = trim((string) $dir);
+		if ($dir === '' || !is_dir($dir)) return null;
+
+		$candidates = [];
+		foreach ((glob(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '*') ?: []) as $path) {
+			if (!is_file($path)) continue;
+			$ext = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+			if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true)) continue;
+			$candidates[] = $path;
+		}
+
+		if (empty($candidates)) return null;
+		return $candidates[array_rand($candidates)];
+	}
+
+	private function sync_eng_crqs_ensure_dir($dir)
+	{
+		$dir = trim((string) $dir);
+		if ($dir === '') return false;
+		if (is_dir($dir)) return true;
+		return @mkdir($dir, 0775, true);
+	}
+
+	private function sync_eng_crqs_process_batch($limit)
+	{
+		$table = $this->sync_eng_crqs_table();
+		$limit = max(1, min(10000, (int) $limit));
+
+		$summary = [
+			'requested' => $limit,
+			'processed' => 0,
+			'copied' => 0,
+			'failed' => 0,
+			'items' => [],
+		];
+
+		if (!$this->db->table_exists($table)) {
+			$summary['error'] = 'Table not found: ' . $table;
+			return $summary;
+		}
+
+		$rows = $this->db->select('id, image_barcode, status')
+			->from($table)
+			->where('status', 0)
+			->order_by('id', 'ASC')
+			->limit($limit)
+			->get()
+			->result();
+
+		foreach (($rows ?? []) as $row) {
+			$summary['processed']++;
+			$item = [
+				'id' => (int) ($row->id ?? 0),
+				'image_barcode' => (string) ($row->image_barcode ?? ''),
+				'result' => 'Failed',
+				'message' => '',
+				'source' => '',
+				'target' => '',
+			];
+
+			$meta = $this->sync_eng_crqs_path_meta($item['image_barcode']);
+			if ($meta === null) {
+				$item['message'] = 'Invalid image_barcode format.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_dir_rel = $meta['source_relative_dir'];
+			$target_dir_rel = $meta['target_relative_dir'];
+			$source_dir_abs = $this->sync_eng_crqs_abs_path($source_dir_rel);
+			$target_dir_abs = $this->sync_eng_crqs_abs_path($target_dir_rel);
+			$target_file_abs = rtrim($target_dir_abs, '/\\') . '/' . $meta['filename'];
+			$target_file_rel = $target_dir_rel . '/' . $meta['filename'];
+
+			$item['source'] = $source_dir_rel;
+			$item['target'] = $target_file_rel;
+
+			if (!is_dir($source_dir_abs)) {
+				$item['message'] = 'Source folder not found.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_file_abs = $this->sync_eng_crqs_pick_random_file($source_dir_abs);
+			if ($source_file_abs === null) {
+				$item['message'] = 'No source image found in source folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			if (!$this->sync_eng_crqs_ensure_dir($target_dir_abs)) {
+				$item['message'] = 'Unable to create target folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$copied = is_file($target_file_abs) ? true : @copy($source_file_abs, $target_file_abs);
+			if (!$copied) {
+				$item['message'] = 'Copy failed.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$this->db->where('id', (int) $item['id'])->update($table, ['status' => 1]);
+			$err = $this->db->error();
+			if (!empty($err['code'])) {
+				$item['message'] = 'Copied file but failed to update DB status.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$item['result'] = 'Copied';
+			$item['message'] = is_file($target_file_abs) ? 'Synchronized successfully.' : 'Copied successfully.';
+			$summary['copied']++;
+			$summary['items'][] = $item;
+		}
+
+		return $summary;
+	}
+
+	private function sync_urdu_crqs_table()
+	{
+		return 'tbl_missing_barcodes_urducrq';
+	}
+
+	private function sync_urdu_crqs_counts()
+	{
+		$table = $this->sync_urdu_crqs_table();
+		if (!$this->db->table_exists($table)) {
+			return [
+				'total' => 0,
+				'pending' => 0,
+				'done' => 0,
+			];
+		}
+
+		$row = $this->db->select('COUNT(*) AS total, SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS done', false)
+			->from($table)
+			->get()
+			->row();
+
+		return [
+			'total' => (int) ($row->total ?? 0),
+			'pending' => (int) ($row->pending ?? 0),
+			'done' => (int) ($row->done ?? 0),
+		];
+	}
+
+	private function sync_urdu_crqs_process_batch($limit)
+	{
+		$table = $this->sync_urdu_crqs_table();
+		$limit = max(1, min(10000, (int) $limit));
+
+		$summary = [
+			'requested' => $limit,
+			'processed' => 0,
+			'copied' => 0,
+			'failed' => 0,
+			'items' => [],
+		];
+
+		if (!$this->db->table_exists($table)) {
+			$summary['error'] = 'Table not found: ' . $table;
+			return $summary;
+		}
+
+		$rows = $this->db->select('id, image_barcode, status')
+			->from($table)
+			->where('status', 0)
+			->order_by('id', 'ASC')
+			->limit($limit)
+			->get()
+			->result();
+
+		foreach (($rows ?? []) as $row) {
+			$summary['processed']++;
+			$item = [
+				'id' => (int) ($row->id ?? 0),
+				'image_barcode' => (string) ($row->image_barcode ?? ''),
+				'result' => 'Failed',
+				'message' => '',
+				'source' => '',
+				'target' => '',
+			];
+
+			$meta = $this->sync_eng_crqs_path_meta($item['image_barcode']);
+			if ($meta === null) {
+				$item['message'] = 'Invalid image_barcode format.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_dir_rel = $meta['source_relative_dir'];
+			$target_dir_rel = $meta['target_relative_dir'];
+			$source_dir_abs = $this->sync_eng_crqs_abs_path($source_dir_rel);
+			$target_dir_abs = $this->sync_eng_crqs_abs_path($target_dir_rel);
+			$target_file_abs = rtrim($target_dir_abs, '/\\') . '/' . $meta['filename'];
+			$target_file_rel = $target_dir_rel . '/' . $meta['filename'];
+
+			$item['source'] = $source_dir_rel;
+			$item['target'] = $target_file_rel;
+
+			if (!is_dir($source_dir_abs)) {
+				$item['message'] = 'Source folder not found.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_file_abs = $this->sync_eng_crqs_pick_random_file($source_dir_abs);
+			if ($source_file_abs === null) {
+				$item['message'] = 'No source image found in source folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			if (!$this->sync_eng_crqs_ensure_dir($target_dir_abs)) {
+				$item['message'] = 'Unable to create target folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$copied = is_file($target_file_abs) ? true : @copy($source_file_abs, $target_file_abs);
+			if (!$copied) {
+				$item['message'] = 'Copy failed.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$this->db->where('id', (int) $item['id'])->update($table, ['status' => 1]);
+			$err = $this->db->error();
+			if (!empty($err['code'])) {
+				$item['message'] = 'Copied file but failed to update DB status.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$item['result'] = 'Copied';
+			$item['message'] = is_file($target_file_abs) ? 'Synchronized successfully.' : 'Copied successfully.';
+			$summary['copied']++;
+			$summary['items'][] = $item;
+		}
+
+		return $summary;
+	}
+
+	private function sync_math_crqs_table()
+	{
+		return 'tbl_missing_barcodes_mathcrq';
+	}
+
+	private function sync_math_crqs_counts()
+	{
+		$table = $this->sync_math_crqs_table();
+		if (!$this->db->table_exists($table)) {
+			return ['total' => 0, 'pending' => 0, 'done' => 0];
+		}
+		$row = $this->db->select('COUNT(*) AS total, SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS done', false)
+			->from($table)
+			->get()
+			->row();
+		return [
+			'total' => (int) ($row->total ?? 0),
+			'pending' => (int) ($row->pending ?? 0),
+			'done' => (int) ($row->done ?? 0),
+		];
+	}
+
+	private function sync_math_crqs_process_batch($limit)
+	{
+		$table = $this->sync_math_crqs_table();
+		$limit = max(1, min(10000, (int) $limit));
+		$summary = ['requested' => $limit, 'processed' => 0, 'copied' => 0, 'failed' => 0, 'items' => []];
+		if (!$this->db->table_exists($table)) {
+			$summary['error'] = 'Table not found: ' . $table;
+			return $summary;
+		}
+		$rows = $this->db->select('id, image_barcode, status')->from($table)->where('status', 0)->order_by('id', 'ASC')->limit($limit)->get()->result();
+		foreach (($rows ?? []) as $row) {
+			$summary['processed']++;
+			$item = ['id' => (int) ($row->id ?? 0), 'image_barcode' => (string) ($row->image_barcode ?? ''), 'result' => 'Failed', 'message' => '', 'source' => '', 'target' => ''];
+			$meta = $this->sync_eng_crqs_path_meta($item['image_barcode']);
+			if ($meta === null) {
+				$item['message'] = 'Invalid image_barcode format.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$source_dir_rel = $meta['source_relative_dir'];
+			$target_dir_rel = $meta['target_relative_dir'];
+			$source_dir_abs = $this->sync_eng_crqs_abs_path($source_dir_rel);
+			$target_dir_abs = $this->sync_eng_crqs_abs_path($target_dir_rel);
+			$target_file_abs = rtrim($target_dir_abs, '/\\') . '/' . $meta['filename'];
+			$target_file_rel = $target_dir_rel . '/' . $meta['filename'];
+			$item['source'] = $source_dir_rel;
+			$item['target'] = $target_file_rel;
+			if (!is_dir($source_dir_abs)) {
+				$item['message'] = 'Source folder not found.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$source_file_abs = $this->sync_eng_crqs_pick_random_file($source_dir_abs);
+			if ($source_file_abs === null) {
+				$item['message'] = 'No source image found in source folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			if (!$this->sync_eng_crqs_ensure_dir($target_dir_abs)) {
+				$item['message'] = 'Unable to create target folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$copied = is_file($target_file_abs) ? true : @copy($source_file_abs, $target_file_abs);
+			if (!$copied) {
+				$item['message'] = 'Copy failed.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$this->db->where('id', (int) $item['id'])->update($table, ['status' => 1]);
+			$err = $this->db->error();
+			if (!empty($err['code'])) {
+				$item['message'] = 'Copied file but failed to update DB status.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$item['result'] = 'Copied';
+			$item['message'] = 'Synchronized successfully.';
+			$summary['copied']++;
+			$summary['items'][] = $item;
+		}
+		return $summary;
+	}
+
+	private function sync_science_crqs_table()
+	{
+		return 'tbl_missing_barcodes_sciencecrq';
+	}
+
+	private function sync_science_crqs_counts()
+	{
+		$table = $this->sync_science_crqs_table();
+		if (!$this->db->table_exists($table)) {
+			return ['total' => 0, 'pending' => 0, 'done' => 0];
+		}
+		$row = $this->db->select('COUNT(*) AS total, SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS done', false)
+			->from($table)
+			->get()
+			->row();
+		return [
+			'total' => (int) ($row->total ?? 0),
+			'pending' => (int) ($row->pending ?? 0),
+			'done' => (int) ($row->done ?? 0),
+		];
+	}
+
+	private function sync_science_crqs_process_batch($limit)
+	{
+		$table = $this->sync_science_crqs_table();
+		$limit = max(1, min(10000, (int) $limit));
+		$summary = ['requested' => $limit, 'processed' => 0, 'copied' => 0, 'failed' => 0, 'items' => []];
+		if (!$this->db->table_exists($table)) {
+			$summary['error'] = 'Table not found: ' . $table;
+			return $summary;
+		}
+		$rows = $this->db->select('id, image_barcode, status')->from($table)->where('status', 0)->order_by('id', 'ASC')->limit($limit)->get()->result();
+		foreach (($rows ?? []) as $row) {
+			$summary['processed']++;
+			$item = ['id' => (int) ($row->id ?? 0), 'image_barcode' => (string) ($row->image_barcode ?? ''), 'result' => 'Failed', 'message' => '', 'source' => '', 'target' => ''];
+			$meta = $this->sync_eng_crqs_path_meta($item['image_barcode']);
+			if ($meta === null) {
+				$item['message'] = 'Invalid image_barcode format.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$source_dir_rel = $meta['source_relative_dir'];
+			$target_dir_rel = $meta['target_relative_dir'];
+			$source_dir_abs = $this->sync_eng_crqs_abs_path($source_dir_rel);
+			$target_dir_abs = $this->sync_eng_crqs_abs_path($target_dir_rel);
+			$target_file_abs = rtrim($target_dir_abs, '/\\') . '/' . $meta['filename'];
+			$target_file_rel = $target_dir_rel . '/' . $meta['filename'];
+			$item['source'] = $source_dir_rel;
+			$item['target'] = $target_file_rel;
+			if (!is_dir($source_dir_abs)) {
+				$item['message'] = 'Source folder not found.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$source_file_abs = $this->sync_eng_crqs_pick_random_file($source_dir_abs);
+			if ($source_file_abs === null) {
+				$item['message'] = 'No source image found in source folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			if (!$this->sync_eng_crqs_ensure_dir($target_dir_abs)) {
+				$item['message'] = 'Unable to create target folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$copied = is_file($target_file_abs) ? true : @copy($source_file_abs, $target_file_abs);
+			if (!$copied) {
+				$item['message'] = 'Copy failed.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$this->db->where('id', (int) $item['id'])->update($table, ['status' => 1]);
+			$err = $this->db->error();
+			if (!empty($err['code'])) {
+				$item['message'] = 'Copied file but failed to update DB status.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+			$item['result'] = 'Copied';
+			$item['message'] = 'Synchronized successfully.';
+			$summary['copied']++;
+			$summary['items'][] = $item;
+		}
+		return $summary;
+	}
+
 	public function __construct()
 	{
 		parent::__construct();
@@ -307,6 +829,104 @@ class Settings extends MY_Controller {
 		$this->page_data['pagination_links'] = $this->pagination->create_links();
 
 		$this->load->view('admin/settings/check_sizes', $this->page_data);
+	}
+
+	public function sync_eng_crqs()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'sync_eng_crqs';
+		$this->page_data['page']->title = 'Synchronize Eng CRQs';
+
+		$batch_size = (int) $this->input->get_post('batch_size', true);
+		if ($batch_size <= 0) $batch_size = 100;
+		$batch_size = max(1, min(10000, $batch_size));
+
+		$run_summary = null;
+		if ($this->input->method(true) === 'POST') {
+			postAllowed();
+			@set_time_limit(0);
+			$run_summary = $this->sync_eng_crqs_process_batch($batch_size);
+			if (empty($run_summary['error'])) {
+				$this->activity_model->add('Synchronize Eng CRQs run by User: #' . logged('id') . ' processed=' . (int) ($run_summary['processed'] ?? 0) . ' copied=' . (int) ($run_summary['copied'] ?? 0));
+			}
+		}
+
+		$this->page_data['batch_size'] = $batch_size;
+		$this->page_data['sync_counts'] = $this->sync_eng_crqs_counts();
+		$this->page_data['run_summary'] = $run_summary;
+		$this->load->view('admin/settings/sync_eng_crqs', $this->page_data);
+	}
+
+	public function sync_urdu_crqs()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'sync_urdu_crqs';
+		$this->page_data['page']->title = 'Synchronize Urdu CRQs';
+
+		$batch_size = (int) $this->input->get_post('batch_size', true);
+		if ($batch_size <= 0) $batch_size = 100;
+		$batch_size = max(1, min(10000, $batch_size));
+
+		$run_summary = null;
+		if ($this->input->method(true) === 'POST') {
+			postAllowed();
+			@set_time_limit(0);
+			$run_summary = $this->sync_urdu_crqs_process_batch($batch_size);
+			if (empty($run_summary['error'])) {
+				$this->activity_model->add('Synchronize Urdu CRQs run by User: #' . logged('id') . ' processed=' . (int) ($run_summary['processed'] ?? 0) . ' copied=' . (int) ($run_summary['copied'] ?? 0));
+			}
+		}
+
+		$this->page_data['batch_size'] = $batch_size;
+		$this->page_data['sync_counts'] = $this->sync_urdu_crqs_counts();
+		$this->page_data['run_summary'] = $run_summary;
+		$this->load->view('admin/settings/sync_urdu_crqs', $this->page_data);
+	}
+
+	public function sync_math_crqs()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'sync_math_crqs';
+		$this->page_data['page']->title = 'Synchronize Math CRQs';
+		$batch_size = (int) $this->input->get_post('batch_size', true);
+		if ($batch_size <= 0) $batch_size = 100;
+		$batch_size = max(1, min(10000, $batch_size));
+		$run_summary = null;
+		if ($this->input->method(true) === 'POST') {
+			postAllowed();
+			@set_time_limit(0);
+			$run_summary = $this->sync_math_crqs_process_batch($batch_size);
+			if (empty($run_summary['error'])) {
+				$this->activity_model->add('Synchronize Math CRQs run by User: #' . logged('id') . ' processed=' . (int) ($run_summary['processed'] ?? 0) . ' copied=' . (int) ($run_summary['copied'] ?? 0));
+			}
+		}
+		$this->page_data['batch_size'] = $batch_size;
+		$this->page_data['sync_counts'] = $this->sync_math_crqs_counts();
+		$this->page_data['run_summary'] = $run_summary;
+		$this->load->view('admin/settings/sync_math_crqs', $this->page_data);
+	}
+
+	public function sync_science_crqs()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'sync_science_crqs';
+		$this->page_data['page']->title = 'Synchronize Science CRQs';
+		$batch_size = (int) $this->input->get_post('batch_size', true);
+		if ($batch_size <= 0) $batch_size = 100;
+		$batch_size = max(1, min(10000, $batch_size));
+		$run_summary = null;
+		if ($this->input->method(true) === 'POST') {
+			postAllowed();
+			@set_time_limit(0);
+			$run_summary = $this->sync_science_crqs_process_batch($batch_size);
+			if (empty($run_summary['error'])) {
+				$this->activity_model->add('Synchronize Science CRQs run by User: #' . logged('id') . ' processed=' . (int) ($run_summary['processed'] ?? 0) . ' copied=' . (int) ($run_summary['copied'] ?? 0));
+			}
+		}
+		$this->page_data['batch_size'] = $batch_size;
+		$this->page_data['sync_counts'] = $this->sync_science_crqs_counts();
+		$this->page_data['run_summary'] = $run_summary;
+		$this->load->view('admin/settings/sync_science_crqs', $this->page_data);
 	}
 
 	public function _valid_optional_datetime($value)

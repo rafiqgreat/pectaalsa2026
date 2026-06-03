@@ -13,6 +13,18 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
       <?php if (hasPermissions('general_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='registration')?'active':'' ?>" href="<?php echo url('admin/settings/registration') ?>">Registration</a>
       <?php endif ?>
+      <?php if (hasPermissions('general_settings')): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_eng_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_eng_crqs') ?>">Synchronize Eng CRQs</a>
+      <?php endif ?>
+      <?php if (hasPermissions('general_settings')): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_urdu_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_urdu_crqs') ?>">Synchronize Urdu CRQs</a>
+      <?php endif ?>
+      <?php if (hasPermissions('general_settings')): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_math_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_math_crqs') ?>">Synchronize Math CRQs</a>
+      <?php endif ?>
+      <?php if (hasPermissions('general_settings')): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_science_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_science_crqs') ?>">Synchronize Science CRQs</a>
+      <?php endif ?>
       <?php if (hasPermissions('company_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='company')?'active':'' ?>" href="<?php echo url('admin/settings/company') ?>"><?php echo lang('company_setings') ?></a>
       <?php endif ?>
