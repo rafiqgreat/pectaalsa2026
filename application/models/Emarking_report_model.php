@@ -46,6 +46,205 @@ class Emarking_report_model extends CI_Model
 		'Version',
 		'Obtained Marks in Each Question',
 	];
+	private $bq_csv_base_headers = [
+		'Unique Identifier',
+		'School ID',
+		'Student / Teacher ID',
+		'EMIS Code',
+		'School Name',
+		'District',
+		'Tehsil',
+		'School Admin',
+		'School Level',
+		'School Type',
+		'Gender',
+		'Grade',
+		'Subject Taught (if teacher)',
+	];
+
+	private function bq_allowed_tables()
+	{
+		return [
+			'sheet_02',
+			'sheet_03',
+			'sheet_04',
+			'sheet_05',
+			'sheet_06',
+			'sheet_07',
+			'sheet_08',
+			'sheet_09',
+			'sheet_1011',
+		];
+	}
+
+	private function bq_decode_barcode_sql($column)
+	{
+		return [
+			'grade' => "SUBSTRING({$column}, 1, 1)",
+			'lsa_numeric' => "SUBSTRING({$column}, 2, 4)",
+			'family_code' => "SUBSTRING({$column}, 6, 2)",
+			'version' => "CAST(SUBSTRING({$column}, 8, 2) AS UNSIGNED)",
+			'student_roll' => "SUBSTRING({$column}, 10, 2)",
+		];
+	}
+
+	private function bq_barcode_grade_expr($column)
+	{
+		$parts = $this->bq_decode_barcode_sql($column);
+		return $parts['grade'];
+	}
+
+	private function bq_barcode_version_expr($column)
+	{
+		$parts = $this->bq_decode_barcode_sql($column);
+		return $parts['version'];
+	}
+
+	private function bq_barcode_lsa_expr($column)
+	{
+		$parts = $this->bq_decode_barcode_sql($column);
+		return $parts['lsa_numeric'];
+	}
+
+	private function bq_barcode_student_expr($column)
+	{
+		$parts = $this->bq_decode_barcode_sql($column);
+		return $parts['student_roll'];
+	}
+
+	private function get_bq_question_labels($table)
+	{
+		$table = trim((string) $table);
+		if ($table === '' || !in_array($table, $this->bq_allowed_tables(), true) || !$this->db->table_exists($table)) {
+			return [];
+		}
+
+		$fields = $this->db->list_fields($table);
+		$labels = [];
+		foreach ($fields as $field) {
+			if (preg_match('/^Q(\d{3})$/', (string) $field, $m)) {
+				$labels[] = 'Q' . (int) $m[1];
+			}
+		}
+
+		return $this->sort_question_labels($labels);
+	}
+
+	private function bq_export_where_sql($table, $filters = [])
+	{
+		$where = ['1 = 1'];
+
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') {
+			$where[] = $this->bq_barcode_grade_expr('src.Student_Barcode') . ' = ' . $this->db->escape($grade);
+		}
+
+		$version = trim((string) ($filters['version'] ?? ''));
+		if ($version !== '') {
+			$where[] = $this->bq_barcode_version_expr('src.Student_Barcode') . ' = ' . (int) $version;
+		}
+
+		$district_id = trim((string) ($filters['district_id'] ?? ''));
+		if ($district_id !== '') {
+			$where[] = 'sch.school_district_id = ' . (int) $district_id;
+		}
+
+		$school_query = trim((string) ($filters['school_query'] ?? ''));
+		if ($school_query !== '') {
+			$like = $this->db->escape_like_str($school_query);
+			$where[] = '('
+				. "sch.school_name LIKE '%{$like}%' ESCAPE '!'"
+				. " OR sch.school_code LIKE '%{$like}%' ESCAPE '!'"
+				. " OR sch.school_lsacode LIKE '%{$like}%' ESCAPE '!'"
+				. " OR src.Student_Barcode LIKE '%{$like}%' ESCAPE '!'"
+				. ')';
+		}
+
+		return implode(' AND ', $where);
+	}
+
+	private function build_bq_export_sql($table, $filters = [], $limit = null)
+	{
+		$table = trim((string) $table);
+		if (!in_array($table, $this->bq_allowed_tables(), true)) {
+			throw new InvalidArgumentException('Invalid BQ source table selected.');
+		}
+
+		$question_labels = $this->get_bq_question_labels($table);
+		$question_selects = [];
+		foreach ($question_labels as $label) {
+			$num = (int) preg_replace('/\D+/', '', $label);
+			$source_col = 'Q' . str_pad((string) $num, 3, '0', STR_PAD_LEFT);
+			$question_selects[] = "TRIM(COALESCE(src.`{$source_col}`, '')) AS `" . strtolower($label) . "`";
+		}
+		$question_select_sql = '';
+		if (!empty($question_selects)) {
+			$question_select_sql = ",
+				" . implode(",
+				", $question_selects);
+		}
+
+		$where_sql = $this->bq_export_where_sql($table, $filters);
+		$grade_expr = $this->bq_barcode_grade_expr('src.Student_Barcode');
+		$lsa_expr = $this->bq_barcode_lsa_expr('src.Student_Barcode');
+		$version_expr = $this->bq_barcode_version_expr('src.Student_Barcode');
+		$student_expr = $this->bq_barcode_student_expr('src.Student_Barcode');
+
+		$limit_sql = '';
+		if ($limit !== null) {
+			$limit_sql = "\nLIMIT " . max(0, (int) $limit);
+		}
+
+		return "
+			SELECT
+				TRIM(COALESCE(src.Student_Barcode, '')) AS unique_identifier,
+				COALESCE(sch.school_id, '') AS school_id,
+				{$student_expr} AS student_teacher_id,
+				COALESCE(sch.school_code, sch.school_lsacode, '') AS emis_code,
+				COALESCE(sch.school_name, '') AS school_name,
+				COALESCE(d.district_name_en, sch.school_district, '') AS district,
+				COALESCE(t.tehsil_name_en, sch.school_tehsil, '') AS tehsil,
+				COALESCE(sch.username, '') AS school_admin,
+				COALESCE(sch.school_level, '') AS school_level,
+				COALESCE(sch.school_department, '') AS school_type,
+				COALESCE(NULLIF(TRIM(src.Gender), ''), sch.school_gender, '') AS gender,
+				{$grade_expr} AS grade,
+				'' AS subject_taught{$question_select_sql},
+				{$version_expr} AS version
+			FROM {$table} src
+			LEFT JOIN schools sch
+				ON sch.school_lsacode COLLATE utf8mb4_unicode_ci = CONCAT('LSA-', {$grade_expr}, '-', {$lsa_expr}) COLLATE utf8mb4_unicode_ci
+			LEFT JOIN districts d ON d.district_id = sch.school_district_id
+			LEFT JOIN tehsils t ON t.tehsil_id = sch.school_tehsil_id
+			WHERE {$where_sql}
+			ORDER BY src.Student_Barcode ASC{$limit_sql}
+		";
+	}
+
+	private function build_bq_csv_row_from_sql_row(array $row, array $question_labels)
+	{
+		$out = [
+			'Unique Identifier' => (string) ($row['unique_identifier'] ?? ''),
+			'School ID' => (string) ($row['school_id'] ?? ''),
+			'Student / Teacher ID' => (string) ($row['student_teacher_id'] ?? ''),
+			'EMIS Code' => (string) ($row['emis_code'] ?? ''),
+			'School Name' => (string) ($row['school_name'] ?? ''),
+			'District' => (string) ($row['district'] ?? ''),
+			'Tehsil' => (string) ($row['tehsil'] ?? ''),
+			'School Admin' => (string) ($row['school_admin'] ?? ''),
+			'School Level' => (string) ($row['school_level'] ?? ''),
+			'School Type' => (string) ($row['school_type'] ?? ''),
+			'Gender' => (string) ($row['gender'] ?? ''),
+			'Grade' => (string) ($row['grade'] ?? ''),
+			'Subject Taught (if teacher)' => (string) ($row['subject_taught'] ?? ''),
+		];
+
+		foreach ($question_labels as $label) {
+			$out[$label] = (string) ($row[strtolower($label)] ?? '');
+		}
+
+		return $out;
+	}
 
 	private function mcq_source_table_where_sql($alias, $filters = [])
 	{
@@ -1342,6 +1541,64 @@ class Emarking_report_model extends CI_Model
 
 			if ($current !== null) {
 				$writer($this->build_mcq_row_from_accumulator($current, $question_labels));
+			}
+		} finally {
+			$result->free();
+		}
+	}
+
+	public function get_bq_source_tables()
+	{
+		return $this->bq_allowed_tables();
+	}
+
+	public function get_bq_csv_headers($filters = [])
+	{
+		$table = trim((string) ($filters['source_table'] ?? ''));
+		$question_labels = $this->get_bq_question_labels($table);
+		return array_merge($this->bq_csv_base_headers, $question_labels);
+	}
+
+	public function get_bq_csv_rows($filters = [], $limit = 50)
+	{
+		$table = trim((string) ($filters['source_table'] ?? ''));
+		if ($table === '' || !in_array($table, $this->bq_allowed_tables(), true)) {
+			return [];
+		}
+
+		$question_labels = $this->get_bq_question_labels($table);
+		$sql = $this->build_bq_export_sql($table, $filters, $limit);
+		$query = $this->db->query($sql);
+		if ($query === false) {
+			$error = $this->db->error();
+			throw new RuntimeException('Unable to load BQ CSV rows: ' . (string) ($error['message'] ?? 'Unknown database error'));
+		}
+		$rows = $query->result_array();
+		$out = [];
+		foreach ($rows as $row) {
+			$out[] = $this->build_bq_csv_row_from_sql_row($row, $question_labels);
+		}
+		return $out;
+	}
+
+	public function stream_bq_csv_export($filters = [], callable $writer)
+	{
+		$table = trim((string) ($filters['source_table'] ?? ''));
+		if ($table === '' || !in_array($table, $this->bq_allowed_tables(), true)) {
+			return;
+		}
+
+		$question_labels = $this->get_bq_question_labels($table);
+		$sql = $this->build_bq_export_sql($table, $filters, null);
+		$mysqli = $this->db->conn_id;
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			throw new RuntimeException('Unable to stream BQ CSV export: ' . $mysqli->error);
+		}
+
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$writer($this->build_bq_csv_row_from_sql_row($row, $question_labels));
 			}
 		} finally {
 			$result->free();
