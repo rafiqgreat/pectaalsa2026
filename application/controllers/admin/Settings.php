@@ -3,6 +3,61 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Settings extends MY_Controller {
 
+	private function require_super_admin()
+	{
+		if ((int) logged('role') !== 1) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'Access denied.');
+			redirect('admin/settings');
+			exit;
+		}
+	}
+
+	private function bulk_mark_range_options($max_marks)
+	{
+		$max_marks = (float) $max_marks;
+		if ($max_marks < 0) $max_marks = 0;
+
+		$scale = 2;
+		$step = 0.5;
+		$options = [];
+		$current = 0.0;
+
+		while ($current < $max_marks) {
+			$options[] = number_format($current, $scale, '.', '');
+			$current += $step;
+		}
+
+		$options[] = number_format($max_marks, $scale, '.', '');
+		$options = array_values(array_unique($options));
+
+		return array_map(function ($value) {
+			return rtrim(rtrim((string) $value, '0'), '.');
+		}, $options);
+	}
+
+	private function bulk_mark_random_value($min_mark, $max_mark)
+	{
+		$min_mark = (float) $min_mark;
+		$max_mark = (float) $max_mark;
+		if ($max_mark < $min_mark) {
+			$tmp = $min_mark;
+			$min_mark = $max_mark;
+			$max_mark = $tmp;
+		}
+
+		$min_units = (int) round($min_mark * 2);
+		$max_units = (int) round($max_mark * 2);
+		if ($max_units < $min_units) $max_units = $min_units;
+		$selected = mt_rand($min_units, $max_units);
+		return $selected / 2;
+	}
+
+	private function bulk_mark_summary_text($selected, $processed, $failed)
+	{
+		return 'Bulk auto mark completed. Marked: ' . (int) $selected . ', Saved: ' . (int) $processed . ', Failed: ' . (int) $failed . '.';
+	}
+
 	private function sync_eng_crqs_table()
 	{
 		return 'tbl_missing_barcodes_englishcrq';
@@ -667,6 +722,137 @@ class Settings extends MY_Controller {
 		$this->activity_model->add("Marking settings updated by User: #".logged('id'));
 
 		redirect('admin/settings/marking');
+	}
+
+	public function mark()
+	{
+		$this->require_super_admin();
+
+		$this->load->model('Emarking_batch_model', 'emarking_batch');
+
+		$this->page_data['page']->submenu = 'mark';
+		$this->page_data['emarkers'] = $this->emarking_batch->get_emarkers();
+
+		$selected_emarker_id = (int) $this->input->get('emarker_id', true);
+		$selected_batch_id = (int) $this->input->get('batch_id', true);
+
+		$this->page_data['selected_emarker_id'] = $selected_emarker_id;
+		$this->page_data['selected_batch_id'] = $selected_batch_id;
+		$this->page_data['batches'] = $selected_emarker_id > 0
+			? $this->emarking_batch->get_bulk_mark_batches_by_emarker($selected_emarker_id)
+			: [];
+		$this->page_data['selected_batch'] = $selected_emarker_id > 0 && $selected_batch_id > 0
+			? $this->emarking_batch->get_bulk_mark_batch($selected_batch_id, $selected_emarker_id)
+			: null;
+
+		$selected_batch = $this->page_data['selected_batch'];
+		$max_marks = (float) ($selected_batch->max_marks ?? 5);
+		$this->page_data['mark_options'] = $this->bulk_mark_range_options($max_marks);
+		$this->page_data['default_min_mark'] = rtrim(rtrim(number_format(min($max_marks, 3), 2, '.', ''), '0'), '.');
+		$this->page_data['default_max_mark'] = rtrim(rtrim(number_format(min($max_marks, 5), 2, '.', ''), '0'), '.');
+		if ($this->page_data['default_min_mark'] === '') $this->page_data['default_min_mark'] = '0';
+		if ($this->page_data['default_max_mark'] === '') $this->page_data['default_max_mark'] = '0';
+
+		$this->load->view('admin/settings/mark', $this->page_data);
+	}
+
+	public function markSubmit()
+	{
+		$this->require_super_admin();
+		postAllowed();
+
+		$this->load->model('Emarking_batch_model', 'emarking_batch');
+		$this->load->model('Marking_model', 'marking');
+		$this->load->library('form_validation');
+
+		$this->form_validation->set_rules('emarker_id', 'eMarker', 'trim|required|integer');
+		$this->form_validation->set_rules('batch_id', 'Batch', 'trim|required|integer');
+		$this->form_validation->set_rules('min_mark', 'Minimum Mark', 'trim|required|numeric');
+		$this->form_validation->set_rules('max_mark', 'Maximum Mark', 'trim|required|numeric');
+
+		$selected_emarker_id = (int) $this->input->post('emarker_id', true);
+		$selected_batch_id = (int) $this->input->post('batch_id', true);
+
+		if ($this->form_validation->run() === false) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', validation_errors());
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
+			return;
+		}
+
+		$batch = $this->emarking_batch->get_bulk_mark_batch($selected_batch_id, $selected_emarker_id);
+		if (!$batch) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'Selected batch is invalid or has no pending items.');
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id);
+			return;
+		}
+
+		$min_mark = (float) $this->input->post('min_mark', true);
+		$max_mark = (float) $this->input->post('max_mark', true);
+		$question_max = (float) ($batch->max_marks ?? 0);
+
+		if ($min_mark < 0 || $max_mark < 0) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'Marks cannot be negative.');
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
+			return;
+		}
+
+		if ($min_mark > $max_mark) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'Minimum mark cannot be greater than maximum mark.');
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
+			return;
+		}
+
+		if ($max_mark > $question_max) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'Selected range exceeds question max marks (' . rtrim(rtrim(number_format($question_max, 2, '.', ''), '0'), '.') . ').');
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
+			return;
+		}
+
+		$items = $this->db->select('i.id')
+			->from('emarking_batch_items i')
+			->join('emarking_batches b', 'b.id = i.batch_id', 'inner')
+			->where('i.batch_id', $selected_batch_id)
+			->where('b.assigned_to', $selected_emarker_id)
+			->where('i.status', 'PENDING')
+			->order_by('i.id', 'ASC')
+			->get()
+			->result();
+
+		if (empty($items)) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'No pending items found for the selected batch.');
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
+			return;
+		}
+
+		$selected = count($items);
+		$processed = 0;
+		$failed = 0;
+		foreach ($items as $item) {
+			$random_mark = $this->bulk_mark_random_value($min_mark, $max_mark);
+			$out = $this->marking->save_mark((int) $item->id, $selected_emarker_id, [
+				'action' => 'MARKED',
+				'marks_obtained' => $random_mark,
+				'remarks' => 'Auto marked by admin bulk tool',
+				'steps' => [],
+			]);
+			if (!empty($out['ok'])) {
+				$processed++;
+			} else {
+				$failed++;
+			}
+		}
+
+		$this->session->set_flashdata('alert-type', $failed > 0 ? 'warning' : 'success');
+		$this->session->set_flashdata('alert', $this->bulk_mark_summary_text($selected, $processed, $failed));
+		$this->activity_model->add('Bulk auto mark executed by User: #' . logged('id') . ' for eMarker #' . $selected_emarker_id . ' batch #' . $selected_batch_id . ' range [' . $min_mark . ',' . $max_mark . ']');
+
+		redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
 	}
 
 	public function check_sizes()

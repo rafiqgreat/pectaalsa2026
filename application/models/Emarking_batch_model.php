@@ -294,6 +294,48 @@ class Emarking_batch_model extends CI_Model
 		return $this->db->get()->row();
 	}
 
+	public function get_bulk_mark_batches_by_emarker($emarker_id)
+	{
+		$emarker_id = (int) $emarker_id;
+		if ($emarker_id <= 0) return [];
+
+		$this->db->select('b.id, b.batch_code, b.status, b.assigned_to, b.question_id, b.assessment_type, b.grade, b.subject_code, q.question_no, q.question_title, q.max_marks');
+		$this->db->select("SUM(CASE WHEN bi.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_items", false);
+		$this->db->select('COUNT(bi.id) AS total_items', false);
+		$this->db->from('emarking_batches b');
+		$this->db->join('emarking_questions q', 'q.id = b.question_id', 'left');
+		$this->db->join('emarking_batch_items bi', 'bi.batch_id = b.id', 'left');
+		$this->db->where('b.assigned_to', $emarker_id);
+		$this->db->where_in('b.status', ['PENDING', 'IN_PROGRESS']);
+		$this->db->group_by('b.id');
+		$this->db->having('pending_items >', 0);
+		$this->db->order_by("CASE b.status WHEN 'IN_PROGRESS' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END", '', false);
+		$this->db->order_by('b.id', 'DESC');
+		return $this->db->get()->result();
+	}
+
+	public function get_bulk_mark_batch($batch_id, $emarker_id)
+	{
+		$batch_id = (int) $batch_id;
+		$emarker_id = (int) $emarker_id;
+		if ($batch_id <= 0 || $emarker_id <= 0) return null;
+
+		$this->db->select('b.id, b.batch_code, b.status, b.assigned_to, b.question_id, b.assessment_type, b.grade, b.subject_code, q.question_no, q.question_title, q.max_marks');
+		$this->db->select("SUM(CASE WHEN bi.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_items", false);
+		$this->db->select('COUNT(bi.id) AS total_items', false);
+		$this->db->from('emarking_batches b');
+		$this->db->join('emarking_questions q', 'q.id = b.question_id', 'left');
+		$this->db->join('emarking_batch_items bi', 'bi.batch_id = b.id', 'left');
+		$this->db->where('b.id', $batch_id);
+		$this->db->where('b.assigned_to', $emarker_id);
+		$this->db->where_in('b.status', ['PENDING', 'IN_PROGRESS']);
+		$this->db->group_by('b.id');
+		$row = $this->db->get()->row();
+		if (!$row) return null;
+		if ((int) ($row->pending_items ?? 0) <= 0) return null;
+		return $row;
+	}
+
 	public function get_emarkers_for_subject_code($subject_code)
 	{
 		$specialization = $this->get_subject_specialization_name($subject_code);

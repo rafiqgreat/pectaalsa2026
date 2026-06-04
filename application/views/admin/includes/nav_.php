@@ -380,6 +380,14 @@
                 <p>Marking</p>
               </a>
             </li>
+            <?php if ((int) logged('role') === 1): ?>
+              <li class="nav-item">
+                <a href="<?php echo url('admin/settings/mark'); ?>" class="nav-link <?php echo ($page->menu == 'settings' && $page->submenu == 'mark') ? 'active' : ''; ?>">
+                  <i class="far fa-circle nav-icon"></i>
+                  <p>Mark</p>
+                </a>
+              </li>
+            <?php endif; ?>
             <li class="nav-item">
               <a href="<?php echo url('admin/settings/check_sizes'); ?>" class="nav-link <?php echo ($page->menu == 'settings' && $page->submenu == 'check_sizes') ? 'active' : ''; ?>">
                 <i class="far fa-circle nav-icon"></i>

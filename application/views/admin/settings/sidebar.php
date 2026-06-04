@@ -13,6 +13,9 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
       <?php if (hasPermissions('general_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='registration')?'active':'' ?>" href="<?php echo url('admin/settings/registration') ?>">Registration</a>
       <?php endif ?>
+      <?php if ((int) logged('role') === 1): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='mark')?'active':'' ?>" href="<?php echo url('admin/settings/mark') ?>">Mark</a>
+      <?php endif ?>
       <?php if (hasPermissions('general_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_eng_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_eng_crqs') ?>">Synchronize Eng CRQs</a>
       <?php endif ?>
