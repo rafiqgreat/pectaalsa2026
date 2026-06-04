@@ -36,10 +36,24 @@ class Settings extends MY_Controller {
 		}, $options);
 	}
 
-	private function bulk_mark_random_value($min_mark, $max_mark)
+	private function bulk_mark_interval_options()
+	{
+		return ['1', '0.5'];
+	}
+
+	private function bulk_mark_value_matches_interval($value, $interval)
+	{
+		$value_units = (int) round(((float) $value) * 2);
+		$interval_units = max(1, (int) round(((float) $interval) * 2));
+		return $value_units % $interval_units === 0;
+	}
+
+	private function bulk_mark_random_value($min_mark, $max_mark, $interval)
 	{
 		$min_mark = (float) $min_mark;
 		$max_mark = (float) $max_mark;
+		$interval = (float) $interval;
+		if ($interval <= 0) $interval = 0.5;
 		if ($max_mark < $min_mark) {
 			$tmp = $min_mark;
 			$min_mark = $max_mark;
@@ -48,8 +62,18 @@ class Settings extends MY_Controller {
 
 		$min_units = (int) round($min_mark * 2);
 		$max_units = (int) round($max_mark * 2);
+		$interval_units = max(1, (int) round($interval * 2));
 		if ($max_units < $min_units) $max_units = $min_units;
-		$selected = mt_rand($min_units, $max_units);
+
+		$choices = [];
+		for ($units = $min_units; $units <= $max_units; $units += $interval_units) {
+			$choices[] = $units;
+		}
+		if (empty($choices)) {
+			$choices[] = $min_units;
+		}
+
+		$selected = $choices[array_rand($choices)];
 		return $selected / 2;
 	}
 
@@ -748,8 +772,10 @@ class Settings extends MY_Controller {
 		$selected_batch = $this->page_data['selected_batch'];
 		$max_marks = (float) ($selected_batch->max_marks ?? 5);
 		$this->page_data['mark_options'] = $this->bulk_mark_range_options($max_marks);
+		$this->page_data['interval_options'] = $this->bulk_mark_interval_options();
 		$this->page_data['default_min_mark'] = rtrim(rtrim(number_format(min($max_marks, 3), 2, '.', ''), '0'), '.');
 		$this->page_data['default_max_mark'] = rtrim(rtrim(number_format(min($max_marks, 5), 2, '.', ''), '0'), '.');
+		$this->page_data['default_interval'] = '1';
 		if ($this->page_data['default_min_mark'] === '') $this->page_data['default_min_mark'] = '0';
 		if ($this->page_data['default_max_mark'] === '') $this->page_data['default_max_mark'] = '0';
 
@@ -769,6 +795,7 @@ class Settings extends MY_Controller {
 		$this->form_validation->set_rules('batch_id', 'Batch', 'trim|required|integer');
 		$this->form_validation->set_rules('min_mark', 'Minimum Mark', 'trim|required|numeric');
 		$this->form_validation->set_rules('max_mark', 'Maximum Mark', 'trim|required|numeric');
+		$this->form_validation->set_rules('mark_interval', 'Interval', 'trim|required');
 
 		$selected_emarker_id = (int) $this->input->post('emarker_id', true);
 		$selected_batch_id = (int) $this->input->post('batch_id', true);
@@ -790,7 +817,15 @@ class Settings extends MY_Controller {
 
 		$min_mark = (float) $this->input->post('min_mark', true);
 		$max_mark = (float) $this->input->post('max_mark', true);
+		$mark_interval = trim((string) $this->input->post('mark_interval', true));
 		$question_max = (float) ($batch->max_marks ?? 0);
+
+		if (!in_array($mark_interval, $this->bulk_mark_interval_options(), true)) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'Invalid interval selected.');
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
+			return;
+		}
 
 		if ($min_mark < 0 || $max_mark < 0) {
 			$this->session->set_flashdata('alert-type', 'error');
@@ -809,6 +844,13 @@ class Settings extends MY_Controller {
 		if ($max_mark > $question_max) {
 			$this->session->set_flashdata('alert-type', 'error');
 			$this->session->set_flashdata('alert', 'Selected range exceeds question max marks (' . rtrim(rtrim(number_format($question_max, 2, '.', ''), '0'), '.') . ').');
+			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
+			return;
+		}
+
+		if (!$this->bulk_mark_value_matches_interval($min_mark, $mark_interval) || !$this->bulk_mark_value_matches_interval($max_mark, $mark_interval)) {
+			$this->session->set_flashdata('alert-type', 'error');
+			$this->session->set_flashdata('alert', 'Selected minimum/maximum marks do not match the chosen interval.');
 			redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
 			return;
 		}
@@ -834,7 +876,7 @@ class Settings extends MY_Controller {
 		$processed = 0;
 		$failed = 0;
 		foreach ($items as $item) {
-			$random_mark = $this->bulk_mark_random_value($min_mark, $max_mark);
+			$random_mark = $this->bulk_mark_random_value($min_mark, $max_mark, $mark_interval);
 			$out = $this->marking->save_mark((int) $item->id, $selected_emarker_id, [
 				'action' => 'MARKED',
 				'marks_obtained' => $random_mark,
@@ -850,7 +892,7 @@ class Settings extends MY_Controller {
 
 		$this->session->set_flashdata('alert-type', $failed > 0 ? 'warning' : 'success');
 		$this->session->set_flashdata('alert', $this->bulk_mark_summary_text($selected, $processed, $failed));
-		$this->activity_model->add('Bulk auto mark executed by User: #' . logged('id') . ' for eMarker #' . $selected_emarker_id . ' batch #' . $selected_batch_id . ' range [' . $min_mark . ',' . $max_mark . ']');
+		$this->activity_model->add('Bulk auto mark executed by User: #' . logged('id') . ' for eMarker #' . $selected_emarker_id . ' batch #' . $selected_batch_id . ' range [' . $min_mark . ',' . $max_mark . '] interval [' . $mark_interval . ']');
 
 		redirect('admin/settings/mark?emarker_id=' . $selected_emarker_id . '&batch_id=' . $selected_batch_id);
 	}
