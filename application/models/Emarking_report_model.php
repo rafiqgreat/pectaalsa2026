@@ -772,6 +772,224 @@ class Emarking_report_model extends CI_Model
 		return array_merge($this->result_csv_base_headers, $question_labels, ['Total Obtained']);
 	}
 
+	private function get_crq_question_sequence($filters = [])
+	{
+		$this->db->select('q.id, q.page_no, q.question_no');
+		$this->db->from('emarking_questions q');
+		$this->db->where('q.assessment_type', 'CRQ');
+
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		$version = trim((string) ($filters['version'] ?? ''));
+		if ($version !== '') $this->db->where('q.version', (int) $version);
+
+		$this->db->order_by('CAST(COALESCE(NULLIF(q.page_no, \'\'), \'0\') AS UNSIGNED)', 'ASC', false);
+		$this->db->order_by('CAST(REPLACE(UPPER(q.question_no), \'Q\', \'\') AS UNSIGNED)', 'ASC', false);
+		$this->db->order_by('q.id', 'ASC');
+
+		$rows = $this->db->get()->result();
+		$out = [];
+		$seq = 1;
+		foreach ($rows as $row) {
+			$qid = (int) ($row->id ?? 0);
+			if ($qid <= 0) {
+				continue;
+			}
+			$out[] = [
+				'question_id' => $qid,
+				'label' => 'Q' . $seq,
+			];
+			$seq++;
+		}
+
+		return $out;
+	}
+
+	private function get_crq_group_keys_page($filters = [], $limit = 50, $offset = 0)
+	{
+		$where_sql = $this->assessment_export_where_sql('CRQ', $filters);
+		$source_tables = ['digital_papers_booklets1', 'digital_papers_booklets2', 'digital_papers_booklets3', 'digital_papers_booklets4'];
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		$sql = "
+			SELECT
+				qi.school_id,
+				qi.roll_no,
+				qi.subject_code,
+				qi.version,
+				qi.grade
+			FROM emarking_question_images qi
+			INNER JOIN emarking_questions q ON q.id = qi.question_id
+			LEFT JOIN schools s ON s.school_id = qi.school_id
+			LEFT JOIN {$source_tables[0]} src1 ON qi.source_table = '{$source_tables[0]}' AND src1.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[1]} src2 ON qi.source_table = '{$source_tables[1]}' AND src2.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[2]} src3 ON qi.source_table = '{$source_tables[2]}' AND src3.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[3]} src4 ON qi.source_table = '{$source_tables[3]}' AND src4.paper_id = qi.source_paper_id
+			WHERE {$where_sql}
+			GROUP BY qi.school_id, qi.roll_no, qi.subject_code, qi.version, qi.grade
+			ORDER BY qi.school_id ASC, qi.roll_no ASC
+			LIMIT {$limit} OFFSET {$offset}
+		";
+
+		return $this->db->query($sql)->result_array();
+	}
+
+	private function build_crq_group_keys_where_sql(array $group_keys)
+	{
+		$clauses = [];
+		foreach ($group_keys as $key) {
+			$school_id = array_key_exists('school_id', $key) && $key['school_id'] !== null ? (int) $key['school_id'] : null;
+			$roll_no = array_key_exists('roll_no', $key) ? trim((string) $key['roll_no']) : '';
+			$subject_code = array_key_exists('subject_code', $key) ? trim((string) $key['subject_code']) : '';
+			$version = array_key_exists('version', $key) && $key['version'] !== null ? (int) $key['version'] : null;
+			$grade = array_key_exists('grade', $key) && $key['grade'] !== null ? (int) $key['grade'] : null;
+
+			$clauses[] = '('
+				. ($school_id === null ? 'qi.school_id IS NULL' : ('qi.school_id = ' . $school_id))
+				. ' AND '
+				. "qi.roll_no = " . $this->db->escape($roll_no)
+				. ' AND '
+				. "qi.subject_code = " . $this->db->escape($subject_code)
+				. ' AND '
+				. ($version === null ? 'qi.version IS NULL' : ('qi.version = ' . $version))
+				. ' AND '
+				. ($grade === null ? 'qi.grade IS NULL' : ('qi.grade = ' . $grade))
+				. ')';
+		}
+
+		return empty($clauses) ? '' : '(' . implode(' OR ', $clauses) . ')';
+	}
+
+	private function build_crq_csv_headers($filters = [])
+	{
+		$sequence = $this->get_crq_question_sequence($filters);
+		$labels = array_map(function ($item) {
+			return (string) ($item['label'] ?? '');
+		}, $sequence);
+		return array_merge($this->result_csv_base_headers, $labels, ['Total Obtained']);
+	}
+
+	private function build_crq_export_sql(array $question_sequence, $filters = [], $limit = null, array $group_keys = [])
+	{
+		$where_sql = $this->assessment_export_where_sql('CRQ', $filters);
+		$source_tables = ['digital_papers_booklets1', 'digital_papers_booklets2', 'digital_papers_booklets3', 'digital_papers_booklets4'];
+		$group_keys_sql = $this->build_crq_group_keys_where_sql($group_keys);
+		if ($group_keys_sql !== '') {
+			$where_sql .= ' AND ' . $group_keys_sql;
+		}
+
+		$question_selects = [];
+		foreach ($question_sequence as $item) {
+			$question_id = (int) ($item['question_id'] ?? 0);
+			$label = strtolower((string) ($item['label'] ?? ''));
+			if ($question_id <= 0 || $label === '') {
+				continue;
+			}
+			$question_selects[] = "MAX(CASE WHEN q.id = {$question_id} THEN sm.marks_obtained END) AS `{$label}`";
+		}
+		$question_select_sql = empty($question_selects) ? '' : ",\n\t\t\t\t" . implode(",\n\t\t\t\t", $question_selects);
+
+		$limit_sql = '';
+		if ($limit !== null) {
+			$limit_sql = "\n\t\t\tLIMIT " . max(0, (int) $limit);
+		}
+
+		return "
+			SELECT
+				MAX(qi.paper_barcode) AS unique_identifier,
+				MAX(qi.school_id) AS school_id,
+				MAX(qi.roll_no) AS student_id,
+				COALESCE(
+					NULLIF(MAX(s.school_code), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_school_code END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_school_code END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_school_code END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_school_code END), ''),
+					NULLIF(MAX(s.school_lsacode), ''),
+					NULLIF(MAX(qi.lsacode), '')
+				) AS emis_code,
+				COALESCE(
+					NULLIF(MAX(s.school_name), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_school_name END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_school_name END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_school_name END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_school_name END), '')
+				) AS school_name,
+				COALESCE(
+					NULLIF(MAX(d.district_name_en), ''),
+					NULLIF(MAX(s.school_district), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_district END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_district END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_district END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_district END), '')
+				) AS district,
+				COALESCE(
+					NULLIF(MAX(t.tehsil_name_en), ''),
+					NULLIF(MAX(s.school_tehsil), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[0]}' THEN src1.paper_tehsil END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[1]}' THEN src2.paper_tehsil END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[2]}' THEN src3.paper_tehsil END), ''),
+					NULLIF(MAX(CASE WHEN qi.source_table = '{$source_tables[3]}' THEN src4.paper_tehsil END), '')
+				) AS tehsil,
+				MAX(s.username) AS school_admin,
+				MAX(s.school_level) AS school_level,
+				MAX(s.school_department) AS school_type,
+				MAX(s.school_gender) AS gender,
+				MAX(qi.grade) AS grade,
+				MAX(qi.source_paper_id) AS exam_id,
+				MAX(qi.subject_code) AS subject_code,
+				MAX(qi.version) AS version{$question_select_sql}
+			FROM emarking_question_images qi
+			INNER JOIN emarking_questions q ON q.id = qi.question_id
+			LEFT JOIN schools s ON s.school_id = qi.school_id
+			LEFT JOIN districts d ON d.district_id = s.school_district_id
+			LEFT JOIN tehsils t ON t.tehsil_id = s.school_tehsil_id
+			LEFT JOIN {$source_tables[0]} src1 ON qi.source_table = '{$source_tables[0]}' AND src1.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[1]} src2 ON qi.source_table = '{$source_tables[1]}' AND src2.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[2]} src3 ON qi.source_table = '{$source_tables[2]}' AND src3.paper_id = qi.source_paper_id
+			LEFT JOIN {$source_tables[3]} src4 ON qi.source_table = '{$source_tables[3]}' AND src4.paper_id = qi.source_paper_id
+			LEFT JOIN (
+				SELECT m1.question_image_id, m1.question_id, m1.marks_obtained
+				FROM emarking_marks m1
+				INNER JOIN (
+					SELECT
+						question_image_id,
+						question_id,
+						MAX(
+							CONCAT(
+								LPAD(COALESCE(is_final, 0), 1, '0'),
+								'|',
+								IFNULL(DATE_FORMAT(finalized_at, '%Y%m%d%H%i%s'), '00000000000000'),
+								'|',
+								IFNULL(DATE_FORMAT(marked_at, '%Y%m%d%H%i%s'), '00000000000000'),
+								'|',
+								LPAD(id, 12, '0')
+							)
+						) AS pick_key
+					FROM emarking_marks
+					GROUP BY question_image_id, question_id
+				) picked
+					ON picked.question_image_id = m1.question_image_id
+					AND picked.question_id = m1.question_id
+					AND CONCAT(
+						LPAD(COALESCE(m1.is_final, 0), 1, '0'),
+						'|',
+						IFNULL(DATE_FORMAT(m1.finalized_at, '%Y%m%d%H%i%s'), '00000000000000'),
+						'|',
+						IFNULL(DATE_FORMAT(m1.marked_at, '%Y%m%d%H%i%s'), '00000000000000'),
+						'|',
+						LPAD(m1.id, 12, '0')
+					) = picked.pick_key
+			) sm ON sm.question_image_id = qi.id AND sm.question_id = qi.question_id
+			WHERE {$where_sql}
+			GROUP BY qi.school_id, qi.roll_no, qi.subject_code, qi.version, qi.grade
+			ORDER BY MAX(qi.school_id) ASC, MAX(qi.roll_no) ASC{$limit_sql}
+		";
+	}
+
 	private function build_assessment_export_sql($assessment_type, array $question_labels, $filters = [], $limit = null)
 	{
 		$assessment_type = strtoupper(trim((string) $assessment_type));
@@ -1441,17 +1659,25 @@ class Emarking_report_model extends CI_Model
 
 	public function get_crq_csv_headers($filters = [])
 	{
-		return $this->get_assessment_csv_headers('CRQ', $filters);
+		return $this->build_crq_csv_headers($filters);
 	}
 
 	public function get_crq_csv_rows($filters = [], $limit = 50)
 	{
-		$question_labels = $this->get_assessment_question_labels('CRQ', $filters);
-		if (empty($question_labels)) {
+		$question_sequence = $this->get_crq_question_sequence($filters);
+		if (empty($question_sequence)) {
 			return [];
 		}
 
-		$sql = $this->build_assessment_export_sql('CRQ', $question_labels, $filters, $limit);
+		$group_keys = $this->get_crq_group_keys_page($filters, $limit, 0);
+		if (empty($group_keys)) {
+			return [];
+		}
+
+		$question_labels = array_map(function ($item) {
+			return (string) ($item['label'] ?? '');
+		}, $question_sequence);
+		$sql = $this->build_crq_export_sql($question_sequence, $filters, null, $group_keys);
 		$rows = $this->db->query($sql)->result_array();
 		$out = [];
 		foreach ($rows as $row) {
@@ -1462,12 +1688,15 @@ class Emarking_report_model extends CI_Model
 
 	public function stream_crq_csv_export($filters = [], callable $writer)
 	{
-		$question_labels = $this->get_assessment_question_labels('CRQ', $filters);
-		if (empty($question_labels)) {
+		$question_sequence = $this->get_crq_question_sequence($filters);
+		if (empty($question_sequence)) {
 			return;
 		}
 
-		$sql = $this->build_assessment_export_sql('CRQ', $question_labels, $filters, null);
+		$question_labels = array_map(function ($item) {
+			return (string) ($item['label'] ?? '');
+		}, $question_sequence);
+		$sql = $this->build_crq_export_sql($question_sequence, $filters, null);
 		$mysqli = $this->db->conn_id;
 		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
 		if ($result === false) {

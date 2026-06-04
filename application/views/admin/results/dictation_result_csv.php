@@ -44,7 +44,7 @@ $subjectName = function ($code) {
         </div>
       </div>
       <div class="card-body">
-        <form method="get" action="<?php echo base_url('admin/emarking/reports_dictation_csv'); ?>" class="mb-3">
+        <form method="get" action="<?php echo base_url('admin/emarking/reports_dictation_csv'); ?>" class="mb-3" id="dictation-filter-form">
           <div class="form-row">
             <div class="col-md-2 mb-2">
               <select name="grade" class="form-control">
@@ -97,7 +97,7 @@ $subjectName = function ($code) {
               <a href="<?php echo base_url('admin/emarking/reports_dictation_csv'); ?>" class="btn btn-outline-secondary btn-block">Reset</a>
             </div>
             <div class="col-md-3 mb-2">
-              <a href="<?php echo base_url('admin/emarking/export_dictation_results_csv?' . http_build_query($filters ?? [])); ?>" class="btn btn-primary btn-block">Export CSV</a>
+              <a href="<?php echo base_url('admin/emarking/export_dictation_results_csv?' . http_build_query($filters ?? [])); ?>" class="btn btn-primary btn-block" id="dictation-export-link">Export CSV</a>
             </div>
           </div>
         </form>
@@ -149,3 +149,18 @@ $subjectName = function ($code) {
 </section>
 
 <?php include viewPath('admin/includes/footer'); ?>
+
+<script>
+  (function () {
+    var exportLink = document.getElementById('dictation-export-link');
+    var filterForm = document.getElementById('dictation-filter-form');
+    if (!exportLink || !filterForm) {
+      return;
+    }
+
+    exportLink.addEventListener('click', function () {
+      var params = new URLSearchParams(new FormData(filterForm));
+      exportLink.href = '<?php echo base_url('admin/emarking/export_dictation_results_csv'); ?>?' + params.toString();
+    });
+  })();
+</script>
