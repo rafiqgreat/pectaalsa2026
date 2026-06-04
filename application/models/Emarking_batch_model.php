@@ -92,7 +92,7 @@ class Emarking_batch_model extends CI_Model
 
 	private function transferable_statuses()
 	{
-		return ['PENDING', 'IN_PROGRESS'];
+		return ['PENDING', 'IN_PROGRESS', 'COMPLETED'];
 	}
 
 	private function get_subject_specialization_name($subject_code)
@@ -322,7 +322,7 @@ class Emarking_batch_model extends CI_Model
 
 		$current_status = strtoupper((string) ($batch->status ?? ''));
 		if (!in_array($current_status, $this->transferable_statuses(), true)) {
-			return ['ok' => false, 'error' => 'Only pending/in-progress batches can be transferred'];
+			return ['ok' => false, 'error' => 'Only pending, in-progress, or completed batches can be transferred'];
 		}
 
 		if ($new_emarker_id <= 0) {
@@ -344,6 +344,22 @@ class Emarking_batch_model extends CI_Model
 
 		$this->db->trans_begin();
 		$new_deadline = $this->transfer_reset_deadline();
+		$is_completed_transfer = ($current_status === 'COMPLETED');
+
+		if ($is_completed_transfer) {
+			$conflict_count = (int) $this->db->select('COUNT(*) AS cnt', false)
+				->from('emarking_marks m')
+				->join('emarking_batch_items bi', 'bi.id = m.batch_item_id', 'inner')
+				->where('bi.batch_id', $batch_id)
+				->where('m.emarker_id', $new_emarker_id)
+				->get()
+				->row('cnt');
+
+			if ($conflict_count > 0) {
+				$this->db->trans_rollback();
+				return ['ok' => false, 'error' => 'Selected eMarker already has marked records for this completed batch'];
+			}
+		}
 
 		// Keep status unchanged, reassign the owner, and refresh deadline for the new assignee.
 		$this->db->where('id', $batch_id);
@@ -355,7 +371,26 @@ class Emarking_batch_model extends CI_Model
 
 		if ($this->db->affected_rows() !== 1) {
 			$this->db->trans_rollback();
-			return ['ok' => false, 'error' => 'Only pending/in-progress batches can be transferred'];
+			return ['ok' => false, 'error' => 'Only pending, in-progress, or completed batches can be transferred'];
+		}
+
+		if ($is_completed_transfer) {
+			$this->db->where('batch_id', $batch_id);
+			$batch_item_ids = array_map('intval', array_column((array) $this->db->get('emarking_batch_items')->result_array(), 'id'));
+
+			if (!empty($batch_item_ids)) {
+				$this->db->where_in('batch_item_id', $batch_item_ids);
+				$this->db->where('emarker_id', (int) $batch->assigned_to);
+				$this->db->update('emarking_marks', [
+					'emarker_id' => $new_emarker_id,
+				]);
+
+				$err = $this->db->error();
+				if (!empty($err['code'])) {
+					$this->db->trans_rollback();
+					return ['ok' => false, 'error' => 'Unable to transfer marked records for this completed batch'];
+				}
+			}
 		}
 
 		// Record every transfer so reassignment remains auditable.

@@ -78,7 +78,15 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
           <label for="password" class="block font-bold text-gray-700 mb-2">Password:</label>
           <input type="password" id="password" name="password" class="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" required>
           <?php echo form_error('password', '<span style="display:block" class="error invalid-feedback">', '</span>'); ?>
-        </div class="pl-10 pr-10">
+        </div>
+
+        <?php if (setting('google_recaptcha_enabled') == '1'): ?>
+          <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+          <div class="pl-10 pr-10">
+            <div class="g-recaptcha" data-sitekey="<?php echo setting('google_recaptcha_sitekey'); ?>"></div>
+            <?php echo form_error('g-recaptcha-response', '<span style="display:block" class="error invalid-feedback">', '</span>'); ?>
+          </div>
+        <?php endif; ?>
 
         <!-- Login Button -->
         <div class="pl-10 pr-10 mt-4">
@@ -185,4 +193,4 @@ defined('BASEPATH') or exit('No direct script access allowed');  ?>
 <!-- /.login-box -->
 
 
-<?php include viewPath('admin/includes/footer'); ?>
+<?php include viewPath('admin/account/includes/footer'); ?>
