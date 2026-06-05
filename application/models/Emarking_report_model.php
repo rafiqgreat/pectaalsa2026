@@ -206,7 +206,8 @@ class Emarking_report_model extends CI_Model
 				COALESCE(sch.username, '') AS school_admin,
 				COALESCE(sch.school_level, '') AS school_level,
 				COALESCE(sch.school_department, '') AS school_type,
-				COALESCE(NULLIF(TRIM(src.Gender), ''), sch.school_gender, '') AS gender,
+				COALESCE(sch.school_gender, '') AS school_gender,
+				TRIM(COALESCE(src.Gender, '')) AS source_gender,
 				{$grade_expr} AS grade,
 				'' AS subject_taught{$question_select_sql},
 				{$version_expr} AS version
@@ -232,8 +233,8 @@ class Emarking_report_model extends CI_Model
 			'Tehsil' => (string) ($row['tehsil'] ?? ''),
 			'School Admin' => (string) ($row['school_type'] ?? ''),
 			'School Level' => (string) ($row['school_level'] ?? ''),
-			'School Type' => (string) ($row['gender'] ?? ''),
-			'Gender' => '',
+			'School Type' => (string) ($row['school_gender'] ?? ''),
+			'Gender' => (string) ($row['source_gender'] ?? ''),
 			'Grade' => (string) ($row['grade'] ?? ''),
 			'Subject Taught (if teacher)' => (string) ($row['subject_taught'] ?? ''),
 		];
