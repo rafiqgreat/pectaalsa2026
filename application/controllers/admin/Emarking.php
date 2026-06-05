@@ -1456,6 +1456,17 @@ class Emarking extends MY_Controller
 		];
 	}
 
+	private function mcq_crq_csv_filters_from_get()
+	{
+		return [
+			'grade' => trim((string) $this->input->get('grade', true)),
+			'subject_code' => trim((string) $this->input->get('subject_code', true)),
+			'version' => trim((string) $this->input->get('version', true)),
+			'district_id' => trim((string) $this->input->get('district_id', true)),
+			'school_query' => trim((string) $this->input->get('school_query', true)),
+		];
+	}
+
 	private function bq_csv_filters_from_get()
 	{
 		return [
@@ -2354,7 +2365,6 @@ class Emarking extends MY_Controller
 				'Exam ID',
 				'Subject',
 				'Version',
-				'Obtained Marks in Each Question',
 			];
 		$this->page_data['preview_rows'] = $this->page_data['show_preview']
 			? $this->emarking_report->get_mcq_csv_rows($filters, 50)
@@ -2388,6 +2398,108 @@ class Emarking extends MY_Controller
 		fputcsv($out, $headers);
 		$row_count = 0;
 		$this->emarking_report->stream_mcq_csv_export($filters, function ($row) use ($out, $headers, &$row_count) {
+			$line = [];
+			foreach ($headers as $header_text) {
+				$line[] = (string) ($row[$header_text] ?? '');
+			}
+			fputcsv($out, $line);
+			$row_count++;
+
+			if (($row_count % 500) === 0) {
+				if (function_exists('ob_get_level')) {
+					while (ob_get_level() > 0) {
+						@ob_end_flush();
+					}
+				}
+				flush();
+			}
+		});
+
+		fclose($out);
+		die;
+	}
+
+	public function reports_mcq_crq_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'mcq_crq_csv';
+		$this->page_data['page']->title = 'MCQ+CRQ Result CSV';
+
+		$filters = $this->mcq_crq_csv_filters_from_get();
+		if ($filters['grade'] === '') {
+			$filters['grade'] = '4';
+		}
+
+		$this->load->model('admin/Location_model', 'location_model');
+		$this->page_data['filters'] = $filters;
+		$this->page_data['subject_options'] = [
+			1 => 'ENGLISH',
+			2 => 'URDU',
+			3 => 'MATH',
+			4 => 'SCIENCE',
+		];
+		$this->page_data['districts'] = $this->location_model->get_districts();
+		$this->page_data['version_options'] = ['1', '2'];
+		$this->page_data['show_preview'] = $this->dictation_csv_has_narrowing_filters($filters);
+		$this->page_data['csv_headers'] = $this->page_data['show_preview']
+			? $this->emarking_report->get_mcq_crq_csv_headers($filters)
+			: [
+				'Unique Identifier',
+				'School ID',
+				'Student ID',
+				'EMIS Code',
+				'School Name',
+				'District',
+				'Tehsil',
+				'School Admin',
+				'School Level',
+				'School Type',
+				'Gender',
+				'Grade',
+				'Exam ID',
+				'Subject',
+				'Version',
+				'MCQs Total',
+				'CRQs Total',
+				'Total Obtained Marks',
+			];
+		$this->page_data['preview_rows'] = $this->page_data['show_preview']
+			? $this->emarking_report->get_mcq_crq_csv_rows($filters, 50)
+			: [];
+
+		$this->load->view('admin/results/mcq_crq_result_csv', $this->page_data);
+	}
+
+	public function export_mcq_crq_results_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$filters = $this->mcq_crq_csv_filters_from_get();
+		$headers = $this->emarking_report->get_mcq_crq_csv_headers($filters);
+		$filename = 'mcq_crq_results_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+		$row_count = 0;
+		$this->emarking_report->stream_mcq_crq_csv_export($filters, function ($row) use ($out, $headers, &$row_count) {
 			$line = [];
 			foreach ($headers as $header_text) {
 				$line[] = (string) ($row[$header_text] ?? '');

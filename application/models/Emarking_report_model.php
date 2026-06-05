@@ -20,7 +20,6 @@ class Emarking_report_model extends CI_Model
 		'Exam ID',
 		'Subject',
 		'Version',
-		'Obtained Marks in Each Question',
 		'Q1',
 		'Q2',
 		'Q3',
@@ -44,7 +43,6 @@ class Emarking_report_model extends CI_Model
 		'Exam ID',
 		'Subject',
 		'Version',
-		'Obtained Marks in Each Question',
 	];
 	private $bq_csv_base_headers = [
 		'Unique Identifier',
@@ -73,7 +71,8 @@ class Emarking_report_model extends CI_Model
 			'sheet_07',
 			'sheet_08',
 			'sheet_09',
-			'sheet_1011',
+			'sheet_10',
+			'sheet_11',
 		];
 	}
 
@@ -225,16 +224,16 @@ class Emarking_report_model extends CI_Model
 	{
 		$out = [
 			'Unique Identifier' => (string) ($row['unique_identifier'] ?? ''),
-			'School ID' => (string) ($row['school_id'] ?? ''),
+			'School ID' => (string) ($row['school_admin'] ?? ''),
 			'Student / Teacher ID' => (string) ($row['student_teacher_id'] ?? ''),
 			'EMIS Code' => (string) ($row['emis_code'] ?? ''),
 			'School Name' => (string) ($row['school_name'] ?? ''),
 			'District' => (string) ($row['district'] ?? ''),
 			'Tehsil' => (string) ($row['tehsil'] ?? ''),
-			'School Admin' => (string) ($row['school_admin'] ?? ''),
+			'School Admin' => (string) ($row['school_type'] ?? ''),
 			'School Level' => (string) ($row['school_level'] ?? ''),
-			'School Type' => (string) ($row['school_type'] ?? ''),
-			'Gender' => (string) ($row['gender'] ?? ''),
+			'School Type' => (string) ($row['gender'] ?? ''),
+			'Gender' => '',
 			'Grade' => (string) ($row['grade'] ?? ''),
 			'Subject Taught (if teacher)' => (string) ($row['subject_taught'] ?? ''),
 		];
@@ -355,10 +354,62 @@ class Emarking_report_model extends CI_Model
 		return implode(' AND ', $where);
 	}
 
-	private function build_mcq_export_sql($filters = [])
+	private function student_group_key_from_parts($school_id, $student_id, $subject_code, $version, $grade)
+	{
+		return implode('|', [
+			trim((string) $school_id),
+			trim((string) $student_id),
+			trim((string) $subject_code),
+			trim((string) $version),
+			trim((string) $grade),
+		]);
+	}
+
+	private function mcq_group_key_from_row(array $row)
+	{
+		return $this->student_group_key_from_parts(
+			$row['school_id'] ?? '',
+			$row['student_id'] ?? '',
+			$row['subject_code'] ?? '',
+			$row['version'] ?? '',
+			$row['grade'] ?? ''
+		);
+	}
+
+	private function build_mcq_group_keys_where_sql(array $group_keys)
+	{
+		$clauses = [];
+		foreach ($group_keys as $key) {
+			$school_id = array_key_exists('school_id', $key) && $key['school_id'] !== null ? (int) $key['school_id'] : null;
+			$student_id = array_key_exists('student_id', $key) ? trim((string) $key['student_id']) : '';
+			$subject_code = array_key_exists('subject_code', $key) ? trim((string) $key['subject_code']) : '';
+			$version = array_key_exists('version', $key) && $key['version'] !== null ? (int) $key['version'] : null;
+			$grade = array_key_exists('grade', $key) && $key['grade'] !== null ? (int) $key['grade'] : null;
+
+			$clauses[] = '('
+				. ($school_id === null ? 'src.school_id IS NULL' : ('src.school_id = ' . $school_id))
+				. ' AND '
+				. 'src.student_id = ' . $this->db->escape($student_id)
+				. ' AND '
+				. 'src.subject_code = ' . $this->db->escape($subject_code)
+				. ' AND '
+				. ($version === null ? 'src.version IS NULL' : ('src.version = ' . $version))
+				. ' AND '
+				. ($grade === null ? 'src.grade IS NULL' : ('src.grade = ' . $grade))
+				. ')';
+		}
+
+		return empty($clauses) ? '' : '(' . implode(' OR ', $clauses) . ')';
+	}
+
+	private function build_mcq_export_sql($filters = [], array $group_keys = [])
 	{
 		$where_sql = $this->mcq_export_where_sql($filters);
 		$source_union_sql = $this->mcq_source_union_sql($filters);
+		$group_keys_sql = $this->build_mcq_group_keys_where_sql($group_keys);
+		if ($group_keys_sql !== '') {
+			$where_sql .= ' AND ' . $group_keys_sql;
+		}
 
 		return "
 			SELECT
@@ -442,17 +493,6 @@ class Emarking_report_model extends CI_Model
 		return $labels;
 	}
 
-	private function mcq_group_key_from_row(array $row)
-	{
-		return implode('|', [
-			trim((string) ($row['school_id'] ?? '')),
-			trim((string) ($row['student_id'] ?? '')),
-			trim((string) ($row['subject_code'] ?? '')),
-			trim((string) ($row['version'] ?? '')),
-			trim((string) ($row['grade'] ?? '')),
-		]);
-	}
-
 	private function build_mcq_base_row(array $row)
 	{
 		$district = trim((string) ($row['district_name_en'] ?? ''));
@@ -487,23 +527,12 @@ class Emarking_report_model extends CI_Model
 			'Exam ID' => trim((string) ($row['paper_id'] ?? '')),
 			'Subject' => $this->dictation_subject_name($row['subject_code'] ?? ''),
 			'Version' => trim((string) ($row['version'] ?? '')),
-			'Obtained Marks in Each Question' => '',
 		];
 	}
 
 	private function build_mcq_row_from_accumulator(array $current, array $question_labels)
 	{
-		$parts = [];
-		foreach ($question_labels as $label) {
-			$value = trim((string) ($current['questions'][$label] ?? ''));
-			if ($value === '') {
-				continue;
-			}
-			$parts[] = $label . '=' . $value;
-		}
-
 		$row = $current['base'];
-		$row['Obtained Marks in Each Question'] = implode(', ', $parts);
 		foreach ($question_labels as $label) {
 			$row[$label] = (string) ($current['questions'][$label] ?? '');
 		}
@@ -514,12 +543,12 @@ class Emarking_report_model extends CI_Model
 			}
 		}
 
-		return $row;
+		return $this->apply_non_bq_result_field_mapping($row);
 	}
 
-	private function collect_mcq_rows($filters = [], $limit = null, $question_labels_only = false)
+	private function collect_mcq_rows($filters = [], $limit = null, $question_labels_only = false, array $group_keys = [])
 	{
-		$sql = $this->build_mcq_export_sql($filters);
+		$sql = $this->build_mcq_export_sql($filters, $group_keys);
 		$mysqli = $this->db->conn_id;
 		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
 		if ($result === false) {
@@ -643,6 +672,43 @@ class Emarking_report_model extends CI_Model
 		];
 		$code = trim((string) $subject_code);
 		return $map[$code] ?? $code;
+	}
+
+	private function apply_non_bq_result_field_mapping(array $row)
+	{
+		$row['School ID'] = trim((string) ($row['School Admin'] ?? ''));
+		$row['School Admin'] = trim((string) ($row['School Type'] ?? ''));
+		$row['School Type'] = trim((string) ($row['Gender'] ?? ''));
+		$row['Gender'] = '';
+		$row['Exam ID'] = 'LSA-4';
+		return $row;
+	}
+
+	private function subject_sort_rank($subject)
+	{
+		$subject = trim((string) $subject);
+		$map = [
+			'1' => 1,
+			'ENGLISH' => 1,
+			'ENGLISH ' => 1,
+			'2' => 2,
+			'URDU' => 2,
+			'3' => 3,
+			'MATH' => 3,
+			'4' => 4,
+			'SCIENCE' => 4,
+		];
+
+		$key = strtoupper($subject);
+		if (isset($map[$key])) {
+			return $map[$key];
+		}
+
+		if (ctype_digit($subject)) {
+			return (int) $subject;
+		}
+
+		return 999;
 	}
 
 	private function format_mark_value($value)
@@ -772,9 +838,9 @@ class Emarking_report_model extends CI_Model
 		return array_merge($this->result_csv_base_headers, $question_labels, ['Total Obtained']);
 	}
 
-	private function get_crq_question_sequence($filters = [])
+	private function get_crq_question_sequences($filters = [])
 	{
-		$this->db->select('q.id, q.page_no, q.question_no');
+		$this->db->select('q.id, q.grade, q.subject_code, q.version, q.page_no, q.question_no');
 		$this->db->from('emarking_questions q');
 		$this->db->where('q.assessment_type', 'CRQ');
 
@@ -785,26 +851,56 @@ class Emarking_report_model extends CI_Model
 		$version = trim((string) ($filters['version'] ?? ''));
 		if ($version !== '') $this->db->where('q.version', (int) $version);
 
+		$this->db->order_by('q.grade', 'ASC');
+		$this->db->order_by('q.subject_code', 'ASC');
+		$this->db->order_by('q.version', 'ASC');
 		$this->db->order_by('CAST(COALESCE(NULLIF(q.page_no, \'\'), \'0\') AS UNSIGNED)', 'ASC', false);
 		$this->db->order_by('CAST(REPLACE(UPPER(q.question_no), \'Q\', \'\') AS UNSIGNED)', 'ASC', false);
 		$this->db->order_by('q.id', 'ASC');
 
 		$rows = $this->db->get()->result();
-		$out = [];
-		$seq = 1;
+		$sequences = [];
 		foreach ($rows as $row) {
-			$qid = (int) ($row->id ?? 0);
-			if ($qid <= 0) {
+			$question_id = (int) ($row->id ?? 0);
+			if ($question_id <= 0) {
 				continue;
 			}
-			$out[] = [
-				'question_id' => $qid,
-				'label' => 'Q' . $seq,
-			];
-			$seq++;
+			$key = implode('|', [
+				(int) ($row->grade ?? 0),
+				trim((string) ($row->subject_code ?? '')),
+				(int) ($row->version ?? 0),
+			]);
+			if (!isset($sequences[$key])) {
+				$sequences[$key] = [
+					'grade' => (int) ($row->grade ?? 0),
+					'subject_code' => trim((string) ($row->subject_code ?? '')),
+					'version' => (int) ($row->version ?? 0),
+					'question_ids' => [],
+				];
+			}
+			$sequences[$key]['question_ids'][] = $question_id;
 		}
 
-		return $out;
+		return $sequences;
+	}
+
+	private function get_crq_question_labels($filters = [])
+	{
+		$sequences = $this->get_crq_question_sequences($filters);
+		$max_count = 0;
+		foreach ($sequences as $sequence) {
+			$count = count($sequence['question_ids'] ?? []);
+			if ($count > $max_count) {
+				$max_count = $count;
+			}
+		}
+
+		$labels = [];
+		for ($i = 1; $i <= $max_count; $i++) {
+			$labels[] = 'Q' . $i;
+		}
+
+		return $labels;
 	}
 
 	private function get_crq_group_keys_page($filters = [], $limit = 50, $offset = 0)
@@ -842,7 +938,9 @@ class Emarking_report_model extends CI_Model
 		$clauses = [];
 		foreach ($group_keys as $key) {
 			$school_id = array_key_exists('school_id', $key) && $key['school_id'] !== null ? (int) $key['school_id'] : null;
-			$roll_no = array_key_exists('roll_no', $key) ? trim((string) $key['roll_no']) : '';
+			$roll_no = array_key_exists('roll_no', $key)
+				? trim((string) $key['roll_no'])
+				: trim((string) ($key['student_id'] ?? ''));
 			$subject_code = array_key_exists('subject_code', $key) ? trim((string) $key['subject_code']) : '';
 			$version = array_key_exists('version', $key) && $key['version'] !== null ? (int) $key['version'] : null;
 			$grade = array_key_exists('grade', $key) && $key['grade'] !== null ? (int) $key['grade'] : null;
@@ -865,14 +963,11 @@ class Emarking_report_model extends CI_Model
 
 	private function build_crq_csv_headers($filters = [])
 	{
-		$sequence = $this->get_crq_question_sequence($filters);
-		$labels = array_map(function ($item) {
-			return (string) ($item['label'] ?? '');
-		}, $sequence);
+		$labels = $this->get_crq_question_labels($filters);
 		return array_merge($this->result_csv_base_headers, $labels, ['Total Obtained']);
 	}
 
-	private function build_crq_export_sql(array $question_sequence, $filters = [], $limit = null, array $group_keys = [])
+	private function build_crq_export_sql(array $question_sequences, $filters = [], $limit = null, array $group_keys = [])
 	{
 		$where_sql = $this->assessment_export_where_sql('CRQ', $filters);
 		$source_tables = ['digital_papers_booklets1', 'digital_papers_booklets2', 'digital_papers_booklets3', 'digital_papers_booklets4'];
@@ -882,13 +977,27 @@ class Emarking_report_model extends CI_Model
 		}
 
 		$question_selects = [];
-		foreach ($question_sequence as $item) {
-			$question_id = (int) ($item['question_id'] ?? 0);
-			$label = strtolower((string) ($item['label'] ?? ''));
-			if ($question_id <= 0 || $label === '') {
+		$max_questions = 0;
+		foreach ($question_sequences as $sequence) {
+			$count = count($sequence['question_ids'] ?? []);
+			if ($count > $max_questions) {
+				$max_questions = $count;
+			}
+		}
+
+		for ($index = 0; $index < $max_questions; $index++) {
+			$question_ids = [];
+			foreach ($question_sequences as $sequence) {
+				$id = (int) ($sequence['question_ids'][$index] ?? 0);
+				if ($id > 0) {
+					$question_ids[$id] = $id;
+				}
+			}
+			if (empty($question_ids)) {
 				continue;
 			}
-			$question_selects[] = "MAX(CASE WHEN q.id = {$question_id} THEN sm.marks_obtained END) AS `{$label}`";
+			$label = 'q' . ($index + 1);
+			$question_selects[] = "MAX(CASE WHEN q.id IN (" . implode(', ', $question_ids) . ") THEN sm.marks_obtained END) AS `{$label}`";
 		}
 		$question_select_sql = empty($question_selects) ? '' : ",\n\t\t\t\t" . implode(",\n\t\t\t\t", $question_selects);
 
@@ -1137,9 +1246,8 @@ class Emarking_report_model extends CI_Model
 			}
 		}
 
-		$out['Obtained Marks in Each Question'] = implode(', ', $parts);
 		$out['Total Obtained'] = $this->format_mark_value($total);
-		return $out;
+		return $this->apply_non_bq_result_field_mapping($out);
 	}
 
 	private function dictation_export_where_sql($filters = [])
@@ -1418,7 +1526,6 @@ class Emarking_report_model extends CI_Model
 					'Exam ID' => (string) ($row['source_paper_id'] ?? ''),
 					'Subject' => $this->dictation_subject_name($row['subject_code'] ?? ''),
 					'Version' => (string) ($row['version'] ?? ''),
-					'Obtained Marks in Each Question' => '',
 					'Q1' => '',
 					'Q2' => '',
 					'Q3' => '',
@@ -1438,16 +1545,14 @@ class Emarking_report_model extends CI_Model
 
 		$out = [];
 		foreach ($papers as $paper) {
-			$parts = [];
 			$total = 0.0;
 			foreach (['Q1', 'Q2', 'Q3', 'Q4', 'Q5'] as $qcol) {
 				$raw = trim((string) ($paper[$qcol] ?? ''));
 				if ($raw === '') continue;
-				$parts[] = $qcol . '=' . $raw;
 				$total += (float) $raw;
 			}
-			$paper['Obtained Marks in Each Question'] = implode(', ', $parts);
 			$paper['Total Obtained'] = $this->format_mark_value($total);
+			$paper = $this->apply_non_bq_result_field_mapping($paper);
 
 			$row = [];
 			foreach ($this->dictation_csv_headers as $header) {
@@ -1643,7 +1748,6 @@ class Emarking_report_model extends CI_Model
 					'Exam ID' => (string) ($row['exam_id'] ?? ''),
 					'Subject' => $this->dictation_subject_name($row['subject_code'] ?? ''),
 					'Version' => (string) ($row['version'] ?? ''),
-					'Obtained Marks in Each Question' => implode(', ', $parts),
 					'Q1' => $q1,
 					'Q2' => $q2,
 					'Q3' => $q3,
@@ -1662,10 +1766,303 @@ class Emarking_report_model extends CI_Model
 		return $this->build_crq_csv_headers($filters);
 	}
 
+	private function get_mcq_crq_question_labels($filters = [])
+	{
+		$mcq_labels = $this->get_mcq_question_labels($filters);
+		$crq_labels = $this->get_crq_question_labels($filters);
+		$total_count = count($mcq_labels) + count($crq_labels);
+		$labels = [];
+		for ($i = 1; $i <= $total_count; $i++) {
+			$labels[] = 'Q' . $i;
+		}
+		return [
+			'mcq_labels' => $mcq_labels,
+			'crq_labels' => $crq_labels,
+			'merged_labels' => $labels,
+		];
+	}
+
+	private function get_mcq_crq_preview_group_keys($filters = [], $limit = 50)
+	{
+		$limit = max(1, (int) $limit);
+		$mcq_where_sql = $this->mcq_export_where_sql($filters);
+		$mcq_source_union_sql = $this->mcq_source_union_sql($filters);
+		$crq_where_sql = $this->assessment_export_where_sql('CRQ', $filters);
+		$source_tables = ['digital_papers_booklets1', 'digital_papers_booklets2', 'digital_papers_booklets3', 'digital_papers_booklets4'];
+
+		$sql = "
+			SELECT
+				combined.school_id,
+				combined.student_id,
+				combined.subject_code,
+				combined.version,
+				combined.grade
+			FROM (
+				SELECT DISTINCT
+					src.school_id,
+					TRIM(COALESCE(src.student_id, '')) AS student_id,
+					TRIM(COALESCE(src.subject_code, '')) AS subject_code,
+					src.version,
+					src.grade
+				FROM ({$mcq_source_union_sql}) src
+				INNER JOIN crq_mcq_results r ON r.barcode = src.paper_barcode
+				LEFT JOIN schools s ON s.school_id = src.school_id
+				WHERE {$mcq_where_sql}
+
+				UNION
+
+				SELECT DISTINCT
+					qi.school_id,
+					TRIM(COALESCE(qi.roll_no, '')) AS student_id,
+					TRIM(COALESCE(qi.subject_code, '')) AS subject_code,
+					qi.version,
+					qi.grade
+				FROM emarking_question_images qi
+				INNER JOIN emarking_questions q ON q.id = qi.question_id
+				LEFT JOIN schools s ON s.school_id = qi.school_id
+				LEFT JOIN {$source_tables[0]} src1 ON qi.source_table = '{$source_tables[0]}' AND src1.paper_id = qi.source_paper_id
+				LEFT JOIN {$source_tables[1]} src2 ON qi.source_table = '{$source_tables[1]}' AND src2.paper_id = qi.source_paper_id
+				LEFT JOIN {$source_tables[2]} src3 ON qi.source_table = '{$source_tables[2]}' AND src3.paper_id = qi.source_paper_id
+				LEFT JOIN {$source_tables[3]} src4 ON qi.source_table = '{$source_tables[3]}' AND src4.paper_id = qi.source_paper_id
+				WHERE {$crq_where_sql}
+			) combined
+			WHERE combined.student_id <> ''
+			ORDER BY
+				CAST(COALESCE(NULLIF(combined.subject_code, ''), '999') AS UNSIGNED) ASC,
+				COALESCE(combined.version, 0) ASC,
+				COALESCE(combined.school_id, 0) ASC,
+				combined.student_id ASC,
+				COALESCE(combined.grade, 0) ASC
+			LIMIT {$limit}
+		";
+
+		return $this->db->query($sql)->result_array();
+	}
+
+	private function collect_all_crq_csv_rows($filters = [], array $group_keys = [])
+	{
+		$question_sequences = $this->get_crq_question_sequences($filters);
+		if (empty($question_sequences)) {
+			return [];
+		}
+
+		$question_labels = $this->get_crq_question_labels($filters);
+		$sql = $this->build_crq_export_sql($question_sequences, $filters, null, $group_keys);
+		$mysqli = $this->db->conn_id;
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			throw new RuntimeException('Unable to query CRQ CSV export rows: ' . $mysqli->error);
+		}
+
+		$rows = [];
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$rows[] = $this->build_assessment_csv_row_from_sql_row($row, $question_labels);
+			}
+		} finally {
+			$result->free();
+		}
+
+		return $rows;
+	}
+
+	private function merge_mcq_crq_csv_rows(array $mcq_rows, array $crq_rows, array $merged_question_labels, array $mcq_labels)
+	{
+		$rows = [];
+		$order = [];
+		$mcq_question_count = count($mcq_labels);
+		$crq_question_count = max(0, count($merged_question_labels) - $mcq_question_count);
+
+		$row_group_key = function (array $row) {
+			return $this->student_group_key_from_parts(
+				$row['School ID'] ?? '',
+				$row['Student ID'] ?? '',
+				trim((string) ($row['Subject'] ?? '')),
+				$row['Version'] ?? '',
+				$row['Grade'] ?? ''
+			);
+		};
+
+		$ensure_row = function ($key, $display_identifier) use (&$rows, &$order, $merged_question_labels) {
+			if (isset($rows[$key])) {
+				return;
+			}
+
+			$row = [];
+			foreach ($this->result_csv_base_headers as $header) {
+				$row[$header] = '';
+			}
+			$row['Unique Identifier'] = $display_identifier;
+			foreach ($merged_question_labels as $label) {
+				$row[$label] = '';
+			}
+			$row['Total Obtained'] = '';
+			$rows[$key] = $row;
+			$order[] = $key;
+		};
+
+		$merge_base_fields = function ($key, array $source_row) use (&$rows) {
+			foreach ($this->result_csv_base_headers as $header) {
+				$current = trim((string) ($rows[$key][$header] ?? ''));
+				$incoming = (string) ($source_row[$header] ?? '');
+				if ($current === '' && trim($incoming) !== '') {
+					$rows[$key][$header] = $incoming;
+				}
+			}
+		};
+
+		foreach ($mcq_rows as $index => $row) {
+			$identifier = (string) ($row['Unique Identifier'] ?? '');
+			$key = $row_group_key($row);
+			if ($key === '||||') {
+				$key = trim($identifier) !== '' ? ('mcq-uid:' . $identifier) : ('mcq-empty:' . $index);
+			}
+			$ensure_row($key, $identifier);
+			$merge_base_fields($key, $row);
+			foreach ($mcq_labels as $label) {
+				$rows[$key][$label] = (string) ($row[$label] ?? '');
+			}
+		}
+
+		foreach ($crq_rows as $index => $row) {
+			$identifier = (string) ($row['Unique Identifier'] ?? '');
+			$key = $row_group_key($row);
+			if ($key === '||||') {
+				$key = trim($identifier) !== '' ? ('crq-uid:' . $identifier) : ('crq-empty:' . $index);
+			}
+			$ensure_row($key, $identifier);
+			$merge_base_fields($key, $row);
+
+			$crq_question_index = 1;
+			while (array_key_exists('Q' . $crq_question_index, $row)) {
+				$merged_label = 'Q' . ($mcq_question_count + $crq_question_index);
+				if (array_key_exists($merged_label, $rows[$key])) {
+					$rows[$key][$merged_label] = (string) ($row['Q' . $crq_question_index] ?? '');
+				}
+				$crq_question_index++;
+			}
+		}
+
+		$merged_rows = [];
+		foreach ($order as $key) {
+			$row = $rows[$key];
+			$mcq_total = 0.0;
+			$crq_total = 0.0;
+			foreach ($merged_question_labels as $index => $label) {
+				$value = trim((string) ($row[$label] ?? ''));
+				if ($value === '') {
+					continue;
+				}
+				if ($index < $mcq_question_count) {
+					$mcq_total += (float) $value;
+				} else {
+					$crq_total += (float) $value;
+				}
+			}
+			$row['School ID'] = trim((string) ($row['School Admin'] ?? ''));
+			$row['School Admin'] = trim((string) ($row['School Type'] ?? ''));
+			$row['School Type'] = trim((string) ($row['Gender'] ?? ''));
+			$row['Gender'] = '';
+			$row['Exam ID'] = 'LSA-4';
+			$row['MCQs Total'] = $this->format_mark_value($mcq_total);
+			$row['CRQs Total'] = $this->format_mark_value($crq_total);
+			$row['Total Obtained Marks'] = $this->format_mark_value($mcq_total + $crq_total);
+			$merged_rows[] = $row;
+		}
+
+		usort($merged_rows, function ($left, $right) {
+			$leftSubject = $this->subject_sort_rank($left['Subject'] ?? '');
+			$rightSubject = $this->subject_sort_rank($right['Subject'] ?? '');
+			if ($leftSubject !== $rightSubject) {
+				return $leftSubject <=> $rightSubject;
+			}
+
+			$leftVersion = (int) ($left['Version'] ?? 0);
+			$rightVersion = (int) ($right['Version'] ?? 0);
+			if ($leftVersion !== $rightVersion) {
+				return $leftVersion <=> $rightVersion;
+			}
+
+			$leftSchool = (int) ($left['School ID'] ?? 0);
+			$rightSchool = (int) ($right['School ID'] ?? 0);
+			if ($leftSchool !== $rightSchool) {
+				return $leftSchool <=> $rightSchool;
+			}
+
+			$leftStudent = trim((string) ($left['Student ID'] ?? ''));
+			$rightStudent = trim((string) ($right['Student ID'] ?? ''));
+			if ($leftStudent !== $rightStudent) {
+				return strcmp($leftStudent, $rightStudent);
+			}
+
+			$leftGrade = (int) ($left['Grade'] ?? 0);
+			$rightGrade = (int) ($right['Grade'] ?? 0);
+			if ($leftGrade !== $rightGrade) {
+				return $leftGrade <=> $rightGrade;
+			}
+
+			return strcmp(
+				trim((string) ($left['Unique Identifier'] ?? '')),
+				trim((string) ($right['Unique Identifier'] ?? ''))
+			);
+		});
+
+		return $merged_rows;
+	}
+
+	public function get_mcq_crq_csv_headers($filters = [])
+	{
+		$question_data = $this->get_mcq_crq_question_labels($filters);
+		$mcq_labels = $question_data['mcq_labels'];
+		$crq_labels = [];
+		$start = count($mcq_labels) + 1;
+		$crq_count = count($question_data['crq_labels']);
+		for ($i = 0; $i < $crq_count; $i++) {
+			$crq_labels[] = 'Q' . ($start + $i);
+		}
+
+		return array_merge(
+			$this->result_csv_base_headers,
+			$mcq_labels,
+			['MCQs Total'],
+			$crq_labels,
+			['CRQs Total', 'Total Obtained Marks']
+		);
+	}
+
+	public function get_mcq_crq_csv_rows($filters = [], $limit = 50)
+	{
+		$question_data = $this->get_mcq_crq_question_labels($filters);
+		$group_keys = $limit !== null ? $this->get_mcq_crq_preview_group_keys($filters, $limit) : [];
+		if ($limit !== null && empty($group_keys)) {
+			return [];
+		}
+		$merged_rows = $this->merge_mcq_crq_csv_rows(
+			$this->collect_mcq_rows($filters, null, false, $group_keys)['rows'] ?? [],
+			$this->collect_all_crq_csv_rows($filters, $group_keys),
+			$question_data['merged_labels'],
+			$question_data['mcq_labels']
+		);
+
+		if ($limit !== null) {
+			return array_slice($merged_rows, 0, max(0, (int) $limit));
+		}
+
+		return $merged_rows;
+	}
+
+	public function stream_mcq_crq_csv_export($filters = [], callable $writer)
+	{
+		$rows = $this->get_mcq_crq_csv_rows($filters, null);
+		foreach ($rows as $row) {
+			$writer($row);
+		}
+	}
+
 	public function get_crq_csv_rows($filters = [], $limit = 50)
 	{
-		$question_sequence = $this->get_crq_question_sequence($filters);
-		if (empty($question_sequence)) {
+		$question_sequences = $this->get_crq_question_sequences($filters);
+		if (empty($question_sequences)) {
 			return [];
 		}
 
@@ -1674,10 +2071,8 @@ class Emarking_report_model extends CI_Model
 			return [];
 		}
 
-		$question_labels = array_map(function ($item) {
-			return (string) ($item['label'] ?? '');
-		}, $question_sequence);
-		$sql = $this->build_crq_export_sql($question_sequence, $filters, null, $group_keys);
+		$question_labels = $this->get_crq_question_labels($filters);
+		$sql = $this->build_crq_export_sql($question_sequences, $filters, null, $group_keys);
 		$rows = $this->db->query($sql)->result_array();
 		$out = [];
 		foreach ($rows as $row) {
@@ -1688,15 +2083,13 @@ class Emarking_report_model extends CI_Model
 
 	public function stream_crq_csv_export($filters = [], callable $writer)
 	{
-		$question_sequence = $this->get_crq_question_sequence($filters);
-		if (empty($question_sequence)) {
+		$question_sequences = $this->get_crq_question_sequences($filters);
+		if (empty($question_sequences)) {
 			return;
 		}
 
-		$question_labels = array_map(function ($item) {
-			return (string) ($item['label'] ?? '');
-		}, $question_sequence);
-		$sql = $this->build_crq_export_sql($question_sequence, $filters, null);
+		$question_labels = $this->get_crq_question_labels($filters);
+		$sql = $this->build_crq_export_sql($question_sequences, $filters, null);
 		$mysqli = $this->db->conn_id;
 		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
 		if ($result === false) {
