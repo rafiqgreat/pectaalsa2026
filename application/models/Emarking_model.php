@@ -342,7 +342,7 @@ class Emarking_model extends CI_Model
 		return $out;
 	}
 
-	private function crq_barcode_query_sql($source_table, $version = '', $expand_by_questions = false, $count_only = false, $status_filter = '')
+	private function crq_barcode_query_sql($source_table, $version = '', $expand_by_questions = false, $count_only = false, $status_filter = '', $assessment_type = '')
 	{
 		$table = trim((string) $source_table);
 		if (!$this->db->table_exists($table)) return [null, []];
@@ -358,10 +358,16 @@ class Emarking_model extends CI_Model
 		$questionExpr = !empty($cols['paper_questions'])
 			? 'CASE WHEN COALESCE(src.`' . $cols['paper_questions'] . '`, 1) >= 2 THEN 2 ELSE 1 END'
 			: '1';
+		$assessment_type = strtoupper(trim((string) $assessment_type));
+		$imageJoinWhere = 'WHERE TRIM(source_table) = ' . $this->db->escape($table);
+		if ($assessment_type !== '') {
+			$imageJoinWhere .= ' AND UPPER(TRIM(assessment_type)) = ' . $this->db->escape($assessment_type);
+		}
+
 		$imageMatchJoin = 'LEFT JOIN (
 			SELECT DISTINCT TRIM(paper_barcode) AS paper_barcode_key, UPPER(TRIM(question_no)) AS question_no_key
 			FROM `emarking_question_images`
-			WHERE TRIM(source_table) = ' . $this->db->escape($table) . '
+			' . $imageJoinWhere . '
 		) qi ON qi.paper_barcode_key = TRIM(src.' . $barcodeCol . ')';
 
 		$where = ['src.' . $generatedCol . ' = ?'];
@@ -471,6 +477,37 @@ class Emarking_model extends CI_Model
 		return $this->db->query($sql, $params)->result();
 	}
 
+	public function get_eng_dict_barcode_versions()
+	{
+		return $this->get_crq_barcode_versions_by_table('digital_papers_dictation1');
+	}
+
+	public function get_eng_dict_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_dictation1', $version, (bool) $expand_by_questions, false, $status_filter, 'DICTATION');
+		if ($sql === null) return [];
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function count_eng_dict_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_dictation1', $version, (bool) $expand_by_questions, true, $status_filter, 'DICTATION');
+		if ($sql === null) return 0;
+		$row = $this->db->query($sql, $params)->row();
+		return (int) ($row->total_rows ?? 0);
+	}
+
+	public function get_eng_dict_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
+	{
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_dictation1', $version, (bool) $expand_by_questions, false, $status_filter, 'DICTATION');
+		if ($sql === null) return [];
+		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+		return $this->db->query($sql, $params)->result();
+	}
+
 	public function get_crq_barcode_versions_by_table($source_table)
 	{
 		$table = trim((string) $source_table);
@@ -522,6 +559,37 @@ class Emarking_model extends CI_Model
 		$offset = max(0, (int) $offset);
 
 		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_booklets2', $version, (bool) $expand_by_questions, false, $status_filter);
+		if ($sql === null) return [];
+		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function get_urdu_dict_barcode_versions()
+	{
+		return $this->get_crq_barcode_versions_by_table('digital_papers_dictation2');
+	}
+
+	public function get_urdu_dict_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_dictation2', $version, (bool) $expand_by_questions, false, $status_filter, 'DICTATION');
+		if ($sql === null) return [];
+		return $this->db->query($sql, $params)->result();
+	}
+
+	public function count_urdu_dict_barcodes($version = '', $expand_by_questions = false, $status_filter = '')
+	{
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_dictation2', $version, (bool) $expand_by_questions, true, $status_filter, 'DICTATION');
+		if ($sql === null) return 0;
+		$row = $this->db->query($sql, $params)->row();
+		return (int) ($row->total_rows ?? 0);
+	}
+
+	public function get_urdu_dict_barcodes_page($version = '', $limit = 100, $offset = 0, $expand_by_questions = false, $status_filter = '')
+	{
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
+
+		list($sql, $params) = $this->crq_barcode_query_sql('digital_papers_dictation2', $version, (bool) $expand_by_questions, false, $status_filter, 'DICTATION');
 		if ($sql === null) return [];
 		$sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
 		return $this->db->query($sql, $params)->result();

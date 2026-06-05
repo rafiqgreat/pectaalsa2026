@@ -20,7 +20,13 @@ defined('BASEPATH') OR exit('No direct script access allowed'); ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_eng_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_eng_crqs') ?>">Synchronize Eng CRQs</a>
       <?php endif ?>
       <?php if (hasPermissions('general_settings')): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_eng_dict')?'active':'' ?>" href="<?php echo url('admin/settings/sync_eng_dict') ?>">Synchronize Eng Dict</a>
+      <?php endif ?>
+      <?php if (hasPermissions('general_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_urdu_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_urdu_crqs') ?>">Synchronize Urdu CRQs</a>
+      <?php endif ?>
+      <?php if (hasPermissions('general_settings')): ?>
+        <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_urdu_dict')?'active':'' ?>" href="<?php echo url('admin/settings/sync_urdu_dict') ?>">Synchronize Urdu Dict</a>
       <?php endif ?>
       <?php if (hasPermissions('general_settings')): ?>
         <a class="list-group-item list-group-item-action <?php echo ($page->submenu=='sync_math_crqs')?'active':'' ?>" href="<?php echo url('admin/settings/sync_math_crqs') ?>">Synchronize Math CRQs</a>

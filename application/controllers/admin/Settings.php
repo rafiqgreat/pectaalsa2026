@@ -87,9 +87,37 @@ class Settings extends MY_Controller {
 		return 'tbl_missing_barcodes_englishcrq';
 	}
 
+	private function sync_eng_dict_table()
+	{
+		return 'tbl_missing_barcodes_englishdict';
+	}
+
 	private function sync_eng_crqs_counts()
 	{
 		$table = $this->sync_eng_crqs_table();
+		if (!$this->db->table_exists($table)) {
+			return [
+				'total' => 0,
+				'pending' => 0,
+				'done' => 0,
+			];
+		}
+
+		$row = $this->db->select('COUNT(*) AS total, SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS done', false)
+			->from($table)
+			->get()
+			->row();
+
+		return [
+			'total' => (int) ($row->total ?? 0),
+			'pending' => (int) ($row->pending ?? 0),
+			'done' => (int) ($row->done ?? 0),
+		];
+	}
+
+	private function sync_eng_dict_counts()
+	{
+		$table = $this->sync_eng_dict_table();
 		if (!$this->db->table_exists($table)) {
 			return [
 				'total' => 0,
@@ -153,6 +181,16 @@ class Settings extends MY_Controller {
 			'source_relative_dir' => 'storagebox/crqs/' . $relative_dir,
 			'target_relative_dir' => 'storagebox/mcrqs/' . $relative_dir,
 		];
+	}
+
+	private function sync_eng_dict_path_meta($image_barcode)
+	{
+		$meta = $this->sync_eng_crqs_path_meta($image_barcode);
+		if ($meta === null) return null;
+
+		$meta['source_relative_dir'] = 'storagebox/dictations/' . $meta['relative_dir'];
+		$meta['target_relative_dir'] = 'storagebox/mdictations/' . $meta['relative_dir'];
+		return $meta;
 	}
 
 	private function sync_eng_crqs_abs_path($relative_path)
@@ -289,14 +327,145 @@ class Settings extends MY_Controller {
 		return $summary;
 	}
 
+	private function sync_eng_dict_process_batch($limit)
+	{
+		$table = $this->sync_eng_dict_table();
+		$limit = max(1, min(10000, (int) $limit));
+
+		$summary = [
+			'requested' => $limit,
+			'processed' => 0,
+			'copied' => 0,
+			'failed' => 0,
+			'items' => [],
+		];
+
+		if (!$this->db->table_exists($table)) {
+			$summary['error'] = 'Table not found: ' . $table;
+			return $summary;
+		}
+
+		$rows = $this->db->select('id, image_barcode, status')
+			->from($table)
+			->where('status', 0)
+			->order_by('id', 'ASC')
+			->limit($limit)
+			->get()
+			->result();
+
+		foreach (($rows ?? []) as $row) {
+			$summary['processed']++;
+			$item = [
+				'id' => (int) ($row->id ?? 0),
+				'image_barcode' => (string) ($row->image_barcode ?? ''),
+				'result' => 'Failed',
+				'message' => '',
+				'source' => '',
+				'target' => '',
+			];
+
+			$meta = $this->sync_eng_dict_path_meta($item['image_barcode']);
+			if ($meta === null) {
+				$item['message'] = 'Invalid image_barcode format.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_dir_rel = $meta['source_relative_dir'];
+			$target_dir_rel = $meta['target_relative_dir'];
+			$source_dir_abs = $this->sync_eng_crqs_abs_path($source_dir_rel);
+			$target_dir_abs = $this->sync_eng_crqs_abs_path($target_dir_rel);
+			$target_file_abs = rtrim($target_dir_abs, '/\\') . '/' . $meta['filename'];
+			$target_file_rel = $target_dir_rel . '/' . $meta['filename'];
+
+			$item['source'] = $source_dir_rel;
+			$item['target'] = $target_file_rel;
+
+			if (!is_dir($source_dir_abs)) {
+				$item['message'] = 'Source folder not found.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_file_abs = $this->sync_eng_crqs_pick_random_file($source_dir_abs);
+			if ($source_file_abs === null) {
+				$item['message'] = 'No source image found in source folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			if (!$this->sync_eng_crqs_ensure_dir($target_dir_abs)) {
+				$item['message'] = 'Unable to create target folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$copied = is_file($target_file_abs) ? true : @copy($source_file_abs, $target_file_abs);
+			if (!$copied) {
+				$item['message'] = 'Copy failed.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$this->db->where('id', (int) $item['id'])->update($table, ['status' => 1]);
+			$err = $this->db->error();
+			if (!empty($err['code'])) {
+				$item['message'] = 'Copied file but failed to update DB status.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$item['result'] = 'Copied';
+			$item['message'] = is_file($target_file_abs) ? 'Synchronized successfully.' : 'Copied successfully.';
+			$summary['copied']++;
+			$summary['items'][] = $item;
+		}
+
+		return $summary;
+	}
+
 	private function sync_urdu_crqs_table()
 	{
 		return 'tbl_missing_barcodes_urducrq';
 	}
 
+	private function sync_urdu_dict_table()
+	{
+		return 'tbl_missing_barcodes_urdudict';
+	}
+
 	private function sync_urdu_crqs_counts()
 	{
 		$table = $this->sync_urdu_crqs_table();
+		if (!$this->db->table_exists($table)) {
+			return [
+				'total' => 0,
+				'pending' => 0,
+				'done' => 0,
+			];
+		}
+
+		$row = $this->db->select('COUNT(*) AS total, SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS done', false)
+			->from($table)
+			->get()
+			->row();
+
+		return [
+			'total' => (int) ($row->total ?? 0),
+			'pending' => (int) ($row->pending ?? 0),
+			'done' => (int) ($row->done ?? 0),
+		];
+	}
+
+	private function sync_urdu_dict_counts()
+	{
+		$table = $this->sync_urdu_dict_table();
 		if (!$this->db->table_exists($table)) {
 			return [
 				'total' => 0,
@@ -355,6 +524,109 @@ class Settings extends MY_Controller {
 			];
 
 			$meta = $this->sync_eng_crqs_path_meta($item['image_barcode']);
+			if ($meta === null) {
+				$item['message'] = 'Invalid image_barcode format.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_dir_rel = $meta['source_relative_dir'];
+			$target_dir_rel = $meta['target_relative_dir'];
+			$source_dir_abs = $this->sync_eng_crqs_abs_path($source_dir_rel);
+			$target_dir_abs = $this->sync_eng_crqs_abs_path($target_dir_rel);
+			$target_file_abs = rtrim($target_dir_abs, '/\\') . '/' . $meta['filename'];
+			$target_file_rel = $target_dir_rel . '/' . $meta['filename'];
+
+			$item['source'] = $source_dir_rel;
+			$item['target'] = $target_file_rel;
+
+			if (!is_dir($source_dir_abs)) {
+				$item['message'] = 'Source folder not found.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$source_file_abs = $this->sync_eng_crqs_pick_random_file($source_dir_abs);
+			if ($source_file_abs === null) {
+				$item['message'] = 'No source image found in source folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			if (!$this->sync_eng_crqs_ensure_dir($target_dir_abs)) {
+				$item['message'] = 'Unable to create target folder.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$copied = is_file($target_file_abs) ? true : @copy($source_file_abs, $target_file_abs);
+			if (!$copied) {
+				$item['message'] = 'Copy failed.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$this->db->where('id', (int) $item['id'])->update($table, ['status' => 1]);
+			$err = $this->db->error();
+			if (!empty($err['code'])) {
+				$item['message'] = 'Copied file but failed to update DB status.';
+				$summary['failed']++;
+				$summary['items'][] = $item;
+				continue;
+			}
+
+			$item['result'] = 'Copied';
+			$item['message'] = is_file($target_file_abs) ? 'Synchronized successfully.' : 'Copied successfully.';
+			$summary['copied']++;
+			$summary['items'][] = $item;
+		}
+
+		return $summary;
+	}
+
+	private function sync_urdu_dict_process_batch($limit)
+	{
+		$table = $this->sync_urdu_dict_table();
+		$limit = max(1, min(10000, (int) $limit));
+
+		$summary = [
+			'requested' => $limit,
+			'processed' => 0,
+			'copied' => 0,
+			'failed' => 0,
+			'items' => [],
+		];
+
+		if (!$this->db->table_exists($table)) {
+			$summary['error'] = 'Table not found: ' . $table;
+			return $summary;
+		}
+
+		$rows = $this->db->select('id, image_barcode, status')
+			->from($table)
+			->where('status', 0)
+			->order_by('id', 'ASC')
+			->limit($limit)
+			->get()
+			->result();
+
+		foreach (($rows ?? []) as $row) {
+			$summary['processed']++;
+			$item = [
+				'id' => (int) ($row->id ?? 0),
+				'image_barcode' => (string) ($row->image_barcode ?? ''),
+				'result' => 'Failed',
+				'message' => '',
+				'source' => '',
+				'target' => '',
+			];
+
+			$meta = $this->sync_eng_dict_path_meta($item['image_barcode']);
 			if ($meta === null) {
 				$item['message'] = 'Invalid image_barcode format.';
 				$summary['failed']++;
@@ -1085,6 +1357,32 @@ class Settings extends MY_Controller {
 		$this->load->view('admin/settings/sync_eng_crqs', $this->page_data);
 	}
 
+	public function sync_eng_dict()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'sync_eng_dict';
+		$this->page_data['page']->title = 'Synchronize Eng Dict';
+
+		$batch_size = (int) $this->input->get_post('batch_size', true);
+		if ($batch_size <= 0) $batch_size = 100;
+		$batch_size = max(1, min(10000, $batch_size));
+
+		$run_summary = null;
+		if ($this->input->method(true) === 'POST') {
+			postAllowed();
+			@set_time_limit(0);
+			$run_summary = $this->sync_eng_dict_process_batch($batch_size);
+			if (empty($run_summary['error'])) {
+				$this->activity_model->add('Synchronize Eng Dict run by User: #' . logged('id') . ' processed=' . (int) ($run_summary['processed'] ?? 0) . ' copied=' . (int) ($run_summary['copied'] ?? 0));
+			}
+		}
+
+		$this->page_data['batch_size'] = $batch_size;
+		$this->page_data['sync_counts'] = $this->sync_eng_dict_counts();
+		$this->page_data['run_summary'] = $run_summary;
+		$this->load->view('admin/settings/sync_eng_dict', $this->page_data);
+	}
+
 	public function sync_urdu_crqs()
 	{
 		ifPermissions('general_settings');
@@ -1109,6 +1407,32 @@ class Settings extends MY_Controller {
 		$this->page_data['sync_counts'] = $this->sync_urdu_crqs_counts();
 		$this->page_data['run_summary'] = $run_summary;
 		$this->load->view('admin/settings/sync_urdu_crqs', $this->page_data);
+	}
+
+	public function sync_urdu_dict()
+	{
+		ifPermissions('general_settings');
+		$this->page_data['page']->submenu = 'sync_urdu_dict';
+		$this->page_data['page']->title = 'Synchronize Urdu Dict';
+
+		$batch_size = (int) $this->input->get_post('batch_size', true);
+		if ($batch_size <= 0) $batch_size = 100;
+		$batch_size = max(1, min(10000, $batch_size));
+
+		$run_summary = null;
+		if ($this->input->method(true) === 'POST') {
+			postAllowed();
+			@set_time_limit(0);
+			$run_summary = $this->sync_urdu_dict_process_batch($batch_size);
+			if (empty($run_summary['error'])) {
+				$this->activity_model->add('Synchronize Urdu Dict run by User: #' . logged('id') . ' processed=' . (int) ($run_summary['processed'] ?? 0) . ' copied=' . (int) ($run_summary['copied'] ?? 0));
+			}
+		}
+
+		$this->page_data['batch_size'] = $batch_size;
+		$this->page_data['sync_counts'] = $this->sync_urdu_dict_counts();
+		$this->page_data['run_summary'] = $run_summary;
+		$this->load->view('admin/settings/sync_urdu_dict', $this->page_data);
 	}
 
 	public function sync_math_crqs()

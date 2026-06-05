@@ -1721,6 +1721,154 @@ class Emarking extends MY_Controller
 		die;
 	}
 
+	public function reports_eng_dict_barcodes()
+	{
+		$this->ensure_english_subject_access();
+		$this->load->library('pagination');
+		$show_image_barcode = ((int) logged('role') === 1);
+
+		$this->page_data['page']->submenu = 'reports';
+		$this->page_data['reports_tab'] = 'eng_dict_barcodes';
+		$this->page_data['page']->title = 'ENG Dict Barcodes';
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+		$per_page = (int) $this->input->get('per_page', true);
+		$allowed_per_page = [100, 200, 500];
+		if (!in_array($per_page, $allowed_per_page, true)) {
+			$per_page = 100;
+		}
+		$page = (int) $this->input->get('page', true);
+		$page = $page > 0 ? $page : 1;
+		$offset = ($page - 1) * $per_page;
+
+		$versions = $this->emarking->get_eng_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$total = $this->emarking->count_eng_dict_barcodes($selected_version, $show_image_barcode, $selected_status);
+		$config = [
+			'base_url' => url('admin/emarking/reports_eng_dict_barcodes'),
+			'total_rows' => $total,
+			'per_page' => $per_page,
+			'page_query_string' => true,
+			'query_string_segment' => 'page',
+			'use_page_numbers' => true,
+			'reuse_query_string' => true,
+		];
+		$this->pagination->initialize($config);
+
+		$rows = $this->emarking->get_eng_dict_barcodes_page($selected_version, $per_page, $offset, $show_image_barcode, $selected_status);
+
+		$this->page_data['barcode_versions'] = $versions;
+		$this->page_data['selected_version'] = $selected_version;
+		$this->page_data['selected_status'] = $selected_status;
+		$this->page_data['barcode_rows'] = $rows;
+		$this->page_data['show_image_barcode'] = $show_image_barcode;
+		$this->page_data['barcode_total'] = $total;
+		$this->page_data['barcode_page'] = $page;
+		$this->page_data['barcode_per_page'] = $per_page;
+		$this->page_data['pagination_links'] = $this->pagination->create_links();
+		$this->page_data['barcode_subject_label'] = 'ENGLISH';
+		$this->page_data['barcode_title_label'] = 'ENG Dict Barcodes';
+		$this->page_data['barcode_source_table'] = 'digital_papers_dictation1';
+		$this->page_data['barcode_export_url'] = 'admin/emarking/export_eng_dict_barcodes_csv';
+		$this->page_data['barcode_type_label'] = 'DICTATION';
+		$this->page_data['barcode_download_label'] = 'Dictation';
+		$this->load->view('admin/emarking/reports_eng_crqs_barcodes', $this->page_data);
+	}
+
+	public function export_eng_dict_barcodes_csv()
+	{
+		$this->ensure_english_subject_access();
+		$show_image_barcode = ((int) logged('role') === 1);
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+
+		$versions = $this->emarking->get_eng_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$ts = date('Ymd_His');
+		$suffix = ($selected_version === '') ? 'all_versions' : ('version_' . $selected_version);
+		$filename = 'eng_dict_barcodes_' . $suffix . '_' . $ts . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create export output stream.', 500);
+			return;
+		}
+
+		$headers = ['Sr', 'Grade', 'Subject', 'Version', 'Type', 'Barcode', 'Status'];
+		if ($show_image_barcode) {
+			$headers[] = 'question_no';
+			$headers[] = 'Image_Barcode';
+		}
+		fputcsv($out, $headers);
+
+		$sr = 1;
+		$chunk = 5000;
+		$offset = 0;
+		while (true) {
+			$rows = $this->emarking->get_eng_dict_barcodes_page($selected_version, $chunk, $offset, $show_image_barcode, $selected_status);
+			if (empty($rows)) {
+				break;
+			}
+
+			foreach ((array) $rows as $row) {
+				$line = [
+					$sr++,
+					(string) ($row->grade ?? '4'),
+					'ENGLISH',
+					(string) ($row->version ?? ''),
+					'DICTATION',
+					(string) ($row->barcode ?? ''),
+					(string) ($row->status ?? 'Missing'),
+				];
+				if ($show_image_barcode) {
+					$line[] = (string) ($row->question_no ?? 'q1');
+					$line[] = (string) ($row->image_barcode ?? '');
+				}
+				fputcsv($out, $line);
+			}
+
+			$offset += $chunk;
+			if (function_exists('ob_get_level')) {
+				while (ob_get_level() > 0) {
+					@ob_end_flush();
+				}
+			}
+			flush();
+
+			if (count($rows) < $chunk) {
+				break;
+			}
+		}
+
+		fclose($out);
+		die;
+	}
+
 	public function reports_urdu_crqs_barcodes()
 	{
 		$this->ensure_admin_barcode_access();
@@ -1840,6 +1988,154 @@ class Emarking extends MY_Controller
 					'URDU',
 					(string) ($row->version ?? ''),
 					'CRQ',
+					(string) ($row->barcode ?? ''),
+					(string) ($row->status ?? 'Missing'),
+				];
+				if ($show_image_barcode) {
+					$line[] = (string) ($row->question_no ?? 'q1');
+					$line[] = (string) ($row->image_barcode ?? '');
+				}
+				fputcsv($out, $line);
+			}
+
+			$offset += $chunk;
+			if (function_exists('ob_get_level')) {
+				while (ob_get_level() > 0) {
+					@ob_end_flush();
+				}
+			}
+			flush();
+
+			if (count($rows) < $chunk) {
+				break;
+			}
+		}
+
+		fclose($out);
+		die;
+	}
+
+	public function reports_urdu_dict_barcodes()
+	{
+		$this->ensure_admin_barcode_access();
+		$this->load->library('pagination');
+		$show_image_barcode = true;
+
+		$this->page_data['page']->submenu = 'reports';
+		$this->page_data['reports_tab'] = 'urdu_dict_barcodes';
+		$this->page_data['page']->title = 'Urdu Dict Barcodes';
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+		$per_page = (int) $this->input->get('per_page', true);
+		$allowed_per_page = [100, 200, 500];
+		if (!in_array($per_page, $allowed_per_page, true)) {
+			$per_page = 100;
+		}
+		$page = (int) $this->input->get('page', true);
+		$page = $page > 0 ? $page : 1;
+		$offset = ($page - 1) * $per_page;
+
+		$versions = $this->emarking->get_urdu_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$total = $this->emarking->count_urdu_dict_barcodes($selected_version, $show_image_barcode, $selected_status);
+		$config = [
+			'base_url' => url('admin/emarking/reports_urdu_dict_barcodes'),
+			'total_rows' => $total,
+			'per_page' => $per_page,
+			'page_query_string' => true,
+			'query_string_segment' => 'page',
+			'use_page_numbers' => true,
+			'reuse_query_string' => true,
+		];
+		$this->pagination->initialize($config);
+
+		$rows = $this->emarking->get_urdu_dict_barcodes_page($selected_version, $per_page, $offset, $show_image_barcode, $selected_status);
+
+		$this->page_data['barcode_versions'] = $versions;
+		$this->page_data['selected_version'] = $selected_version;
+		$this->page_data['selected_status'] = $selected_status;
+		$this->page_data['barcode_rows'] = $rows;
+		$this->page_data['show_image_barcode'] = $show_image_barcode;
+		$this->page_data['barcode_total'] = $total;
+		$this->page_data['barcode_page'] = $page;
+		$this->page_data['barcode_per_page'] = $per_page;
+		$this->page_data['pagination_links'] = $this->pagination->create_links();
+		$this->page_data['barcode_subject_label'] = 'URDU';
+		$this->page_data['barcode_title_label'] = 'Urdu Dict Barcodes';
+		$this->page_data['barcode_source_table'] = 'digital_papers_dictation2';
+		$this->page_data['barcode_export_url'] = 'admin/emarking/export_urdu_dict_barcodes_csv';
+		$this->page_data['barcode_type_label'] = 'DICTATION';
+		$this->page_data['barcode_download_label'] = 'Dictation';
+		$this->load->view('admin/emarking/reports_eng_crqs_barcodes', $this->page_data);
+	}
+
+	public function export_urdu_dict_barcodes_csv()
+	{
+		$this->ensure_admin_barcode_access();
+		$show_image_barcode = true;
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+
+		$versions = $this->emarking->get_urdu_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$ts = date('Ymd_His');
+		$suffix = ($selected_version === '') ? 'all_versions' : ('version_' . $selected_version);
+		$filename = 'urdu_dict_barcodes_' . $suffix . '_' . $ts . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create export output stream.', 500);
+			return;
+		}
+
+		$headers = ['Sr', 'Grade', 'Subject', 'Version', 'Type', 'Barcode', 'Status'];
+		if ($show_image_barcode) {
+			$headers[] = 'question_no';
+			$headers[] = 'Image_Barcode';
+		}
+		fputcsv($out, $headers);
+
+		$sr = 1;
+		$chunk = 5000;
+		$offset = 0;
+		while (true) {
+			$rows = $this->emarking->get_urdu_dict_barcodes_page($selected_version, $chunk, $offset, $show_image_barcode, $selected_status);
+			if (empty($rows)) {
+				break;
+			}
+
+			foreach ((array) $rows as $row) {
+				$line = [
+					$sr++,
+					(string) ($row->grade ?? '4'),
+					'URDU',
+					(string) ($row->version ?? ''),
+					'DICTATION',
 					(string) ($row->barcode ?? ''),
 					(string) ($row->status ?? 'Missing'),
 				];

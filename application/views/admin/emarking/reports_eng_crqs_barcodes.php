@@ -19,6 +19,8 @@ $subjectLabel = trim((string) ($barcode_subject_label ?? 'ENGLISH'));
 $titleLabel = trim((string) ($barcode_title_label ?? 'ENG CRQs Barcodes'));
 $sourceTable = trim((string) ($barcode_source_table ?? 'digital_papers_booklets1'));
 $exportPath = trim((string) ($barcode_export_url ?? 'admin/emarking/export_eng_crqs_barcodes_csv'));
+$typeLabel = trim((string) ($barcode_type_label ?? 'CRQ'));
+$downloadLabel = trim((string) ($barcode_download_label ?? $typeLabel));
 $exportParams = [];
 if ($selectedVersion !== '') $exportParams[] = 'version=' . urlencode($selectedVersion);
 if ($selectedStatus !== '') $exportParams[] = 'status=' . urlencode($selectedStatus);
@@ -48,7 +50,7 @@ $exportUrl = base_url($exportPath . (!empty($exportParams) ? ('?' . implode('&',
 
     <div class="card">
       <div class="card-header">
-        <h3 class="card-title mb-0">Download <?php echo htmlspecialchars($subjectLabel); ?> CRQ Booklet Barcodes</h3>
+        <h3 class="card-title mb-0">Download <?php echo htmlspecialchars($subjectLabel); ?> <?php echo htmlspecialchars($downloadLabel); ?> Booklet Barcodes</h3>
       </div>
       <div class="card-body">
         <form method="get" class="mb-3">
@@ -126,7 +128,7 @@ $exportUrl = base_url($exportPath . (!empty($exportParams) ? ('?' . implode('&',
                     <td><?php echo html_escape((string) ($row->grade ?? '4')); ?></td>
                     <td><?php echo htmlspecialchars($subjectLabel); ?></td>
                     <td><?php echo html_escape((string) ($row->version ?? '')); ?></td>
-                    <td>CRQ</td>
+                    <td><?php echo htmlspecialchars($typeLabel); ?></td>
                     <td><?php echo html_escape((string) ($row->barcode ?? '')); ?></td>
                     <td><?php echo html_escape((string) ($row->status ?? 'Missing')); ?></td>
                     <?php if ($showImageBarcode): ?>

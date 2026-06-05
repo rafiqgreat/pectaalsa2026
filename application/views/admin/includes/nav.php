@@ -216,9 +216,21 @@
               </a>
             </li>
             <li class="nav-item">
+              <a href="<?php echo url('admin/emarking/reports_eng_dict_barcodes'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'eng_dict_barcodes') ? 'active' : ''; ?>">
+                <i class="far fa-dot-circle nav-icon"></i>
+                <p>ENG Dict Barcodes</p>
+              </a>
+            </li>
+            <li class="nav-item">
               <a href="<?php echo url('admin/emarking/reports_urdu_crqs_barcodes'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'urdu_crqs_barcodes') ? 'active' : ''; ?>">
                 <i class="far fa-dot-circle nav-icon"></i>
                 <p>URDU CRQs Barcodes</p>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="<?php echo url('admin/emarking/reports_urdu_dict_barcodes'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'urdu_dict_barcodes') ? 'active' : ''; ?>">
+                <i class="far fa-dot-circle nav-icon"></i>
+                <p>Urdu Dict Barcodes</p>
               </a>
             </li>
             <li class="nav-item">
@@ -419,9 +431,21 @@
               </a>
             </li>
             <li class="nav-item">
+              <a href="<?php echo url('admin/settings/sync_eng_dict'); ?>" class="nav-link <?php echo ($page->menu == 'settings' && $page->submenu == 'sync_eng_dict') ? 'active' : ''; ?>">
+                <i class="far fa-circle nav-icon"></i>
+                <p>Synchronize Eng Dict</p>
+              </a>
+            </li>
+            <li class="nav-item">
               <a href="<?php echo url('admin/settings/sync_urdu_crqs'); ?>" class="nav-link <?php echo ($page->menu == 'settings' && $page->submenu == 'sync_urdu_crqs') ? 'active' : ''; ?>">
                 <i class="far fa-circle nav-icon"></i>
                 <p>Synchronize Urdu CRQs</p>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="<?php echo url('admin/settings/sync_urdu_dict'); ?>" class="nav-link <?php echo ($page->menu == 'settings' && $page->submenu == 'sync_urdu_dict') ? 'active' : ''; ?>">
+                <i class="far fa-circle nav-icon"></i>
+                <p>Synchronize Urdu Dict</p>
               </a>
             </li>
             <li class="nav-item">
