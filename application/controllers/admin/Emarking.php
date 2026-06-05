@@ -2480,7 +2480,7 @@ class Emarking extends MY_Controller
 		];
 		$this->page_data['districts'] = $this->location_model->get_districts();
 		$this->page_data['version_options'] = ['1', '2'];
-		$this->page_data['csv_headers'] = $this->emarking_report->get_dictation_csv_headers();
+		$this->page_data['csv_headers'] = $this->emarking_report->get_dictation_csv_headers($filters);
 		$this->page_data['show_preview'] = $this->dictation_csv_has_narrowing_filters($filters);
 		$this->page_data['preview_rows'] = $this->page_data['show_preview']
 			? $this->emarking_report->get_dictation_csv_rows($filters, 50)
@@ -2497,7 +2497,7 @@ class Emarking extends MY_Controller
 		}
 
 		$filters = $this->dictation_csv_filters_from_get();
-		$headers = $this->emarking_report->get_dictation_csv_headers();
+		$headers = $this->emarking_report->get_dictation_csv_headers($filters);
 		$filename = 'dictation_results_' . date('Ymd_His') . '.csv';
 
 		header('Content-Type: text/csv; charset=utf-8');

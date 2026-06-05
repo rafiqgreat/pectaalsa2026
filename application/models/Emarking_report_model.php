@@ -685,6 +685,13 @@ class Emarking_report_model extends CI_Model
 		return $row;
 	}
 
+	private function apply_dictation_school_gender_format(array $row)
+	{
+		$row['School Type'] = trim((string) ($row['School Type'] ?? ''));
+		$row['Gender'] = $this->combined_gender_code_from_school_gender($row['School Type'] ?? '');
+		return $row;
+	}
+
 	private function subject_sort_rank($subject)
 	{
 		$subject = trim((string) $subject);
@@ -710,6 +717,21 @@ class Emarking_report_model extends CI_Model
 		}
 
 		return 999;
+	}
+
+	private function combined_gender_code_from_school_gender($school_gender)
+	{
+		$value = strtoupper(trim((string) $school_gender));
+		if ($value === 'MALE' || $value === 'M') {
+			return 'M';
+		}
+		if ($value === 'FEMALE' || $value === 'F') {
+			return 'F';
+		}
+		if ($value === 'BOTH') {
+			return random_int(0, 1) === 0 ? 'F' : 'M';
+		}
+		return '';
 	}
 
 	private function format_mark_value($value)
@@ -1554,6 +1576,7 @@ class Emarking_report_model extends CI_Model
 			}
 			$paper['Total Obtained'] = $this->format_mark_value($total);
 			$paper = $this->apply_non_bq_result_field_mapping($paper);
+			$paper = $this->apply_dictation_school_gender_format($paper);
 
 			$row = [];
 			foreach ($this->dictation_csv_headers as $header) {
@@ -1565,66 +1588,177 @@ class Emarking_report_model extends CI_Model
 		return $out;
 	}
 
-	public function get_dictation_csv_headers()
+	private function get_dictation_question_sequences($filters = [])
 	{
-		return $this->dictation_csv_headers;
-	}
-
-	public function get_dictation_csv_versions($filters = [])
-	{
-		$this->db->distinct();
-		$this->db->select('qi.version');
-		$this->db->from('emarking_question_images qi');
-		$this->db->join('emarking_questions q', 'q.id = qi.question_id', 'inner');
+		$this->db->select('q.id, q.grade, q.subject_code, q.version, q.page_no, q.question_no');
+		$this->db->from('emarking_questions q');
 		$this->db->where('q.assessment_type', 'DICTATION');
-		$this->db->where('qi.assessment_type', 'DICTATION');
-
-		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
-		if ($subject_code !== '') {
-			$this->db->where('qi.subject_code', $subject_code);
-		}
 
 		$grade = trim((string) ($filters['grade'] ?? ''));
-		if ($grade !== '') {
-			$this->db->where('qi.grade', (int) $grade);
-		}
+		if ($grade !== '') $this->db->where('q.grade', (int) $grade);
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') $this->db->where('q.subject_code', $subject_code);
+		$version = trim((string) ($filters['version'] ?? ''));
+		if ($version !== '') $this->db->where('q.version', (int) $version);
 
-		$this->db->order_by('qi.version', 'ASC');
+		$this->db->order_by('q.grade', 'ASC');
+		$this->db->order_by('q.subject_code', 'ASC');
+		$this->db->order_by('q.version', 'ASC');
+		$this->db->order_by('CAST(COALESCE(NULLIF(q.page_no, \'\'), \'0\') AS UNSIGNED)', 'ASC', false);
+		$this->db->order_by('CAST(REPLACE(UPPER(q.question_no), \'Q\', \'\') AS UNSIGNED)', 'ASC', false);
+		$this->db->order_by('q.id', 'ASC');
+
 		$rows = $this->db->get()->result();
-
-		$out = [];
+		$sequences = [];
 		foreach ($rows as $row) {
-			$v = trim((string) ($row->version ?? ''));
-			if ($v !== '') $out[] = $v;
+			$question_id = (int) ($row->id ?? 0);
+			if ($question_id <= 0) {
+				continue;
+			}
+			$key = implode('|', [
+				(int) ($row->grade ?? 0),
+				trim((string) ($row->subject_code ?? '')),
+				(int) ($row->version ?? 0),
+			]);
+			if (!isset($sequences[$key])) {
+				$sequences[$key] = [
+					'grade' => (int) ($row->grade ?? 0),
+					'subject_code' => trim((string) ($row->subject_code ?? '')),
+					'version' => (int) ($row->version ?? 0),
+					'question_ids' => [],
+				];
+			}
+			$sequences[$key]['question_ids'][] = $question_id;
 		}
-		return array_values(array_unique($out));
+
+		return $sequences;
 	}
 
-	public function get_dictation_csv_rows($filters = [], $limit = null)
+	private function get_dictation_question_labels($filters = [])
 	{
-		if ($limit !== null) {
-			$paper_keys = $this->get_dictation_paper_keys_page($filters, $limit, 0);
-			return $this->get_dictation_csv_rows_for_paper_keys($filters, $paper_keys);
+		$sequences = $this->get_dictation_question_sequences($filters);
+		$max_count = 0;
+		foreach ($sequences as $sequence) {
+			$count = count($sequence['question_ids'] ?? []);
+			if ($count > $max_count) {
+				$max_count = $count;
+			}
 		}
 
-		$this->build_dictation_csv_query($filters);
-		$rows = $this->db->get()->result_array();
-		return $this->aggregate_dictation_csv_rows($rows);
+		$labels = [];
+		for ($i = 1; $i <= $max_count; $i++) {
+			$labels[] = 'Q' . $i;
+		}
+
+		return $labels;
 	}
 
-	public function get_dictation_csv_rows_page($filters = [], $limit = 200, $offset = 0)
+	private function build_dictation_csv_headers($filters = [])
 	{
-		$paper_keys = $this->get_dictation_paper_keys_page($filters, $limit, $offset);
-		return $this->get_dictation_csv_rows_for_paper_keys($filters, $paper_keys);
+		return array_merge($this->result_csv_base_headers, $this->get_dictation_question_labels($filters), ['Total Obtained']);
 	}
 
-	public function stream_dictation_csv_export($filters = [], callable $writer)
+	private function get_dictation_group_keys_page($filters = [], $limit = 50, $offset = 0)
 	{
 		$where_sql = $this->dictation_export_where_sql($filters);
+		$limit = max(1, (int) $limit);
+		$offset = max(0, (int) $offset);
 
 		$sql = "
 			SELECT
-				qi.paper_barcode AS unique_identifier,
+				qi.school_id,
+				qi.roll_no,
+				qi.subject_code,
+				qi.version,
+				qi.grade
+			FROM emarking_question_images qi
+			INNER JOIN emarking_questions q ON q.id = qi.question_id
+			LEFT JOIN schools s ON s.school_id = qi.school_id
+			LEFT JOIN digital_papers_dictation1 dp1 ON qi.source_table = 'digital_papers_dictation1' AND dp1.paper_id = qi.source_paper_id
+			LEFT JOIN digital_papers_dictation2 dp2 ON qi.source_table = 'digital_papers_dictation2' AND dp2.paper_id = qi.source_paper_id
+			WHERE {$where_sql}
+			GROUP BY qi.school_id, qi.roll_no, qi.subject_code, qi.version, qi.grade
+			ORDER BY
+				CAST(COALESCE(NULLIF(qi.subject_code, ''), '999') AS UNSIGNED) ASC,
+				COALESCE(qi.version, 0) ASC,
+				COALESCE(qi.school_id, 0) ASC,
+				qi.roll_no ASC,
+				COALESCE(qi.grade, 0) ASC
+			LIMIT {$limit} OFFSET {$offset}
+		";
+
+		return $this->db->query($sql)->result_array();
+	}
+
+	private function build_dictation_group_keys_where_sql(array $group_keys)
+	{
+		$clauses = [];
+		foreach ($group_keys as $key) {
+			$school_id = array_key_exists('school_id', $key) && $key['school_id'] !== null ? (int) $key['school_id'] : null;
+			$roll_no = array_key_exists('roll_no', $key)
+				? trim((string) $key['roll_no'])
+				: trim((string) ($key['student_id'] ?? ''));
+			$subject_code = array_key_exists('subject_code', $key) ? trim((string) $key['subject_code']) : '';
+			$version = array_key_exists('version', $key) && $key['version'] !== null ? (int) $key['version'] : null;
+			$grade = array_key_exists('grade', $key) && $key['grade'] !== null ? (int) $key['grade'] : null;
+
+			$clauses[] = '('
+				. ($school_id === null ? 'qi.school_id IS NULL' : ('qi.school_id = ' . $school_id))
+				. ' AND '
+				. "qi.roll_no = " . $this->db->escape($roll_no)
+				. ' AND '
+				. "qi.subject_code = " . $this->db->escape($subject_code)
+				. ' AND '
+				. ($version === null ? 'qi.version IS NULL' : ('qi.version = ' . $version))
+				. ' AND '
+				. ($grade === null ? 'qi.grade IS NULL' : ('qi.grade = ' . $grade))
+				. ')';
+		}
+
+		return empty($clauses) ? '' : '(' . implode(' OR ', $clauses) . ')';
+	}
+
+	private function build_dictation_export_sql(array $question_sequences, $filters = [], $limit = null, array $group_keys = [])
+	{
+		$where_sql = $this->dictation_export_where_sql($filters);
+		$group_keys_sql = $this->build_dictation_group_keys_where_sql($group_keys);
+		if ($group_keys_sql !== '') {
+			$where_sql .= ' AND ' . $group_keys_sql;
+		}
+
+		$question_selects = [];
+		$max_questions = 0;
+		foreach ($question_sequences as $sequence) {
+			$count = count($sequence['question_ids'] ?? []);
+			if ($count > $max_questions) {
+				$max_questions = $count;
+			}
+		}
+
+		for ($index = 0; $index < $max_questions; $index++) {
+			$question_ids = [];
+			foreach ($question_sequences as $sequence) {
+				$id = (int) ($sequence['question_ids'][$index] ?? 0);
+				if ($id > 0) {
+					$question_ids[$id] = $id;
+				}
+			}
+			if (empty($question_ids)) {
+				continue;
+			}
+			$label = 'q' . ($index + 1);
+			$question_selects[] = "MAX(CASE WHEN q.id IN (" . implode(', ', $question_ids) . ") THEN sm.marks_obtained END) AS `{$label}`";
+		}
+		$question_select_sql = empty($question_selects) ? '' : ",\n\t\t\t\t" . implode(",\n\t\t\t\t", $question_selects);
+
+		$limit_sql = '';
+		if ($limit !== null) {
+			$limit_sql = "\n\t\t\tLIMIT " . max(0, (int) $limit);
+		}
+
+		return "
+			SELECT
+				MAX(qi.paper_barcode) AS unique_identifier,
 				MAX(qi.school_id) AS school_id,
 				MAX(qi.roll_no) AS student_id,
 				COALESCE(
@@ -1658,12 +1792,7 @@ class Emarking_report_model extends CI_Model
 				MAX(qi.grade) AS grade,
 				MAX(qi.source_paper_id) AS exam_id,
 				MAX(qi.subject_code) AS subject_code,
-				MAX(qi.version) AS version,
-				MAX(CASE WHEN UPPER(q.question_no) = 'Q1' THEN sm.marks_obtained END) AS q1,
-				MAX(CASE WHEN UPPER(q.question_no) = 'Q2' THEN sm.marks_obtained END) AS q2,
-				MAX(CASE WHEN UPPER(q.question_no) = 'Q3' THEN sm.marks_obtained END) AS q3,
-				MAX(CASE WHEN UPPER(q.question_no) = 'Q4' THEN sm.marks_obtained END) AS q4,
-				MAX(CASE WHEN UPPER(q.question_no) = 'Q5' THEN sm.marks_obtained END) AS q5
+				MAX(qi.version) AS version{$question_select_sql}
 			FROM emarking_question_images qi
 			INNER JOIN emarking_questions q ON q.id = qi.question_id
 			LEFT JOIN schools s ON s.school_id = qi.school_id
@@ -1705,9 +1834,112 @@ class Emarking_report_model extends CI_Model
 					) = picked.pick_key
 			) sm ON sm.question_image_id = qi.id AND sm.question_id = qi.question_id
 			WHERE {$where_sql}
-			GROUP BY qi.source_table, qi.source_paper_id, qi.paper_barcode
-			ORDER BY qi.source_paper_id ASC, qi.paper_barcode ASC
+			GROUP BY qi.school_id, qi.roll_no, qi.subject_code, qi.version, qi.grade
+			ORDER BY
+				CAST(COALESCE(NULLIF(MAX(qi.subject_code), ''), '999') AS UNSIGNED) ASC,
+				COALESCE(MAX(qi.version), 0) ASC,
+				COALESCE(MAX(qi.school_id), 0) ASC,
+				MAX(qi.roll_no) ASC,
+				COALESCE(MAX(qi.grade), 0) ASC{$limit_sql}
 		";
+	}
+
+	private function build_dictation_csv_row_from_sql_row(array $row, array $question_labels)
+	{
+		return $this->apply_dictation_school_gender_format($this->build_assessment_csv_row_from_sql_row($row, $question_labels));
+	}
+
+	public function get_dictation_csv_headers($filters = [])
+	{
+		return $this->build_dictation_csv_headers($filters);
+	}
+
+	public function get_dictation_csv_versions($filters = [])
+	{
+		$this->db->distinct();
+		$this->db->select('qi.version');
+		$this->db->from('emarking_question_images qi');
+		$this->db->join('emarking_questions q', 'q.id = qi.question_id', 'inner');
+		$this->db->where('q.assessment_type', 'DICTATION');
+		$this->db->where('qi.assessment_type', 'DICTATION');
+
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') {
+			$this->db->where('qi.subject_code', $subject_code);
+		}
+
+		$grade = trim((string) ($filters['grade'] ?? ''));
+		if ($grade !== '') {
+			$this->db->where('qi.grade', (int) $grade);
+		}
+
+		$this->db->order_by('qi.version', 'ASC');
+		$rows = $this->db->get()->result();
+
+		$out = [];
+		foreach ($rows as $row) {
+			$v = trim((string) ($row->version ?? ''));
+			if ($v !== '') $out[] = $v;
+		}
+		return array_values(array_unique($out));
+	}
+
+	public function get_dictation_csv_rows($filters = [], $limit = null)
+	{
+		$question_sequences = $this->get_dictation_question_sequences($filters);
+		$question_labels = $this->get_dictation_question_labels($filters);
+		if (empty($question_labels)) {
+			return [];
+		}
+
+		$group_keys = [];
+		if ($limit !== null) {
+			$group_keys = $this->get_dictation_group_keys_page($filters, $limit, 0);
+			if (empty($group_keys)) {
+				return [];
+			}
+		}
+
+		$sql = $this->build_dictation_export_sql($question_sequences, $filters, null, $group_keys);
+		$rows = $this->db->query($sql)->result_array();
+		$out = [];
+		foreach ($rows as $row) {
+			$out[] = $this->build_dictation_csv_row_from_sql_row($row, $question_labels);
+		}
+		return $out;
+	}
+
+	public function get_dictation_csv_rows_page($filters = [], $limit = 200, $offset = 0)
+	{
+		$question_sequences = $this->get_dictation_question_sequences($filters);
+		$question_labels = $this->get_dictation_question_labels($filters);
+		if (empty($question_labels)) {
+			return [];
+		}
+
+		$group_keys = $this->get_dictation_group_keys_page($filters, $limit, $offset);
+		if (empty($group_keys)) {
+			return [];
+		}
+
+		$sql = $this->build_dictation_export_sql($question_sequences, $filters, null, $group_keys);
+		$rows = $this->db->query($sql)->result_array();
+		$out = [];
+		foreach ($rows as $row) {
+			$out[] = $this->build_dictation_csv_row_from_sql_row($row, $question_labels);
+		}
+		return $out;
+	}
+
+	public function stream_dictation_csv_export($filters = [], callable $writer)
+	{
+		$question_sequences = $this->get_dictation_question_sequences($filters);
+		$question_labels = $this->get_dictation_question_labels($filters);
+		if (empty($question_labels)) {
+			return;
+		}
+
+		$sql = $this->build_dictation_export_sql($question_sequences, $filters);
 
 		$mysqli = $this->db->conn_id;
 		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
@@ -1717,45 +1949,7 @@ class Emarking_report_model extends CI_Model
 
 		try {
 			while ($row = $result->fetch_assoc()) {
-				$q1 = $this->format_mark_value($row['q1'] ?? null);
-				$q2 = $this->format_mark_value($row['q2'] ?? null);
-				$q3 = $this->format_mark_value($row['q3'] ?? null);
-				$q4 = $this->format_mark_value($row['q4'] ?? null);
-				$q5 = $this->format_mark_value($row['q5'] ?? null);
-
-				$parts = [];
-				foreach (['Q1' => $q1, 'Q2' => $q2, 'Q3' => $q3, 'Q4' => $q4, 'Q5' => $q5] as $label => $value) {
-					if ($value !== '') $parts[] = $label . '=' . $value;
-				}
-
-				$total = 0.0;
-				foreach ([$q1, $q2, $q3, $q4, $q5] as $value) {
-					if ($value !== '') $total += (float) $value;
-				}
-
-				$writer([
-					'Unique Identifier' => (string) ($row['unique_identifier'] ?? ''),
-					'School ID' => (string) ($row['school_id'] ?? ''),
-					'Student ID' => (string) ($row['student_id'] ?? ''),
-					'EMIS Code' => (string) ($row['emis_code'] ?? ''),
-					'School Name' => (string) ($row['school_name'] ?? ''),
-					'District' => (string) ($row['district'] ?? ''),
-					'Tehsil' => (string) ($row['tehsil'] ?? ''),
-					'School Admin' => (string) ($row['school_admin'] ?? ''),
-					'School Level' => (string) ($row['school_level'] ?? ''),
-					'School Type' => (string) ($row['school_type'] ?? ''),
-					'Gender' => (string) ($row['gender'] ?? ''),
-					'Grade' => (string) ($row['grade'] ?? ''),
-					'Exam ID' => (string) ($row['exam_id'] ?? ''),
-					'Subject' => $this->dictation_subject_name($row['subject_code'] ?? ''),
-					'Version' => (string) ($row['version'] ?? ''),
-					'Q1' => $q1,
-					'Q2' => $q2,
-					'Q3' => $q3,
-					'Q4' => $q4,
-					'Q5' => $q5,
-					'Total Obtained' => $this->format_mark_value($total),
-				]);
+				$writer($this->build_dictation_csv_row_from_sql_row($row, $question_labels));
 			}
 		} finally {
 			$result->free();
@@ -1960,10 +2154,8 @@ class Emarking_report_model extends CI_Model
 					$crq_total += (float) $value;
 				}
 			}
-			$row['School ID'] = trim((string) ($row['School Admin'] ?? ''));
-			$row['School Admin'] = trim((string) ($row['School Type'] ?? ''));
-			$row['School Type'] = trim((string) ($row['Gender'] ?? ''));
-			$row['Gender'] = '';
+			$row['School Type'] = trim((string) ($row['School Type'] ?? ''));
+			$row['Gender'] = $this->combined_gender_code_from_school_gender($row['School Type'] ?? '');
 			$row['Exam ID'] = 'LSA-4';
 			$row['MCQs Total'] = $this->format_mark_value($mcq_total);
 			$row['CRQs Total'] = $this->format_mark_value($crq_total);
