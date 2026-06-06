@@ -692,6 +692,13 @@ class Emarking_report_model extends CI_Model
 		return $row;
 	}
 
+	private function apply_crq_school_gender_format(array $row)
+	{
+		$row['School Type'] = trim((string) ($row['School Type'] ?? ''));
+		$row['Gender'] = $this->combined_gender_code_from_school_gender($row['School Type'] ?? '');
+		return $row;
+	}
+
 	private function subject_sort_rank($subject)
 	{
 		$subject = trim((string) $subject);
@@ -2052,7 +2059,9 @@ class Emarking_report_model extends CI_Model
 		$rows = [];
 		try {
 			while ($row = $result->fetch_assoc()) {
-				$rows[] = $this->build_assessment_csv_row_from_sql_row($row, $question_labels);
+				$rows[] = $this->apply_crq_school_gender_format(
+					$this->build_assessment_csv_row_from_sql_row($row, $question_labels)
+				);
 			}
 		} finally {
 			$result->free();
@@ -2269,7 +2278,9 @@ class Emarking_report_model extends CI_Model
 		$rows = $this->db->query($sql)->result_array();
 		$out = [];
 		foreach ($rows as $row) {
-			$out[] = $this->build_assessment_csv_row_from_sql_row($row, $question_labels);
+			$out[] = $this->apply_crq_school_gender_format(
+				$this->build_assessment_csv_row_from_sql_row($row, $question_labels)
+			);
 		}
 		return $out;
 	}
@@ -2291,7 +2302,9 @@ class Emarking_report_model extends CI_Model
 
 		try {
 			while ($row = $result->fetch_assoc()) {
-				$writer($this->build_assessment_csv_row_from_sql_row($row, $question_labels));
+				$writer($this->apply_crq_school_gender_format(
+					$this->build_assessment_csv_row_from_sql_row($row, $question_labels)
+				));
 			}
 		} finally {
 			$result->free();
