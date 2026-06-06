@@ -347,11 +347,35 @@
             <p>MCQ+CRQ Result CSV</p>
           </a>
         </li>
-        <li class="nav-item">
-          <a href="<?php echo url('admin/emarking/reports_bq_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'bq_csv') ? 'active' : ''; ?>">
-            <i class="far fa-circle nav-icon"></i>
-            <p>BQ Result CSV</p>
-          </a>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/emarking/reports_complete_english_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'complete_english_csv') ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>Complete English CSV</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/emarking/reports_complete_urdu_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'complete_urdu_csv') ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>Complete Urdu CSV</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/emarking/reports_complete_math_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'complete_math_csv') ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>Complete Math CSV</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/emarking/reports_complete_science_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'complete_science_csv') ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>Complete Science CSV</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/emarking/reports_bq_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'bq_csv') ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>BQ Result CSV</p>
+            </a>
         </li>
         <li class="nav-item">
           <a href="<?php echo url('admin/emarking/reports_dictation_csv'); ?>" class="nav-link <?php echo ($page->menu == 'results' && $page->submenu == 'dictation_csv') ? 'active' : ''; ?>">
