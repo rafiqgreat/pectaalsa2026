@@ -3,7 +3,7 @@
 
 <?php
 $tab = (string) ($reports_tab ?? 'questions');
-$allowedTabs = ['questions', 'subjects', 'emarkers', 'batches', 'emarkers_payment'];
+$allowedTabs = ['questions', 'subjects', 'emarkers', 'batches', 'emarkers_payment', 'rechecking_summary'];
 if (!in_array($tab, $allowedTabs, true)) $tab = 'questions';
 $role = (int) logged('role');
 $subjectName = function ($code) {
@@ -84,6 +84,9 @@ $subjectOptions = isset($subject_options) && is_array($subject_options) && !empt
             <a class="btn btn-<?php echo ($tab === 'questions') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_questions'); ?>">Question-wise</a>
             <a class="btn btn-<?php echo ($tab === 'subjects') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_subjects'); ?>">Subject-wise</a>
             <a class="btn btn-<?php echo ($tab === 'emarkers') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_emarkers'); ?>">eMarker-wise</a>
+            <?php if (in_array($role, [1, 18], true)): ?>
+              <a class="btn btn-<?php echo ($tab === 'rechecking_summary') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/rechecking_summary'); ?>">Rechecking Summary</a>
+            <?php endif; ?>
             <?php if ($role === 1): ?>
               <a class="btn btn-<?php echo ($tab === 'emarkers_payment') ? 'primary' : 'outline-secondary'; ?>" href="<?php echo base_url('admin/emarking/reports_emarkers_payment_summary'); ?>">Payment Summary</a>
               <a class="btn btn-outline-secondary" href="<?php echo base_url('admin/emarking/reports_dictation_csv'); ?>">Dictation Result CSV</a>

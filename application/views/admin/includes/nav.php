@@ -30,6 +30,14 @@
             <p>eMarker-wise Summary</p>
           </a>
         </li>
+        <?php if (in_array($role, [1, 18], true)): ?>
+          <li class="nav-item">
+            <a href="<?php echo url('admin/emarking/rechecking_summary'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'rechecking_summary') ? 'active' : ''; ?>">
+              <i class="far fa-circle nav-icon"></i>
+              <p>eMarker-wise Rechecking Summary</p>
+            </a>
+          </li>
+        <?php endif; ?>
         <li class="nav-item">
           <a href="<?php echo url('admin/emarking/reports_subjects'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'subjects') ? 'active' : ''; ?>">
             <i class="far fa-circle nav-icon"></i>
@@ -187,6 +195,14 @@
                 <p>eMarker-wise Summary</p>
               </a>
             </li>
+            <?php if (in_array($role, [1, 18], true)): ?>
+              <li class="nav-item">
+                <a href="<?php echo url('admin/emarking/rechecking_summary'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'rechecking_summary') ? 'active' : ''; ?>">
+                  <i class="far fa-dot-circle nav-icon"></i>
+                  <p>eMarker-wise Rechecking Summary</p>
+                </a>
+              </li>
+            <?php endif; ?>
             <?php if ($role !== 18): ?>
               <li class="nav-item">
                 <a href="<?php echo url('admin/emarking/reports_subjects'); ?>" class="nav-link <?php echo ($page->menu == 'emarking' && $page->submenu == 'reports' && (string) ($reports_tab ?? '') === 'subjects') ? 'active' : ''; ?>">

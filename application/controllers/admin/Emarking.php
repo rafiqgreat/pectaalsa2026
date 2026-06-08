@@ -1417,6 +1417,7 @@ class Emarking extends MY_Controller
 			'assessment_type' => trim((string) $this->input->get('assessment_type', true)),
 			'grade' => trim((string) $this->input->get('grade', true)),
 			'subject_code' => trim((string) $this->input->get('subject_code', true)),
+			'emarker_id' => trim((string) $this->input->get('emarker_id', true)),
 		];
 	}
 
@@ -1567,6 +1568,87 @@ class Emarking extends MY_Controller
 	public function reports_emarkers()
 	{
 		$this->load_reports_tab('emarkers');
+	}
+
+	public function rechecking_summary()
+	{
+		$role = $this->current_role();
+		if (!in_array($role, [1, 18], true)) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->submenu = 'reports';
+		$this->page_data['reports_tab'] = 'rechecking_summary';
+		$this->page_data['page']->title = 'eMarker-wise Rechecking Summary';
+
+		if ($this->input->method(true) === 'POST') {
+			if ($role !== 1) {
+				redirect('errors/permission_denied');
+				die;
+			}
+
+			$ok = $this->emarking_report->regenerate_rechecking_pool();
+			$this->session->set_flashdata('message', $ok ? 'Rechecking pool regenerated successfully.' : 'Unable to regenerate rechecking pool.');
+			$this->session->set_flashdata('message_type', $ok ? 'success' : 'danger');
+			redirect('admin/emarking/rechecking_summary');
+			return;
+		}
+
+		$filters = $this->reports_filters_from_get();
+
+		if ($role === 18) {
+			$allowed_codes = $this->ss_allowed_subject_codes();
+			if (empty($allowed_codes)) {
+				$this->session->set_flashdata('message', 'No subjects are assigned to your account.');
+				$this->session->set_flashdata('message_type', 'danger');
+				redirect('admin/dashboard/subject_specialist');
+				return;
+			}
+
+			$opts = [];
+			foreach ($this->subject_code_map as $code => $name) {
+				if (in_array((string) $code, $allowed_codes, true)) {
+					$opts[$code] = $name;
+				}
+			}
+			$this->page_data['subject_options'] = $opts;
+
+			$typed = trim((string) ($filters['subject_code'] ?? ''));
+			if ($typed !== '' && in_array($typed, $allowed_codes, true)) {
+				$filters['subject_code'] = $typed;
+			} else {
+				$filters['subject_code'] = $allowed_codes;
+			}
+		} else {
+			$this->page_data['subject_options'] = $this->subject_code_map;
+		}
+
+		$this->page_data['filters'] = $filters;
+		$this->page_data['rechecking_summary'] = $this->emarking_report->get_rechecking_summary($filters);
+
+		$selected_emarker_id = (int) ($filters['emarker_id'] ?? 0);
+		if ($selected_emarker_id > 0) {
+			$this->page_data['emarker_options'] = $this->emarking_report->get_rechecking_summary_emarker_options($filters);
+		} else {
+			$options = [];
+			$seen = [];
+			foreach ((array) $this->page_data['rechecking_summary'] as $row) {
+				$emarker_id = (int) ($row->emarker_id ?? 0);
+				if ($emarker_id <= 0 || isset($seen[$emarker_id])) {
+					continue;
+				}
+				$seen[$emarker_id] = true;
+				$options[] = (object) [
+					'emarker_id' => $emarker_id,
+					'emarker_name' => (string) ($row->emarker_name ?? ''),
+					'emarker_username' => (string) ($row->emarker_username ?? ''),
+				];
+			}
+			$this->page_data['emarker_options'] = $options;
+		}
+
+		$this->load->view('admin/emarking/reports_rechecking_summary', $this->page_data);
 	}
 
 	public function reports_emarkers_payment_summary()
