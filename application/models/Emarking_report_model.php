@@ -2700,82 +2700,92 @@ class Emarking_report_model extends CI_Model
 			return;
 		}
 
-		$total_marked = 0;
-		$max_marked = 0;
-		foreach ($rows as $row) {
-			$marked = (int) ($row->marked ?? 0);
-			$total_marked += $marked;
-			if ($marked > $max_marked) {
-				$max_marked = $marked;
+		$subject_groups = [];
+		foreach (array_keys($rows) as $idx) {
+			$subject_id = (int) ($rows[$idx]->subject_id ?? 0);
+			if (!isset($subject_groups[$subject_id])) {
+				$subject_groups[$subject_id] = [];
 			}
+			$subject_groups[$subject_id][] = $idx;
 		}
 
-		if ($total_marked <= 0 || $max_marked <= 0) {
-			return;
-		}
-
-		$target_percentage = $this->random_decimal(9, 12);
-		$target_total = (int) round($total_marked * $target_percentage / 100);
-		$current_total = 0;
-
-		foreach ($rows as $row) {
-			$generated = $this->calculate_default_rechecking_values((int) ($row->marked ?? 0), $max_marked);
-			$row->percentage = (float) $generated['percentage'];
-			$row->rechecked = (int) $generated['rechecked'];
-			$current_total += (int) $row->rechecked;
-		}
-
-		$diff = $target_total - $current_total;
-		if ($diff !== 0) {
-			$order = array_keys($rows);
-			usort($order, function ($a, $b) use ($rows, $diff) {
-				$marked_a = (int) ($rows[$a]->marked ?? 0);
-				$marked_b = (int) ($rows[$b]->marked ?? 0);
-				if ($marked_a === $marked_b) return 0;
-				return ($diff > 0)
-					? (($marked_a < $marked_b) ? 1 : -1)
-					: (($marked_a > $marked_b) ? 1 : -1);
-			});
-
-			foreach ($order as $idx) {
-				if ($diff === 0) {
-					break;
-				}
-
-				$row = $rows[$idx];
-				$marked = (int) ($row->marked ?? 0);
-				if ($marked <= 0) {
-					continue;
-				}
-
-				$current = (int) ($row->rechecked ?? 0);
-				if ($marked < 200) {
-					$min_allowed = 0;
-					$max_allowed = 0;
-				} else {
-					$min_allowed = max(1, (int) ceil($marked * 0.09));
-					$max_allowed = min($marked, (int) floor($marked * 0.12));
-				}
-
-				if ($diff > 0) {
-					$capacity = max(0, $max_allowed - $current);
-					if ($capacity <= 0) continue;
-					$step = min($capacity, $diff);
-					$rows[$idx]->rechecked = $current + $step;
-					$diff -= $step;
-				} else {
-					$capacity = max(0, $current - $min_allowed);
-					if ($capacity <= 0) continue;
-					$step = min($capacity, abs($diff));
-					$rows[$idx]->rechecked = $current - $step;
-					$diff += $step;
+		foreach ($subject_groups as $indexes) {
+			$total_marked = 0;
+			$max_marked = 0;
+			foreach ($indexes as $idx) {
+				$marked = (int) ($rows[$idx]->marked ?? 0);
+				$total_marked += $marked;
+				if ($marked > $max_marked) {
+					$max_marked = $marked;
 				}
 			}
 
-			foreach ($rows as $row) {
-				$marked = (int) ($row->marked ?? 0);
-				$row->percentage = ($marked > 0)
-					? round((((int) $row->rechecked * 100) / $marked), 2)
+			if ($total_marked <= 0 || $max_marked <= 0) {
+				continue;
+			}
+
+			$target_percentage = $this->random_decimal(9, 12);
+			$target_total = (int) round($total_marked * $target_percentage / 100);
+			$current_total = 0;
+
+			foreach ($indexes as $idx) {
+				$generated = $this->calculate_default_rechecking_values((int) ($rows[$idx]->marked ?? 0), $max_marked);
+				$rows[$idx]->percentage = (float) $generated['percentage'];
+				$rows[$idx]->rechecked = (int) $generated['rechecked'];
+				$current_total += (int) $rows[$idx]->rechecked;
+			}
+
+			$diff = $target_total - $current_total;
+			if ($diff !== 0) {
+				$order = $indexes;
+				usort($order, function ($a, $b) use ($rows, $diff) {
+					$marked_a = (int) ($rows[$a]->marked ?? 0);
+					$marked_b = (int) ($rows[$b]->marked ?? 0);
+					if ($marked_a === $marked_b) return 0;
+					return ($diff > 0)
+						? (($marked_a < $marked_b) ? 1 : -1)
+						: (($marked_a > $marked_b) ? 1 : -1);
+				});
+
+				foreach ($order as $idx) {
+					if ($diff === 0) {
+						break;
+					}
+
+					$marked = (int) ($rows[$idx]->marked ?? 0);
+					if ($marked <= 0) {
+						continue;
+					}
+
+					$current = (int) ($rows[$idx]->rechecked ?? 0);
+					if ($marked < 200) {
+						$min_allowed = 0;
+						$max_allowed = 0;
+					} else {
+						$min_allowed = max(1, (int) ceil($marked * 0.09));
+						$max_allowed = min($marked, (int) floor($marked * 0.12));
+					}
+
+					if ($diff > 0) {
+						$capacity = max(0, $max_allowed - $current);
+						if ($capacity <= 0) continue;
+						$step = min($capacity, $diff);
+						$rows[$idx]->rechecked = $current + $step;
+						$diff -= $step;
+					} else {
+						$capacity = max(0, $current - $min_allowed);
+						if ($capacity <= 0) continue;
+						$step = min($capacity, abs($diff));
+						$rows[$idx]->rechecked = $current - $step;
+						$diff += $step;
+					}
+				}
+			}
+
+			foreach ($indexes as $idx) {
+				$marked = (int) ($rows[$idx]->marked ?? 0);
+				$rows[$idx]->percentage = ($marked > 0)
+					? round((((int) $rows[$idx]->rechecked * 100) / $marked), 2)
 					: 0.00;
 			}
 		}
