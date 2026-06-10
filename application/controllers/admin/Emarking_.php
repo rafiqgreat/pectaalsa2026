@@ -1444,6 +1444,41 @@ class Emarking extends MY_Controller
 		];
 	}
 
+	private function mcq_csv_filters_from_get()
+	{
+		return [
+			'assessment_type' => 'MCQ',
+			'grade' => trim((string) $this->input->get('grade', true)),
+			'subject_code' => trim((string) $this->input->get('subject_code', true)),
+			'version' => trim((string) $this->input->get('version', true)),
+			'district_id' => trim((string) $this->input->get('district_id', true)),
+			'school_query' => trim((string) $this->input->get('school_query', true)),
+		];
+	}
+
+	private function mcq_crq_csv_filters_from_get()
+	{
+		return [
+			'grade' => trim((string) $this->input->get('grade', true)),
+			'subject_code' => trim((string) $this->input->get('subject_code', true)),
+			'version' => trim((string) $this->input->get('version', true)),
+			'district_id' => trim((string) $this->input->get('district_id', true)),
+			'school_query' => trim((string) $this->input->get('school_query', true)),
+		];
+	}
+
+	private function bq_csv_filters_from_get()
+	{
+		return [
+			'assessment_type' => 'BQ',
+			'source_table' => trim((string) $this->input->get('source_table', true)),
+			'grade' => trim((string) $this->input->get('grade', true)),
+			'version' => trim((string) $this->input->get('version', true)),
+			'district_id' => trim((string) $this->input->get('district_id', true)),
+			'school_query' => trim((string) $this->input->get('school_query', true)),
+		];
+	}
+
 	private function dictation_csv_has_narrowing_filters($filters)
 	{
 		return
@@ -1686,6 +1721,154 @@ class Emarking extends MY_Controller
 		die;
 	}
 
+	public function reports_eng_dict_barcodes()
+	{
+		$this->ensure_english_subject_access();
+		$this->load->library('pagination');
+		$show_image_barcode = ((int) logged('role') === 1);
+
+		$this->page_data['page']->submenu = 'reports';
+		$this->page_data['reports_tab'] = 'eng_dict_barcodes';
+		$this->page_data['page']->title = 'ENG Dict Barcodes';
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+		$per_page = (int) $this->input->get('per_page', true);
+		$allowed_per_page = [100, 200, 500];
+		if (!in_array($per_page, $allowed_per_page, true)) {
+			$per_page = 100;
+		}
+		$page = (int) $this->input->get('page', true);
+		$page = $page > 0 ? $page : 1;
+		$offset = ($page - 1) * $per_page;
+
+		$versions = $this->emarking->get_eng_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$total = $this->emarking->count_eng_dict_barcodes($selected_version, $show_image_barcode, $selected_status);
+		$config = [
+			'base_url' => url('admin/emarking/reports_eng_dict_barcodes'),
+			'total_rows' => $total,
+			'per_page' => $per_page,
+			'page_query_string' => true,
+			'query_string_segment' => 'page',
+			'use_page_numbers' => true,
+			'reuse_query_string' => true,
+		];
+		$this->pagination->initialize($config);
+
+		$rows = $this->emarking->get_eng_dict_barcodes_page($selected_version, $per_page, $offset, $show_image_barcode, $selected_status);
+
+		$this->page_data['barcode_versions'] = $versions;
+		$this->page_data['selected_version'] = $selected_version;
+		$this->page_data['selected_status'] = $selected_status;
+		$this->page_data['barcode_rows'] = $rows;
+		$this->page_data['show_image_barcode'] = $show_image_barcode;
+		$this->page_data['barcode_total'] = $total;
+		$this->page_data['barcode_page'] = $page;
+		$this->page_data['barcode_per_page'] = $per_page;
+		$this->page_data['pagination_links'] = $this->pagination->create_links();
+		$this->page_data['barcode_subject_label'] = 'ENGLISH';
+		$this->page_data['barcode_title_label'] = 'ENG Dict Barcodes';
+		$this->page_data['barcode_source_table'] = 'digital_papers_dictation1';
+		$this->page_data['barcode_export_url'] = 'admin/emarking/export_eng_dict_barcodes_csv';
+		$this->page_data['barcode_type_label'] = 'DICTATION';
+		$this->page_data['barcode_download_label'] = 'Dictation';
+		$this->load->view('admin/emarking/reports_eng_crqs_barcodes', $this->page_data);
+	}
+
+	public function export_eng_dict_barcodes_csv()
+	{
+		$this->ensure_english_subject_access();
+		$show_image_barcode = ((int) logged('role') === 1);
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+
+		$versions = $this->emarking->get_eng_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$ts = date('Ymd_His');
+		$suffix = ($selected_version === '') ? 'all_versions' : ('version_' . $selected_version);
+		$filename = 'eng_dict_barcodes_' . $suffix . '_' . $ts . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create export output stream.', 500);
+			return;
+		}
+
+		$headers = ['Sr', 'Grade', 'Subject', 'Version', 'Type', 'Barcode', 'Status'];
+		if ($show_image_barcode) {
+			$headers[] = 'question_no';
+			$headers[] = 'Image_Barcode';
+		}
+		fputcsv($out, $headers);
+
+		$sr = 1;
+		$chunk = 5000;
+		$offset = 0;
+		while (true) {
+			$rows = $this->emarking->get_eng_dict_barcodes_page($selected_version, $chunk, $offset, $show_image_barcode, $selected_status);
+			if (empty($rows)) {
+				break;
+			}
+
+			foreach ((array) $rows as $row) {
+				$line = [
+					$sr++,
+					(string) ($row->grade ?? '4'),
+					'ENGLISH',
+					(string) ($row->version ?? ''),
+					'DICTATION',
+					(string) ($row->barcode ?? ''),
+					(string) ($row->status ?? 'Missing'),
+				];
+				if ($show_image_barcode) {
+					$line[] = (string) ($row->question_no ?? 'q1');
+					$line[] = (string) ($row->image_barcode ?? '');
+				}
+				fputcsv($out, $line);
+			}
+
+			$offset += $chunk;
+			if (function_exists('ob_get_level')) {
+				while (ob_get_level() > 0) {
+					@ob_end_flush();
+				}
+			}
+			flush();
+
+			if (count($rows) < $chunk) {
+				break;
+			}
+		}
+
+		fclose($out);
+		die;
+	}
+
 	public function reports_urdu_crqs_barcodes()
 	{
 		$this->ensure_admin_barcode_access();
@@ -1805,6 +1988,154 @@ class Emarking extends MY_Controller
 					'URDU',
 					(string) ($row->version ?? ''),
 					'CRQ',
+					(string) ($row->barcode ?? ''),
+					(string) ($row->status ?? 'Missing'),
+				];
+				if ($show_image_barcode) {
+					$line[] = (string) ($row->question_no ?? 'q1');
+					$line[] = (string) ($row->image_barcode ?? '');
+				}
+				fputcsv($out, $line);
+			}
+
+			$offset += $chunk;
+			if (function_exists('ob_get_level')) {
+				while (ob_get_level() > 0) {
+					@ob_end_flush();
+				}
+			}
+			flush();
+
+			if (count($rows) < $chunk) {
+				break;
+			}
+		}
+
+		fclose($out);
+		die;
+	}
+
+	public function reports_urdu_dict_barcodes()
+	{
+		$this->ensure_admin_barcode_access();
+		$this->load->library('pagination');
+		$show_image_barcode = true;
+
+		$this->page_data['page']->submenu = 'reports';
+		$this->page_data['reports_tab'] = 'urdu_dict_barcodes';
+		$this->page_data['page']->title = 'Urdu Dict Barcodes';
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+		$per_page = (int) $this->input->get('per_page', true);
+		$allowed_per_page = [100, 200, 500];
+		if (!in_array($per_page, $allowed_per_page, true)) {
+			$per_page = 100;
+		}
+		$page = (int) $this->input->get('page', true);
+		$page = $page > 0 ? $page : 1;
+		$offset = ($page - 1) * $per_page;
+
+		$versions = $this->emarking->get_urdu_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$total = $this->emarking->count_urdu_dict_barcodes($selected_version, $show_image_barcode, $selected_status);
+		$config = [
+			'base_url' => url('admin/emarking/reports_urdu_dict_barcodes'),
+			'total_rows' => $total,
+			'per_page' => $per_page,
+			'page_query_string' => true,
+			'query_string_segment' => 'page',
+			'use_page_numbers' => true,
+			'reuse_query_string' => true,
+		];
+		$this->pagination->initialize($config);
+
+		$rows = $this->emarking->get_urdu_dict_barcodes_page($selected_version, $per_page, $offset, $show_image_barcode, $selected_status);
+
+		$this->page_data['barcode_versions'] = $versions;
+		$this->page_data['selected_version'] = $selected_version;
+		$this->page_data['selected_status'] = $selected_status;
+		$this->page_data['barcode_rows'] = $rows;
+		$this->page_data['show_image_barcode'] = $show_image_barcode;
+		$this->page_data['barcode_total'] = $total;
+		$this->page_data['barcode_page'] = $page;
+		$this->page_data['barcode_per_page'] = $per_page;
+		$this->page_data['pagination_links'] = $this->pagination->create_links();
+		$this->page_data['barcode_subject_label'] = 'URDU';
+		$this->page_data['barcode_title_label'] = 'Urdu Dict Barcodes';
+		$this->page_data['barcode_source_table'] = 'digital_papers_dictation2';
+		$this->page_data['barcode_export_url'] = 'admin/emarking/export_urdu_dict_barcodes_csv';
+		$this->page_data['barcode_type_label'] = 'DICTATION';
+		$this->page_data['barcode_download_label'] = 'Dictation';
+		$this->load->view('admin/emarking/reports_eng_crqs_barcodes', $this->page_data);
+	}
+
+	public function export_urdu_dict_barcodes_csv()
+	{
+		$this->ensure_admin_barcode_access();
+		$show_image_barcode = true;
+
+		$selected_version = trim((string) $this->input->get('version', true));
+		if ($selected_version !== '' && !ctype_digit($selected_version)) {
+			$selected_version = '';
+		}
+		$selected_status = strtolower(trim((string) $this->input->get('status', true)));
+		if (!in_array($selected_status, ['exist', 'missing'], true)) {
+			$selected_status = '';
+		}
+
+		$versions = $this->emarking->get_urdu_dict_barcode_versions();
+		if ($selected_version !== '' && !in_array($selected_version, $versions, true)) {
+			$selected_version = '';
+		}
+
+		$ts = date('Ymd_His');
+		$suffix = ($selected_version === '') ? 'all_versions' : ('version_' . $selected_version);
+		$filename = 'urdu_dict_barcodes_' . $suffix . '_' . $ts . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create export output stream.', 500);
+			return;
+		}
+
+		$headers = ['Sr', 'Grade', 'Subject', 'Version', 'Type', 'Barcode', 'Status'];
+		if ($show_image_barcode) {
+			$headers[] = 'question_no';
+			$headers[] = 'Image_Barcode';
+		}
+		fputcsv($out, $headers);
+
+		$sr = 1;
+		$chunk = 5000;
+		$offset = 0;
+		while (true) {
+			$rows = $this->emarking->get_urdu_dict_barcodes_page($selected_version, $chunk, $offset, $show_image_barcode, $selected_status);
+			if (empty($rows)) {
+				break;
+			}
+
+			foreach ((array) $rows as $row) {
+				$line = [
+					$sr++,
+					(string) ($row->grade ?? '4'),
+					'URDU',
+					(string) ($row->version ?? ''),
+					'DICTATION',
 					(string) ($row->barcode ?? ''),
 					(string) ($row->status ?? 'Missing'),
 				];
@@ -2149,7 +2480,7 @@ class Emarking extends MY_Controller
 		];
 		$this->page_data['districts'] = $this->location_model->get_districts();
 		$this->page_data['version_options'] = ['1', '2'];
-		$this->page_data['csv_headers'] = $this->emarking_report->get_dictation_csv_headers();
+		$this->page_data['csv_headers'] = $this->emarking_report->get_dictation_csv_headers($filters);
 		$this->page_data['show_preview'] = $this->dictation_csv_has_narrowing_filters($filters);
 		$this->page_data['preview_rows'] = $this->page_data['show_preview']
 			? $this->emarking_report->get_dictation_csv_rows($filters, 50)
@@ -2166,7 +2497,7 @@ class Emarking extends MY_Controller
 		}
 
 		$filters = $this->dictation_csv_filters_from_get();
-		$headers = $this->emarking_report->get_dictation_csv_headers();
+		$headers = $this->emarking_report->get_dictation_csv_headers($filters);
 		$filename = 'dictation_results_' . date('Ymd_His') . '.csv';
 
 		header('Content-Type: text/csv; charset=utf-8');
@@ -2239,6 +2570,1045 @@ class Emarking extends MY_Controller
 		$this->load->view('admin/results/crq_result_csv', $this->page_data);
 	}
 
+	private function complete_english_csv_table_name()
+	{
+		return 'fullbook_complete_result_english';
+	}
+
+	private function complete_english_csv_all_columns()
+	{
+		return [
+			'id',
+			'crq_id',
+			'school_id',
+			'student_id',
+			'emis_code',
+			'school_name',
+			'district',
+			'tehsil',
+			'school_admin',
+			'school_level',
+			'school_type',
+			'gender',
+			'grade',
+			'exam_id',
+			'subject',
+			'version',
+			'crq_q1',
+			'crq_q2',
+			'crq_q3',
+			'crq_q4',
+			'crq_q5',
+			'crq_q6',
+			'crq_q7',
+			'crq_q8',
+			'crq_total_obtained',
+			'SchoolCode',
+			'mcq_sr',
+			'mcq_school_code',
+			'mcq_roll_no',
+			'mcq_grade',
+			'mcq_subject',
+			'mcq_version',
+			'mcq_q1',
+			'mcq_q2',
+			'mcq_q3',
+			'mcq_q4',
+			'mcq_q5',
+			'mcq_q6',
+			'mcq_q7',
+			'mcq_q8',
+			'mcq_q9',
+			'mcq_q10',
+			'mcq_q11',
+			'mcq_q12',
+			'mcq_q13',
+			'mcq_q14',
+			'mcq_q15',
+			'mcq_q16',
+			'mcq_q17',
+			'mcq_q18',
+			'mcq_q19',
+			'mcq_q20',
+			'mcq_q21',
+			'mcq_q22',
+			'mcq_q23',
+			'mcq_q24',
+			'mcq_q25',
+			'mcq_q26',
+			'project_variant',
+			'mcq_status',
+		];
+	}
+
+	private function complete_english_csv_headers($include_mcq_status = false)
+	{
+		$headers = $this->complete_english_csv_all_columns();
+		if (!$include_mcq_status) {
+			$headers = array_values(array_filter($headers, function ($column) {
+				return $column !== 'mcq_status';
+			}));
+		}
+		return $headers;
+	}
+
+	private function complete_english_csv_include_status_from_get()
+	{
+		return (string) $this->input->get('include_mcq_status', true) === '1';
+	}
+
+	private function complete_english_csv_preview_rows($limit = 50)
+	{
+		$table = $this->complete_english_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			return [];
+		}
+
+		$limit = max(1, (int) $limit);
+		$columns = $this->complete_english_csv_headers(false);
+		$this->db->select(implode(',', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $columns)), false);
+		$this->db->from($table);
+		$this->db->order_by('id', 'ASC');
+		$this->db->limit($limit);
+		return $this->db->get()->result_array();
+	}
+
+	public function reports_complete_english_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'complete_english_csv';
+		$this->page_data['page']->title = 'Complete English CSV';
+
+		$table = $this->complete_english_csv_table_name();
+		$this->page_data['csv_table_name'] = $table;
+		$this->page_data['include_mcq_status'] = $this->complete_english_csv_include_status_from_get();
+		$this->page_data['csv_headers'] = $this->complete_english_csv_headers(false);
+		$this->page_data['preview_rows'] = $this->complete_english_csv_preview_rows(50);
+		$this->page_data['table_exists'] = $this->db->table_exists($table);
+
+		$this->load->view('admin/results/complete_english_csv', $this->page_data);
+	}
+
+	public function export_complete_english_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$table = $this->complete_english_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			show_error('Source table not found: ' . $table, 500);
+			return;
+		}
+
+		$include_mcq_status = $this->complete_english_csv_include_status_from_get();
+		$headers = $this->complete_english_csv_headers($include_mcq_status);
+		$filename = 'complete_english_csv_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+
+		$mysqli = $this->db->conn_id;
+		$select_sql = implode(', ', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $headers));
+		$sql = 'SELECT ' . $select_sql . ' FROM `' . $table . '` ORDER BY `id` ASC';
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			fclose($out);
+			show_error('Unable to stream Complete English CSV export: ' . $mysqli->error, 500);
+			return;
+		}
+
+		$row_count = 0;
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$line = [];
+				foreach ($headers as $header_text) {
+					$line[] = (string) ($row[$header_text] ?? '');
+				}
+				fputcsv($out, $line);
+				$row_count++;
+
+				if (($row_count % 500) === 0) {
+					if (function_exists('ob_get_level')) {
+						while (ob_get_level() > 0) {
+							@ob_end_flush();
+						}
+					}
+					flush();
+				}
+			}
+		} finally {
+			$result->free();
+		}
+
+		fclose($out);
+		die;
+	}
+
+	private function complete_urdu_csv_table_name()
+	{
+		return 'fullbook_complete_result_urdu';
+	}
+
+	private function complete_urdu_csv_all_columns()
+	{
+		return [
+			'id',
+			'crq_id',
+			'school_id',
+			'student_id',
+			'emis_code',
+			'school_name',
+			'district',
+			'tehsil',
+			'school_admin',
+			'school_level',
+			'school_type',
+			'gender',
+			'grade',
+			'exam_id',
+			'subject',
+			'version',
+			'crq_q1',
+			'crq_q2',
+			'crq_q3',
+			'crq_q4',
+			'crq_q5',
+			'crq_q6',
+			'crq_q7',
+			'crq_total_obtained',
+			'SchoolCode',
+			'mcq_sr',
+			'mcq_school_code',
+			'mcq_roll_no',
+			'mcq_grade',
+			'mcq_subject',
+			'mcq_version',
+			'mcq_q1',
+			'mcq_q2',
+			'mcq_q3',
+			'mcq_q4',
+			'mcq_q5',
+			'mcq_q6',
+			'mcq_q7',
+			'mcq_q8',
+			'mcq_q9',
+			'mcq_q10',
+			'mcq_q11',
+			'mcq_q12',
+			'mcq_q13',
+			'mcq_q14',
+			'mcq_q15',
+			'mcq_q16',
+			'mcq_q17',
+			'mcq_q18',
+			'mcq_q19',
+			'mcq_q20',
+			'mcq_q21',
+			'mcq_q22',
+			'mcq_q23',
+			'mcq_q24',
+			'mcq_q25',
+			'mcq_q26',
+			'project_variant',
+			'mcq_status',
+		];
+	}
+
+	private function complete_urdu_csv_headers($include_mcq_status = false)
+	{
+		$headers = $this->complete_urdu_csv_all_columns();
+		if (!$include_mcq_status) {
+			$headers = array_values(array_filter($headers, function ($column) {
+				return $column !== 'mcq_status';
+			}));
+		}
+		return $headers;
+	}
+
+	private function complete_urdu_csv_include_status_from_get()
+	{
+		return (string) $this->input->get('include_mcq_status', true) === '1';
+	}
+
+	private function complete_urdu_csv_preview_rows($limit = 50)
+	{
+		$table = $this->complete_urdu_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			return [];
+		}
+
+		$limit = max(1, (int) $limit);
+		$columns = $this->complete_urdu_csv_headers(false);
+		$this->db->select(implode(',', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $columns)), false);
+		$this->db->from($table);
+		$this->db->order_by('id', 'ASC');
+		$this->db->limit($limit);
+		return $this->db->get()->result_array();
+	}
+
+	public function reports_complete_urdu_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'complete_urdu_csv';
+		$this->page_data['page']->title = 'Complete Urdu CSV';
+
+		$table = $this->complete_urdu_csv_table_name();
+		$this->page_data['csv_table_name'] = $table;
+		$this->page_data['include_mcq_status'] = $this->complete_urdu_csv_include_status_from_get();
+		$this->page_data['csv_headers'] = $this->complete_urdu_csv_headers(false);
+		$this->page_data['preview_rows'] = $this->complete_urdu_csv_preview_rows(50);
+		$this->page_data['table_exists'] = $this->db->table_exists($table);
+
+		$this->load->view('admin/results/complete_urdu_csv', $this->page_data);
+	}
+
+	public function export_complete_urdu_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$table = $this->complete_urdu_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			show_error('Source table not found: ' . $table, 500);
+			return;
+		}
+
+		$include_mcq_status = $this->complete_urdu_csv_include_status_from_get();
+		$headers = $this->complete_urdu_csv_headers($include_mcq_status);
+		$filename = 'complete_urdu_csv_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+
+		$mysqli = $this->db->conn_id;
+		$select_sql = implode(', ', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $headers));
+		$sql = 'SELECT ' . $select_sql . ' FROM `' . $table . '` ORDER BY `id` ASC';
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			fclose($out);
+			show_error('Unable to stream Complete Urdu CSV export: ' . $mysqli->error, 500);
+			return;
+		}
+
+		$row_count = 0;
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$line = [];
+				foreach ($headers as $header_text) {
+					$line[] = (string) ($row[$header_text] ?? '');
+				}
+				fputcsv($out, $line);
+				$row_count++;
+
+				if (($row_count % 500) === 0) {
+					if (function_exists('ob_get_level')) {
+						while (ob_get_level() > 0) {
+							@ob_end_flush();
+						}
+					}
+					flush();
+				}
+			}
+		} finally {
+			$result->free();
+		}
+
+		fclose($out);
+		die;
+	}
+
+	private function complete_math_csv_table_name()
+	{
+		return 'fullbook_complete_result_math';
+	}
+
+	private function complete_math_csv_all_columns()
+	{
+		return [
+			'id',
+			'crq_id',
+			'school_id',
+			'student_id',
+			'emis_code',
+			'school_name',
+			'district',
+			'tehsil',
+			'school_admin',
+			'school_level',
+			'school_type',
+			'gender',
+			'grade',
+			'exam_id',
+			'subject',
+			'version',
+			'crq_q1',
+			'crq_q2',
+			'crq_q3',
+			'crq_q4',
+			'crq_q5',
+			'crq_q6',
+			'crq_q7',
+			'crq_q8',
+			'crq_q9',
+			'crq_q10',
+			'crq_q11',
+			'crq_q12',
+			'crq_q13',
+			'crq_total_obtained',
+			'SchoolCode',
+			'mcq_sr',
+			'mcq_school_code',
+			'mcq_roll_no',
+			'mcq_grade',
+			'mcq_subject',
+			'mcq_version',
+			'mcq_q1',
+			'mcq_q2',
+			'mcq_q3',
+			'mcq_q4',
+			'mcq_q5',
+			'mcq_q6',
+			'mcq_q7',
+			'mcq_q8',
+			'mcq_q9',
+			'mcq_q10',
+			'mcq_q11',
+			'mcq_q12',
+			'mcq_q13',
+			'mcq_q14',
+			'mcq_q15',
+			'mcq_q16',
+			'mcq_q17',
+			'mcq_q18',
+			'mcq_q19',
+			'mcq_q20',
+			'mcq_q21',
+			'mcq_q22',
+			'mcq_q23',
+			'mcq_q24',
+			'mcq_q25',
+			'mcq_q26',
+			'project_variant',
+			'mcq_status',
+		];
+	}
+
+	private function complete_math_csv_headers($include_mcq_status = false)
+	{
+		$headers = $this->complete_math_csv_all_columns();
+		if (!$include_mcq_status) {
+			$headers = array_values(array_filter($headers, function ($column) {
+				return $column !== 'mcq_status';
+			}));
+		}
+		return $headers;
+	}
+
+	private function complete_math_csv_include_status_from_get()
+	{
+		return (string) $this->input->get('include_mcq_status', true) === '1';
+	}
+
+	private function complete_math_csv_preview_rows($limit = 50)
+	{
+		$table = $this->complete_math_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			return [];
+		}
+
+		$limit = max(1, (int) $limit);
+		$columns = $this->complete_math_csv_headers(false);
+		$this->db->select(implode(',', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $columns)), false);
+		$this->db->from($table);
+		$this->db->order_by('id', 'ASC');
+		$this->db->limit($limit);
+		return $this->db->get()->result_array();
+	}
+
+	public function reports_complete_math_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'complete_math_csv';
+		$this->page_data['page']->title = 'Complete Math CSV';
+
+		$table = $this->complete_math_csv_table_name();
+		$this->page_data['csv_table_name'] = $table;
+		$this->page_data['include_mcq_status'] = $this->complete_math_csv_include_status_from_get();
+		$this->page_data['csv_headers'] = $this->complete_math_csv_headers(false);
+		$this->page_data['preview_rows'] = $this->complete_math_csv_preview_rows(50);
+		$this->page_data['table_exists'] = $this->db->table_exists($table);
+
+		$this->load->view('admin/results/complete_math_csv', $this->page_data);
+	}
+
+	public function export_complete_math_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$table = $this->complete_math_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			show_error('Source table not found: ' . $table, 500);
+			return;
+		}
+
+		$include_mcq_status = $this->complete_math_csv_include_status_from_get();
+		$headers = $this->complete_math_csv_headers($include_mcq_status);
+		$filename = 'complete_math_csv_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+
+		$mysqli = $this->db->conn_id;
+		$select_sql = implode(', ', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $headers));
+		$sql = 'SELECT ' . $select_sql . ' FROM `' . $table . '` ORDER BY `id` ASC';
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			fclose($out);
+			show_error('Unable to stream Complete Math CSV export: ' . $mysqli->error, 500);
+			return;
+		}
+
+		$row_count = 0;
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$line = [];
+				foreach ($headers as $header_text) {
+					$line[] = (string) ($row[$header_text] ?? '');
+				}
+				fputcsv($out, $line);
+				$row_count++;
+
+				if (($row_count % 500) === 0) {
+					if (function_exists('ob_get_level')) {
+						while (ob_get_level() > 0) {
+							@ob_end_flush();
+						}
+					}
+					flush();
+				}
+			}
+		} finally {
+			$result->free();
+		}
+
+		fclose($out);
+		die;
+	}
+
+	private function complete_science_csv_table_name()
+	{
+		return 'fullbook_complete_result_science';
+	}
+
+	private function complete_science_csv_all_columns()
+	{
+		return [
+			'id',
+			'crq_id',
+			'school_id',
+			'student_id',
+			'emis_code',
+			'school_name',
+			'district',
+			'tehsil',
+			'school_admin',
+			'school_level',
+			'school_type',
+			'gender',
+			'grade',
+			'exam_id',
+			'subject',
+			'version',
+			'crq_q1',
+			'crq_q2',
+			'crq_q3',
+			'crq_q4',
+			'crq_q5',
+			'crq_q6',
+			'crq_q7',
+			'crq_q8',
+			'crq_q9',
+			'crq_q10',
+			'crq_total_obtained',
+			'SchoolCode',
+			'mcq_sr',
+			'mcq_school_code',
+			'mcq_roll_no',
+			'mcq_grade',
+			'mcq_subject',
+			'mcq_version',
+			'mcq_q1',
+			'mcq_q2',
+			'mcq_q3',
+			'mcq_q4',
+			'mcq_q5',
+			'mcq_q6',
+			'mcq_q7',
+			'mcq_q8',
+			'mcq_q9',
+			'mcq_q10',
+			'mcq_q11',
+			'mcq_q12',
+			'mcq_q13',
+			'mcq_q14',
+			'mcq_q15',
+			'mcq_q16',
+			'mcq_q17',
+			'mcq_q18',
+			'mcq_q19',
+			'mcq_q20',
+			'mcq_q21',
+			'mcq_q22',
+			'mcq_q23',
+			'mcq_q24',
+			'mcq_q25',
+			'mcq_q26',
+			'project_variant',
+			'mcq_status',
+		];
+	}
+
+	private function complete_science_csv_headers($include_mcq_status = false)
+	{
+		$headers = $this->complete_science_csv_all_columns();
+		if (!$include_mcq_status) {
+			$headers = array_values(array_filter($headers, function ($column) {
+				return $column !== 'mcq_status';
+			}));
+		}
+		return $headers;
+	}
+
+	private function complete_science_csv_include_status_from_get()
+	{
+		return (string) $this->input->get('include_mcq_status', true) === '1';
+	}
+
+	private function complete_science_csv_preview_rows($limit = 50)
+	{
+		$table = $this->complete_science_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			return [];
+		}
+
+		$limit = max(1, (int) $limit);
+		$columns = $this->complete_science_csv_headers(false);
+		$this->db->select(implode(',', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $columns)), false);
+		$this->db->from($table);
+		$this->db->order_by('id', 'ASC');
+		$this->db->limit($limit);
+		return $this->db->get()->result_array();
+	}
+
+	public function reports_complete_science_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'complete_science_csv';
+		$this->page_data['page']->title = 'Complete Science CSV';
+
+		$table = $this->complete_science_csv_table_name();
+		$this->page_data['csv_table_name'] = $table;
+		$this->page_data['include_mcq_status'] = $this->complete_science_csv_include_status_from_get();
+		$this->page_data['csv_headers'] = $this->complete_science_csv_headers(false);
+		$this->page_data['preview_rows'] = $this->complete_science_csv_preview_rows(50);
+		$this->page_data['table_exists'] = $this->db->table_exists($table);
+
+		$this->load->view('admin/results/complete_science_csv', $this->page_data);
+	}
+
+	public function export_complete_science_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$table = $this->complete_science_csv_table_name();
+		if (!$this->db->table_exists($table)) {
+			show_error('Source table not found: ' . $table, 500);
+			return;
+		}
+
+		$include_mcq_status = $this->complete_science_csv_include_status_from_get();
+		$headers = $this->complete_science_csv_headers($include_mcq_status);
+		$filename = 'complete_science_csv_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+
+		$mysqli = $this->db->conn_id;
+		$select_sql = implode(', ', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $headers));
+		$sql = 'SELECT ' . $select_sql . ' FROM `' . $table . '` ORDER BY `id` ASC';
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			fclose($out);
+			show_error('Unable to stream Complete Science CSV export: ' . $mysqli->error, 500);
+			return;
+		}
+
+		$row_count = 0;
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$line = [];
+				foreach ($headers as $header_text) {
+					$line[] = (string) ($row[$header_text] ?? '');
+				}
+				fputcsv($out, $line);
+				$row_count++;
+
+				if (($row_count % 500) === 0) {
+					if (function_exists('ob_get_level')) {
+						while (ob_get_level() > 0) {
+							@ob_end_flush();
+						}
+					}
+					flush();
+				}
+			}
+		} finally {
+			$result->free();
+		}
+
+		fclose($out);
+		die;
+	}
+
+	private function complete_marks_csv_config($subject_key)
+	{
+		$configs = [
+			'english' => [
+				'table' => 'fullbook_complete_result_english_marks',
+				'submenu' => 'complete_english_marks_csv',
+				'title' => 'Complete English Marks CSV',
+				'filename_prefix' => 'complete_english_marks_csv_',
+				'crq_count' => 8,
+				'mcq_count' => 25,
+			],
+			'urdu' => [
+				'table' => 'fullbook_complete_result_urdu_marks',
+				'submenu' => 'complete_urdu_marks_csv',
+				'title' => 'Complete Urdu Marks CSV',
+				'filename_prefix' => 'complete_urdu_marks_csv_',
+				'crq_count' => 7,
+				'mcq_count' => 26,
+			],
+			'math' => [
+				'table' => 'fullbook_complete_result_math_marks',
+				'submenu' => 'complete_math_marks_csv',
+				'title' => 'Complete Math Marks CSV',
+				'filename_prefix' => 'complete_math_marks_csv_',
+				'crq_count' => 13,
+				'mcq_count' => 25,
+			],
+			'science' => [
+				'table' => 'fullbook_complete_result_science_marks',
+				'submenu' => 'complete_science_marks_csv',
+				'title' => 'Complete Science Marks CSV',
+				'filename_prefix' => 'complete_science_marks_csv_',
+				'crq_count' => 10,
+				'mcq_count' => 25,
+			],
+		];
+
+		return $configs[$subject_key] ?? null;
+	}
+
+	private function complete_marks_csv_headers($subject_key)
+	{
+		$config = $this->complete_marks_csv_config($subject_key);
+		if (empty($config)) {
+			return [];
+		}
+
+		$table = (string) ($config['table'] ?? '');
+		if ($table !== '' && $this->db->table_exists($table)) {
+			$fields = $this->db->list_fields($table);
+			if (!empty($fields)) {
+				return array_values($fields);
+			}
+		}
+
+		$headers = [
+			'id',
+			'source_id',
+			'crq_id',
+			'school_id',
+			'student_id',
+			'emis_code',
+			'school_name',
+			'district',
+			'tehsil',
+			'school_admin',
+			'school_level',
+			'school_type',
+			'gender',
+			'grade',
+			'exam_id',
+			'subject',
+			'version',
+		];
+
+		for ($i = 1; $i <= (int) $config['crq_count']; $i++) {
+			$headers[] = 'crq_q' . $i;
+		}
+
+		$headers[] = 'crq_total_obtained';
+
+		for ($i = 1; $i <= (int) $config['mcq_count']; $i++) {
+			$headers[] = 'mcq_q' . $i . '_mark';
+		}
+
+		$headers[] = 'mcq_total_obtained';
+		$headers[] = 'crq_total_marks';
+		$headers[] = 'grand_total_marks';
+		$headers[] = 'SchoolCode';
+		$headers[] = 'project_variant';
+		$headers[] = 'mcq_status';
+		$headers[] = 'created_at';
+
+		return $headers;
+	}
+
+	private function complete_marks_csv_preview_rows($subject_key, $limit = 50)
+	{
+		$config = $this->complete_marks_csv_config($subject_key);
+		$table = (string) ($config['table'] ?? '');
+		if ($table === '' || !$this->db->table_exists($table)) {
+			return [];
+		}
+
+		$limit = max(1, (int) $limit);
+		$columns = $this->complete_marks_csv_headers($subject_key);
+		$this->db->select(implode(',', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $columns)), false);
+		$this->db->from($table);
+		$this->db->order_by('id', 'ASC');
+		$this->db->limit($limit);
+		return $this->db->get()->result_array();
+	}
+
+	private function render_complete_marks_csv_report($subject_key)
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$config = $this->complete_marks_csv_config($subject_key);
+		if (empty($config)) {
+			show_404();
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = $config['submenu'];
+		$this->page_data['page']->title = $config['title'];
+		$this->page_data['csv_table_name'] = $config['table'];
+		$this->page_data['csv_headers'] = $this->complete_marks_csv_headers($subject_key);
+		$this->page_data['preview_rows'] = $this->complete_marks_csv_preview_rows($subject_key, 50);
+		$this->page_data['table_exists'] = $this->db->table_exists($config['table']);
+		$this->page_data['report_url'] = base_url('admin/emarking/reports_' . $subject_key . '_marks_csv');
+		$this->page_data['export_url'] = base_url('admin/emarking/export_' . $subject_key . '_marks_csv');
+
+		$this->load->view('admin/results/complete_subject_marks_csv', $this->page_data);
+	}
+
+	private function export_complete_marks_csv($subject_key)
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$config = $this->complete_marks_csv_config($subject_key);
+		if (empty($config)) {
+			show_404();
+		}
+
+		$table = $config['table'];
+		if (!$this->db->table_exists($table)) {
+			show_error('Source table not found: ' . $table, 500);
+			return;
+		}
+
+		$headers = $this->complete_marks_csv_headers($subject_key);
+		$filename = $config['filename_prefix'] . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+
+		$mysqli = $this->db->conn_id;
+		$select_sql = implode(', ', array_map(function ($column) {
+			return '`' . $column . '`';
+		}, $headers));
+		$sql = 'SELECT ' . $select_sql . ' FROM `' . $table . '` ORDER BY `id` ASC';
+		$result = $mysqli->query($sql, MYSQLI_USE_RESULT);
+		if ($result === false) {
+			fclose($out);
+			show_error('Unable to stream export for ' . $config['title'] . ': ' . $mysqli->error, 500);
+			return;
+		}
+
+		$row_count = 0;
+		try {
+			while ($row = $result->fetch_assoc()) {
+				$line = [];
+				foreach ($headers as $header_text) {
+					$line[] = (string) ($row[$header_text] ?? '');
+				}
+				fputcsv($out, $line);
+				$row_count++;
+
+				if (($row_count % 500) === 0) {
+					if (function_exists('ob_get_level')) {
+						while (ob_get_level() > 0) {
+							@ob_end_flush();
+						}
+					}
+					flush();
+				}
+			}
+		} finally {
+			$result->free();
+		}
+
+		fclose($out);
+		die;
+	}
+
+	public function reports_english_marks_csv()
+	{
+		$this->render_complete_marks_csv_report('english');
+	}
+
+	public function export_english_marks_csv()
+	{
+		$this->export_complete_marks_csv('english');
+	}
+
+	public function reports_urdu_marks_csv()
+	{
+		$this->render_complete_marks_csv_report('urdu');
+	}
+
+	public function export_urdu_marks_csv()
+	{
+		$this->export_complete_marks_csv('urdu');
+	}
+
+	public function reports_math_marks_csv()
+	{
+		$this->render_complete_marks_csv_report('math');
+	}
+
+	public function export_math_marks_csv()
+	{
+		$this->export_complete_marks_csv('math');
+	}
+
+	public function reports_science_marks_csv()
+	{
+		$this->render_complete_marks_csv_report('science');
+	}
+
+	public function export_science_marks_csv()
+	{
+		$this->export_complete_marks_csv('science');
+	}
+
 	public function export_crq_results_csv()
 	{
 		if ($this->current_role() !== 1) {
@@ -2264,6 +3634,290 @@ class Emarking extends MY_Controller
 		fputcsv($out, $headers);
 		$row_count = 0;
 		$this->emarking_report->stream_crq_csv_export($filters, function ($row) use ($out, $headers, &$row_count) {
+			$line = [];
+			foreach ($headers as $header_text) {
+				$line[] = (string) ($row[$header_text] ?? '');
+			}
+			fputcsv($out, $line);
+			$row_count++;
+
+			if (($row_count % 500) === 0) {
+				if (function_exists('ob_get_level')) {
+					while (ob_get_level() > 0) {
+						@ob_end_flush();
+					}
+				}
+				flush();
+			}
+		});
+
+		fclose($out);
+		die;
+	}
+
+	public function reports_mcq_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'mcq_csv';
+		$this->page_data['page']->title = 'MCQ Result CSV';
+
+		$filters = $this->mcq_csv_filters_from_get();
+		if ($filters['grade'] === '') {
+			$filters['grade'] = '4';
+		}
+
+		$this->load->model('admin/Location_model', 'location_model');
+		$this->page_data['filters'] = $filters;
+		$this->page_data['subject_options'] = [
+			1 => 'ENGLISH',
+			2 => 'URDU',
+			3 => 'MATH',
+			4 => 'SCIENCE',
+		];
+		$this->page_data['districts'] = $this->location_model->get_districts();
+		$this->page_data['version_options'] = ['1', '2'];
+		$this->page_data['show_preview'] = $this->dictation_csv_has_narrowing_filters($filters);
+		$this->page_data['csv_headers'] = $this->page_data['show_preview']
+			? $this->emarking_report->get_mcq_csv_headers($filters)
+			: [
+				'Unique Identifier',
+				'School ID',
+				'Student ID',
+				'EMIS Code',
+				'School Name',
+				'District',
+				'Tehsil',
+				'School Admin',
+				'School Level',
+				'School Type',
+				'Gender',
+				'Grade',
+				'Exam ID',
+				'Subject',
+				'Version',
+			];
+		$this->page_data['preview_rows'] = $this->page_data['show_preview']
+			? $this->emarking_report->get_mcq_csv_rows($filters, 50)
+			: [];
+
+		$this->load->view('admin/results/mcq_result_csv', $this->page_data);
+	}
+
+	public function export_mcq_results_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$filters = $this->mcq_csv_filters_from_get();
+		$headers = $this->emarking_report->get_mcq_csv_headers($filters);
+		$filename = 'mcq_results_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+		$row_count = 0;
+		$this->emarking_report->stream_mcq_csv_export($filters, function ($row) use ($out, $headers, &$row_count) {
+			$line = [];
+			foreach ($headers as $header_text) {
+				$line[] = (string) ($row[$header_text] ?? '');
+			}
+			fputcsv($out, $line);
+			$row_count++;
+
+			if (($row_count % 500) === 0) {
+				if (function_exists('ob_get_level')) {
+					while (ob_get_level() > 0) {
+						@ob_end_flush();
+					}
+				}
+				flush();
+			}
+		});
+
+		fclose($out);
+		die;
+	}
+
+	public function reports_mcq_crq_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'mcq_crq_csv';
+		$this->page_data['page']->title = 'MCQ+CRQ Result CSV';
+
+		$filters = $this->mcq_crq_csv_filters_from_get();
+		if ($filters['grade'] === '') {
+			$filters['grade'] = '4';
+		}
+
+		$this->load->model('admin/Location_model', 'location_model');
+		$this->page_data['filters'] = $filters;
+		$this->page_data['subject_options'] = [
+			1 => 'ENGLISH',
+			2 => 'URDU',
+			3 => 'MATH',
+			4 => 'SCIENCE',
+		];
+		$this->page_data['districts'] = $this->location_model->get_districts();
+		$this->page_data['version_options'] = ['1', '2'];
+		$this->page_data['show_preview'] = $this->dictation_csv_has_narrowing_filters($filters);
+		$this->page_data['csv_headers'] = $this->page_data['show_preview']
+			? $this->emarking_report->get_mcq_crq_csv_headers($filters)
+			: [
+				'Unique Identifier',
+				'School ID',
+				'Student ID',
+				'EMIS Code',
+				'School Name',
+				'District',
+				'Tehsil',
+				'School Admin',
+				'School Level',
+				'School Type',
+				'Gender',
+				'Grade',
+				'Exam ID',
+				'Subject',
+				'Version',
+				'MCQs Total',
+				'CRQs Total',
+				'Total Obtained Marks',
+			];
+		$this->page_data['preview_rows'] = $this->page_data['show_preview']
+			? $this->emarking_report->get_mcq_crq_csv_rows($filters, 50)
+			: [];
+
+		$this->load->view('admin/results/mcq_crq_result_csv', $this->page_data);
+	}
+
+	public function export_mcq_crq_results_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$filters = $this->mcq_crq_csv_filters_from_get();
+		$headers = $this->emarking_report->get_mcq_crq_csv_headers($filters);
+		$filename = 'mcq_crq_results_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+		$row_count = 0;
+		$this->emarking_report->stream_mcq_crq_csv_export($filters, function ($row) use ($out, $headers, &$row_count) {
+			$line = [];
+			foreach ($headers as $header_text) {
+				$line[] = (string) ($row[$header_text] ?? '');
+			}
+			fputcsv($out, $line);
+			$row_count++;
+
+			if (($row_count % 500) === 0) {
+				if (function_exists('ob_get_level')) {
+					while (ob_get_level() > 0) {
+						@ob_end_flush();
+					}
+				}
+				flush();
+			}
+		});
+
+		fclose($out);
+		die;
+	}
+
+	public function reports_bq_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$this->page_data['page']->menu = 'results';
+		$this->page_data['page']->submenu = 'bq_csv';
+		$this->page_data['page']->title = 'BQ Result CSV';
+
+		$filters = $this->bq_csv_filters_from_get();
+		if ($filters['grade'] === '') {
+			$filters['grade'] = '4';
+		}
+
+		$this->load->model('admin/Location_model', 'location_model');
+		$this->page_data['filters'] = $filters;
+		$this->page_data['districts'] = $this->location_model->get_districts();
+		$this->page_data['source_tables'] = $this->emarking_report->get_bq_source_tables();
+		$this->page_data['version_options'] = ['1', '2'];
+		$this->page_data['csv_headers'] = $this->emarking_report->get_bq_csv_headers($filters);
+		$this->page_data['show_preview'] = trim((string) ($filters['source_table'] ?? '')) !== '';
+		$this->page_data['preview_rows'] = $this->page_data['show_preview']
+			? $this->emarking_report->get_bq_csv_rows($filters, 50)
+			: [];
+
+		$this->load->view('admin/results/bq_result_csv', $this->page_data);
+	}
+
+	public function export_bq_results_csv()
+	{
+		if ($this->current_role() !== 1) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$filters = $this->bq_csv_filters_from_get();
+		if (trim((string) ($filters['source_table'] ?? '')) === '') {
+			$this->session->set_flashdata('message', 'Please select a source sheet before exporting BQ CSV.');
+			$this->session->set_flashdata('message_type', 'warning');
+			redirect('admin/emarking/reports_bq_csv');
+			return;
+		}
+
+		$headers = $this->emarking_report->get_bq_csv_headers($filters);
+		$filename = 'bq_results_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+		$row_count = 0;
+		$this->emarking_report->stream_bq_csv_export($filters, function ($row) use ($out, $headers, &$row_count) {
 			$line = [];
 			foreach ($headers as $header_text) {
 				$line[] = (string) ($row[$header_text] ?? '');
