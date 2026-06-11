@@ -2843,19 +2843,20 @@ class Emarking_report_model extends CI_Model
 		$to = $this->parse_date($filters['to'] ?? '', '23:59:59');
 
 		$this->db->select("
-			u.id AS emarker_id,
+			m.emarker_id AS emarker_id,
 			u.name AS emarker_name,
 			u.username AS emarker_username
 		", false);
 		if ($group_by_subject) {
 			$this->db->select('q.subject_code AS subject_id', false);
 			$this->db->select('COUNT(m.id) AS marked', false);
+			$this->db->select('SUM(m.max_marks) AS total_max_marks', false);
 		}
 		if ($include_saved_summary && $summary_table_exists) {
 			$this->db->select('MAX(rs.percentage) AS saved_percentage, MAX(rs.rechecked_count) AS saved_rechecked_count', false);
 		}
 		$this->db->from('emarking_marks m');
-		$this->db->join('users u', 'u.id = m.emarker_id', 'inner');
+		$this->db->join('users u', 'u.id = m.emarker_id', 'left');
 		$this->db->join('emarking_questions q', 'q.id = m.question_id', 'inner');
 		if ($include_saved_summary && $summary_table_exists) {
 			$this->db->join(
@@ -2898,13 +2899,64 @@ class Emarking_report_model extends CI_Model
 
 		$emarker_id = (int) ($filters['emarker_id'] ?? 0);
 		if ($apply_emarker_filter && $emarker_id > 0) {
-			$this->db->where('u.id', $emarker_id);
+			$this->db->where('m.emarker_id', $emarker_id);
 		}
 
 		if ($group_by_subject) {
-			$this->db->group_by(['u.id', 'u.name', 'u.username', 'q.subject_code']);
+			$this->db->group_by(['m.emarker_id', 'u.name', 'u.username', 'q.subject_code']);
 		} else {
-			$this->db->group_by(['u.id', 'u.name', 'u.username']);
+			$this->db->group_by(['m.emarker_id', 'u.name', 'u.username']);
+		}
+	}
+
+	private function add_rechecked_total_max_marks_to_rows(array &$rows)
+	{
+		foreach ($rows as $row) {
+			$marked = (float) ($row->marked ?? 0);
+			$total_max_marks = (float) ($row->total_max_marks ?? 0);
+			$rechecked = (float) ($row->rechecked ?? 0);
+			$row->rechecked_total_max_marks = ($marked > 0)
+				? round(($total_max_marks * $rechecked) / $marked)
+				: 0;
+		}
+	}
+
+	private function apply_stable_rechecking_values(array &$rows, $persist_missing_values)
+	{
+		foreach ($rows as $row) {
+			$emarker_id = (int) ($row->emarker_id ?? 0);
+			$subject_id = (int) ($row->subject_id ?? 0);
+			$marked = (int) ($row->marked ?? 0);
+			$saved_percentage = $row->saved_percentage ?? null;
+			$saved_rechecked = $row->saved_rechecked_count ?? null;
+
+			if ($saved_rechecked !== null && $saved_percentage !== null) {
+				$row->percentage = (float) $saved_percentage;
+				$row->rechecked = (int) $saved_rechecked;
+				continue;
+			}
+
+			$rechecked = ($marked >= 200) ? (int) round($marked * 0.10) : 0;
+			$percentage = ($marked > 0) ? round(($rechecked * 100) / $marked, 2) : 0.00;
+			$row->percentage = $percentage;
+			$row->rechecked = $rechecked;
+
+			if ($persist_missing_values) {
+				$inserted = $this->upsert_rechecking_summary_row($emarker_id, $subject_id, $percentage, $rechecked);
+				if (!$inserted) {
+					$fallback = $this->db
+						->select('percentage, rechecked_count')
+						->get_where('emarking_rechecking_summary', [
+							'emarker_id' => $emarker_id,
+							'subject_id' => $subject_id,
+						])
+						->row();
+					if ($fallback) {
+						$row->percentage = (float) $fallback->percentage;
+						$row->rechecked = (int) $fallback->rechecked_count;
+					}
+				}
+			}
 		}
 	}
 
@@ -2948,6 +3000,7 @@ class Emarking_report_model extends CI_Model
 			'group_by_subject' => true,
 			'summary_table_exists' => $summary_table_exists,
 		]);
+		$this->db->order_by('total_max_marks', 'DESC', false);
 		$this->db->order_by('marked', 'DESC', false);
 		$this->db->order_by('u.name', 'ASC');
 		$this->db->order_by('q.subject_code', 'ASC');
@@ -2956,69 +3009,48 @@ class Emarking_report_model extends CI_Model
 			return [];
 		}
 
-		$has_missing_saved = false;
-		foreach ($rows as $row) {
-			if (($row->saved_percentage ?? null) === null || ($row->saved_rechecked_count ?? null) === null) {
-				$has_missing_saved = true;
-				break;
-			}
-		}
-
 		if ($is_default_scope) {
-			if (!$summary_table_exists || $has_missing_saved) {
-				$this->normalize_default_rechecking_summary_rows($rows, $summary_table_exists);
-			} else {
-				foreach ($rows as $row) {
-					$row->percentage = (float) ($row->saved_percentage ?? 0);
-					$row->rechecked = (int) ($row->saved_rechecked_count ?? 0);
-				}
-
-				$total_percentage = $this->rechecking_total_percentage($rows);
-				if ($total_percentage < 9 || $total_percentage > 12) {
-					$this->normalize_default_rechecking_summary_rows($rows, $summary_table_exists);
-				}
-			}
-
+			$this->apply_stable_rechecking_values($rows, $summary_table_exists);
+			$this->add_rechecked_total_max_marks_to_rows($rows);
 			return $rows;
 		}
 
+		$this->apply_stable_rechecking_values($rows, $summary_table_exists);
+		$this->add_rechecked_total_max_marks_to_rows($rows);
+		return $rows;
+	}
+
+	public function get_rechecking_summary_csv_headers()
+	{
+		return [
+			'eMarker',
+			'Username',
+			'Subject',
+			'Marked',
+			'Total Max Marks',
+			'Rechecked',
+			'Rechecked Total Max Marks',
+		];
+	}
+
+	public function get_rechecking_summary_csv_rows($filters = [])
+	{
+		$rows = $this->get_rechecking_summary($filters);
+		$out = [];
 		foreach ($rows as $row) {
-			$emarker_id = (int) ($row->emarker_id ?? 0);
-			$subject_id = (int) ($row->subject_id ?? 0);
-			$marked = (int) ($row->marked ?? 0);
-			$saved_percentage = $row->saved_percentage ?? null;
-			$saved_rechecked = $row->saved_rechecked_count ?? null;
-
-			if ($saved_rechecked !== null && $saved_percentage !== null) {
-				$row->percentage = (float) $saved_percentage;
-				$row->rechecked = (int) $saved_rechecked;
-				continue;
-			}
-
-			$rechecked = ($marked >= 200) ? (int) round($marked * 0.10) : 0;
-			$percentage = ($marked > 0) ? round(($rechecked * 100) / $marked, 2) : 0.00;
-			$row->percentage = $percentage;
-			$row->rechecked = $rechecked;
-
-			if ($summary_table_exists) {
-				$inserted = $this->upsert_rechecking_summary_row($emarker_id, $subject_id, $percentage, $rechecked);
-				if (!$inserted) {
-					$fallback = $this->db
-						->select('percentage, rechecked_count')
-						->get_where('emarking_rechecking_summary', [
-							'emarker_id' => $emarker_id,
-							'subject_id' => $subject_id,
-						])
-						->row();
-					if ($fallback) {
-						$row->percentage = (float) $fallback->percentage;
-						$row->rechecked = (int) $fallback->rechecked_count;
-					}
-				}
-			}
+			$out[] = [
+				'eMarker' => (string) ($row->emarker_name ?? ''),
+				'eMarker ID' => (int) ($row->emarker_id ?? 0),
+				'Username' => (string) ($row->emarker_username ?? ''),
+				'Subject' => (string) ($row->subject_id ?? ''),
+				'Marked' => (int) ($row->marked ?? 0),
+				'Total Max Marks' => number_format((float) ($row->total_max_marks ?? 0), 2, '.', ''),
+				'Rechecked' => (int) ($row->rechecked ?? 0),
+				'Rechecked Total Max Marks' => (string) ((int) round((float) ($row->rechecked_total_max_marks ?? 0))),
+			];
 		}
 
-		return $rows;
+		return $out;
 	}
 
 	public function get_emarker_payment_summary($filters = [])
@@ -3103,7 +3135,7 @@ class Emarking_report_model extends CI_Model
 			) agg
 			LEFT JOIN users u ON u.id = agg.emarker_id
 			GROUP BY agg.emarker_id, u.name, u.username
-			ORDER BY marked DESC
+			ORDER BY total_max_marks DESC, marked DESC
 		";
 
 		return $this->db->query($sql, $params)->result();

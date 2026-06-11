@@ -1656,6 +1656,78 @@ class Emarking extends MY_Controller
 		$this->load_reports_tab('emarkers_payment');
 	}
 
+	public function export_rechecking_summary_csv()
+	{
+		$role = $this->current_role();
+		if (!in_array($role, [1, 18], true)) {
+			redirect('errors/permission_denied');
+			die;
+		}
+
+		$filters = $this->reports_filters_from_get();
+		if ($role === 18) {
+			$allowed_codes = $this->ss_allowed_subject_codes();
+			if (empty($allowed_codes)) {
+				$this->session->set_flashdata('message', 'No subjects are assigned to your account.');
+				$this->session->set_flashdata('message_type', 'danger');
+				redirect('admin/dashboard/subject_specialist');
+				return;
+			}
+
+			$typed = trim((string) ($filters['subject_code'] ?? ''));
+			if ($typed !== '' && in_array($typed, $allowed_codes, true)) {
+				$filters['subject_code'] = $typed;
+			} else {
+				$filters['subject_code'] = $allowed_codes;
+			}
+		}
+
+		$headers = $this->emarking_report->get_rechecking_summary_csv_headers();
+		$rows = $this->emarking_report->get_rechecking_summary_csv_rows($filters);
+		$subject_map = [
+			'1' => 'English',
+			'2' => 'Urdu',
+			'3' => 'Math',
+			'4' => 'Science',
+		];
+		$filename = 'rechecking_summary_' . date('Ymd_His') . '.csv';
+
+		header('Content-Type: text/csv; charset=utf-8');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$out = fopen('php://output', 'w');
+		if ($out === false) {
+			show_error('Unable to create CSV output stream.', 500);
+			return;
+		}
+
+		fputcsv($out, $headers);
+		foreach ($rows as $row) {
+			$emarker_name = trim((string) ($row['eMarker'] ?? ''));
+			$emarker_name = preg_replace('/\s*\([^)]*\)\s*$/', '', $emarker_name);
+			$emarker_name = trim((string) $emarker_name);
+			$emarker_id = (int) ($row['eMarker ID'] ?? 0);
+			$row['eMarker'] = ($emarker_name !== '')
+				? ($emarker_name . ' (' . $emarker_id . ')')
+				: (string) $emarker_id;
+			$subject_code = trim((string) ($row['Subject'] ?? ''));
+			if ($subject_code !== '' && isset($subject_map[$subject_code])) {
+				$row['Subject'] = $subject_map[$subject_code];
+			}
+
+			$line = [];
+			foreach ($headers as $header_text) {
+				$line[] = (string) ($row[$header_text] ?? '');
+			}
+			fputcsv($out, $line);
+		}
+
+		fclose($out);
+		die;
+	}
+
 	public function reports_batches()
 	{
 		$this->load_reports_tab('batches');

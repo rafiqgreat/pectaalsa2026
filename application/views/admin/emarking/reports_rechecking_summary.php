@@ -21,6 +21,28 @@ if (is_array($selectedSubject)) $selectedSubject = '';
 $selectedEmarker = (string) ($filters['emarker_id'] ?? '');
 $selectedGrade = trim((string) ($filters['grade'] ?? ''));
 if ($selectedGrade === '') $selectedGrade = '4';
+$emarkerLabel = function ($name, $emarkerId) {
+  $rawName = trim((string) $name);
+  $cleanName = preg_replace('/\s*\([^)]*\)\s*$/', '', $rawName);
+  $cleanName = trim((string) $cleanName);
+  $id = (int) $emarkerId;
+  if ($cleanName === '') {
+    return (string) $id;
+  }
+  return $cleanName . ' (' . $id . ')';
+};
+$exportParams = [];
+foreach (['from', 'to', 'assessment_type', 'grade', 'subject_code', 'emarker_id'] as $filterKey) {
+  $filterValue = $filters[$filterKey] ?? '';
+  if (is_array($filterValue)) {
+    continue;
+  }
+  $filterValue = trim((string) $filterValue);
+  if ($filterValue !== '') {
+    $exportParams[] = rawurlencode($filterKey) . '=' . rawurlencode($filterValue);
+  }
+}
+$exportUrl = base_url('admin/emarking/export_rechecking_summary_csv' . (!empty($exportParams) ? ('?' . implode('&', $exportParams)) : ''));
 ?>
 
 <section class="content-header">
@@ -107,7 +129,7 @@ if ($selectedGrade === '') $selectedGrade = '4';
                 <?php foreach ((array) ($emarker_options ?? []) as $option): ?>
                   <?php $id = (string) ($option->emarker_id ?? ''); ?>
                   <option value="<?php echo html_escape($id); ?>" <?php echo ($selectedEmarker === $id) ? 'selected' : ''; ?>>
-                    <?php echo html_escape(trim((string) ($option->emarker_name ?? '')) . ' (' . trim((string) ($option->emarker_username ?? '')) . ')'); ?>
+                    <?php echo html_escape($emarkerLabel($option->emarker_name ?? '', $option->emarker_id ?? 0) . ' - ' . trim((string) ($option->emarker_username ?? ''))); ?>
                   </option>
                 <?php endforeach; ?>
               </select>
@@ -119,13 +141,20 @@ if ($selectedGrade === '') $selectedGrade = '4';
         </form>
 
         <div class="mb-2">
-          <h5 class="mb-2">eMarker-wise Rechecking Summary</h5>
+          <div class="d-flex align-items-center justify-content-between flex-wrap mb-2">
+            <h5 class="mb-0">eMarker-wise Rechecking Summary</h5>
+            <a href="<?php echo $exportUrl; ?>" class="btn btn-primary btn-sm">Download CSV</a>
+          </div>
           <?php
           $totalMarked = 0;
           $totalRechecked = 0;
+          $totalMaxMarks = 0;
+          $totalRecheckedMaxMarks = 0;
           foreach ((array) ($rechecking_summary ?? []) as $summaryRow) {
             $totalMarked += (int) ($summaryRow->marked ?? 0);
             $totalRechecked += (int) ($summaryRow->rechecked ?? 0);
+            $totalMaxMarks += (float) ($summaryRow->total_max_marks ?? 0);
+            $totalRecheckedMaxMarks += (float) ($summaryRow->rechecked_total_max_marks ?? 0);
           }
           ?>
           <div class="table-responsive">
@@ -134,29 +163,37 @@ if ($selectedGrade === '') $selectedGrade = '4';
                 <tr>
                   <th style="width:70px;">Sr No</th>
                   <th>eMarker</th>
+                  <th>Username</th>
                   <th>Subject</th>
                   <th>Marked</th>
+                  <th>Total Max Marks</th>
                   <th>Rechecked</th>
+                  <th>Rechecked Total Max Marks</th>
                 </tr>
               </thead>
               <tbody>
                 <?php if (empty($rechecking_summary)): ?>
-                  <tr><td colspan="5" class="text-center text-muted">No records</td></tr>
+                  <tr><td colspan="8" class="text-center text-muted">No records</td></tr>
                 <?php else: ?>
                   <?php $sr = 1; ?>
                   <?php foreach ($rechecking_summary as $row): ?>
                     <tr>
                       <td><?php echo (int) $sr++; ?></td>
-                      <td><?php echo htmlspecialchars((string) ($row->emarker_name ?? '')); ?> (<?php echo htmlspecialchars((string) ($row->emarker_username ?? '')); ?>)</td>
+                      <td><?php echo htmlspecialchars((string) $emarkerLabel($row->emarker_name ?? '', $row->emarker_id ?? 0)); ?></td>
+                      <td><?php echo htmlspecialchars((string) ($row->emarker_username ?? '')); ?></td>
                       <td><?php echo htmlspecialchars((string) $subjectName($row->subject_id ?? '')); ?></td>
                       <td><?php echo (int) ($row->marked ?? 0); ?></td>
+                      <td><?php echo number_format((float) ($row->total_max_marks ?? 0), 2); ?></td>
                       <td><?php echo (int) ($row->rechecked ?? 0); ?></td>
+                      <td><?php echo (int) round((float) ($row->rechecked_total_max_marks ?? 0)); ?></td>
                     </tr>
                   <?php endforeach; ?>
                   <tr class="font-weight-bold">
-                    <td colspan="3" class="text-right">Total</td>
+                    <td colspan="4" class="text-right">Total</td>
                     <td><?php echo (int) $totalMarked; ?></td>
+                    <td><?php echo number_format($totalMaxMarks, 2); ?></td>
                     <td><?php echo (int) $totalRechecked; ?></td>
+                    <td><?php echo (int) round($totalRecheckedMaxMarks); ?></td>
                   </tr>
                 <?php endif; ?>
               </tbody>
