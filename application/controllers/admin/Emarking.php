@@ -1474,6 +1474,7 @@ class Emarking extends MY_Controller
 			'assessment_type' => 'BQ',
 			'source_table' => trim((string) $this->input->get('source_table', true)),
 			'grade' => trim((string) $this->input->get('grade', true)),
+			'subject_code' => trim((string) $this->input->get('subject_code', true)),
 			'version' => trim((string) $this->input->get('version', true)),
 			'district_id' => trim((string) $this->input->get('district_id', true)),
 			'school_query' => trim((string) $this->input->get('school_query', true)),
@@ -4028,6 +4029,12 @@ class Emarking extends MY_Controller
 
 		$this->load->model('admin/Location_model', 'location_model');
 		$this->page_data['filters'] = $filters;
+		$this->page_data['subject_options'] = [
+			1 => 'ENGLISH',
+			2 => 'URDU',
+			3 => 'MATH',
+			4 => 'SCIENCE',
+		];
 		$this->page_data['districts'] = $this->location_model->get_districts();
 		$this->page_data['source_tables'] = $this->emarking_report->get_bq_source_tables();
 		$this->page_data['version_options'] = ['1', '2'];

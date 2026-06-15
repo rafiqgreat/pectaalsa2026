@@ -57,6 +57,7 @@ class Emarking_report_model extends CI_Model
 		'School Type',
 		'Gender',
 		'Grade',
+		'Subject',
 		'Subject Taught (if teacher)',
 	];
 
@@ -73,6 +74,7 @@ class Emarking_report_model extends CI_Model
 			'sheet_09',
 			'sheet_10',
 			'sheet_11',
+			'sheet_1011',
 		];
 	}
 
@@ -111,6 +113,28 @@ class Emarking_report_model extends CI_Model
 		return $parts['student_roll'];
 	}
 
+	private function bq_clean_barcode_expr($column)
+	{
+		return "REPLACE(TRIM(COALESCE({$column}, '')), '(01)', '')";
+	}
+
+	private function bq_barcode_subject_digit_expr($column)
+	{
+		return "SUBSTRING(" . $this->bq_clean_barcode_expr($column) . ", 8, 1)";
+	}
+
+	private function bq_barcode_subject_name_sql($column)
+	{
+		$subject_digit = $this->bq_barcode_subject_digit_expr($column);
+		return "CASE {$subject_digit}
+			WHEN '1' THEN 'English'
+			WHEN '2' THEN 'Urdu'
+			WHEN '3' THEN 'Math'
+			WHEN '4' THEN 'Science'
+			ELSE ''
+		END";
+	}
+
 	private function get_bq_question_labels($table)
 	{
 		$table = trim((string) $table);
@@ -141,6 +165,11 @@ class Emarking_report_model extends CI_Model
 		$version = trim((string) ($filters['version'] ?? ''));
 		if ($version !== '') {
 			$where[] = $this->bq_barcode_version_expr('src.Student_Barcode') . ' = ' . (int) $version;
+		}
+
+		$subject_code = trim((string) ($filters['subject_code'] ?? ''));
+		if ($subject_code !== '') {
+			$where[] = $this->bq_barcode_subject_digit_expr('src.Student_Barcode') . ' = ' . $this->db->escape($subject_code);
 		}
 
 		$district_id = trim((string) ($filters['district_id'] ?? ''));
@@ -188,6 +217,7 @@ class Emarking_report_model extends CI_Model
 		$lsa_expr = $this->bq_barcode_lsa_expr('src.Student_Barcode');
 		$version_expr = $this->bq_barcode_version_expr('src.Student_Barcode');
 		$student_expr = $this->bq_barcode_student_expr('src.Student_Barcode');
+		$subject_name_sql = $this->bq_barcode_subject_name_sql('src.Student_Barcode');
 
 		$limit_sql = '';
 		if ($limit !== null) {
@@ -209,6 +239,7 @@ class Emarking_report_model extends CI_Model
 				COALESCE(sch.school_gender, '') AS school_gender,
 				TRIM(COALESCE(src.Gender, '')) AS source_gender,
 				{$grade_expr} AS grade,
+				{$subject_name_sql} AS subject_name,
 				'' AS subject_taught{$question_select_sql},
 				{$version_expr} AS version
 			FROM {$table} src
@@ -221,8 +252,13 @@ class Emarking_report_model extends CI_Model
 		";
 	}
 
-	private function build_bq_csv_row_from_sql_row(array $row, array $question_labels)
+	private function build_bq_csv_row_from_sql_row(array $row, array $question_labels, $table)
 	{
+		$gender = (string) ($row['source_gender'] ?? '');
+		if (trim((string) $table) === 'sheet_1011') {
+			$gender = $this->combined_gender_code_from_school_gender($row['school_gender'] ?? '');
+		}
+
 		$out = [
 			'Unique Identifier' => (string) ($row['unique_identifier'] ?? ''),
 			'School ID' => (string) ($row['school_admin'] ?? ''),
@@ -234,8 +270,9 @@ class Emarking_report_model extends CI_Model
 			'School Admin' => (string) ($row['school_type'] ?? ''),
 			'School Level' => (string) ($row['school_level'] ?? ''),
 			'School Type' => (string) ($row['school_gender'] ?? ''),
-			'Gender' => (string) ($row['source_gender'] ?? ''),
+			'Gender' => $gender,
 			'Grade' => (string) ($row['grade'] ?? ''),
+			'Subject' => (string) ($row['subject_name'] ?? ''),
 			'Subject Taught (if teacher)' => (string) ($row['subject_taught'] ?? ''),
 		];
 
@@ -2404,7 +2441,7 @@ class Emarking_report_model extends CI_Model
 		$rows = $query->result_array();
 		$out = [];
 		foreach ($rows as $row) {
-			$out[] = $this->build_bq_csv_row_from_sql_row($row, $question_labels);
+			$out[] = $this->build_bq_csv_row_from_sql_row($row, $question_labels, $table);
 		}
 		return $out;
 	}
@@ -2426,7 +2463,7 @@ class Emarking_report_model extends CI_Model
 
 		try {
 			while ($row = $result->fetch_assoc()) {
-				$writer($this->build_bq_csv_row_from_sql_row($row, $question_labels));
+				$writer($this->build_bq_csv_row_from_sql_row($row, $question_labels, $table));
 			}
 		} finally {
 			$result->free();

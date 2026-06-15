@@ -1,6 +1,19 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php include viewPath('admin/includes/header'); ?>
 
+<?php
+$subjectName = function ($code) {
+  $map = [
+    '1' => 'English',
+    '2' => 'Urdu',
+    '3' => 'Math',
+    '4' => 'Science',
+  ];
+  $key = trim((string) $code);
+  return $map[$key] ?? $key;
+};
+?>
+
 <section class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
@@ -52,6 +65,16 @@
               </select>
             </div>
             <div class="col-md-2 mb-2">
+              <select name="subject_code" class="form-control">
+                <option value="">Subject (All)</option>
+                <?php foreach (($subject_options ?? []) as $code => $label): ?>
+                  <option value="<?php echo html_escape((string) $code); ?>" <?php echo (($filters['subject_code'] ?? '') === (string) $code) ? 'selected' : ''; ?>>
+                    <?php echo html_escape($subjectName($code)); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-md-2 mb-2">
               <select name="version" class="form-control">
                 <option value="">Version (All)</option>
                 <?php foreach (($version_options ?? []) as $version): ?>
@@ -74,11 +97,11 @@
             <div class="col-md-2 mb-2">
               <input type="text" name="school_query" value="<?php echo htmlspecialchars((string) ($filters['school_query'] ?? '')); ?>" class="form-control" placeholder="School / EMIS Code">
             </div>
+          </div>
+          <div class="form-row">
             <div class="col-md-2 mb-2">
               <input type="text" class="form-control" value="BQ" readonly>
             </div>
-          </div>
-          <div class="form-row">
             <div class="col-md-2 mb-2">
               <button type="submit" class="btn btn-secondary btn-block">Filter</button>
             </div>
