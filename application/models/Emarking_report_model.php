@@ -255,7 +255,7 @@ class Emarking_report_model extends CI_Model
 	private function build_bq_csv_row_from_sql_row(array $row, array $question_labels, $table)
 	{
 		$gender = (string) ($row['source_gender'] ?? '');
-		if (trim((string) $table) === 'sheet_1011') {
+		if (in_array(trim((string) $table), ['sheet_10', 'sheet_11', 'sheet_1011'], true)) {
 			$gender = $this->combined_gender_code_from_school_gender($row['school_gender'] ?? '');
 		}
 
